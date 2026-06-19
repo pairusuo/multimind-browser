@@ -265,17 +265,57 @@ mac:
         - x64      # Intel Mac
         - arm64    # Apple Silicon
   category: public.app-category.productivity
+  identity: null    # 明确禁用代码签名尝试，见下方「签名决策」说明
 
 win:
   target:
     - target: nsis
       arch:
         - x64
+  signAndEditExecutable: false   # 明确禁用签名尝试
 
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
 ```
+
+### 签名决策（2026年6月，第一版 MVP 明确决定）
+
+**当前版本不做代码签名和 Notarization**，原因是还没有 Apple Developer Program
+账号（$99/年）和 Windows Code Signing Certificate，且当前阶段优先验证产品
+价值而非分发体验。这是有意决策，不是遗漏，后续如果产品验证通过，再补签名。
+
+**带来的已知影响（需要在用户文档中说明）**：
+
+- macOS：用户首次打开 `.dmg` 安装的应用时，Gatekeeper 会拦截并提示
+  "无法验证开发者"或"应用已损坏，要移到废纸篓吗"。解决方法：
+  在「系统设置 → 隐私与安全性」中找到该提示，点击"仍要打开"；
+  或者右键点击 App → 选择"打开"（而不是双击），会出现"打开"选项绕过拦截
+- Windows：用户运行 `.exe` 安装包时，Windows Defender SmartScreen 会提示
+  "Windows 已保护你的电脑"。解决方法：点击"更多信息"，然后点击
+  "仍要运行"
+
+**任务**：在 README.md 或安装说明文档中，把上述两段绕过步骤写清楚，
+配图说明（截图 Gatekeeper 和 SmartScreen 的实际提示界面），放在
+下载链接旁边明显位置，避免用户看到警告就放弃安装。
+
+### Universal Binary 构建验证（重要，必须执行）
+
+`electron-builder --mac --universal` 在 Intel Mac 上执行时，arm64 部分的
+构建依赖 Electron 官方预编译的 arm64 二进制，不是本机编译，原理上可行，
+但**必须验证产物真的包含两种架构**，不能假设命令成功就代表正确：
+
+```bash
+# 打包完成后，在生成的 .app 内找到主执行文件验证
+lipo -info "release/mac-universal/MultiMind Browser.app/Contents/MacOS/MultiMind Browser"
+
+# 期望输出包含两种架构，类似：
+# Architectures in the fat file: ... are: x86_64 arm64
+```
+
+如果输出只显示一种架构，说明 Universal Binary 构建失败，需要检查
+electron-builder 版本和配置，不能直接发布。这一步是 Week 8 验收的
+强制项，不能跳过。
 
 ---
 
@@ -360,8 +400,23 @@ nsis:
   确认 150ms 的间隔机制让请求不会互相阻塞导致应用无响应
 
 **Week 8：打包**
-完成后验收标准：`npm run package:mac` 生成 Universal dmg，
-在 Intel Mac 和 M 系芯片 Mac 上均可安装运行。
+
+完成后验收标准：
+
+1. `npm run package:mac` 生成 `.dmg`，用 `lipo -info` 验证确实包含
+   `x86_64` 和 `arm64` 两种架构（见上方「Universal Binary 构建验证」）
+2. 在你的 Intel Mac 上完整走一遍安装流程：双击 `.dmg` → 拖入 Applications →
+   首次打开遇到 Gatekeeper 拦截 → 用「右键打开」方式绕过 → 确认应用正常启动
+3. 如果有条件，找一台 Apple Silicon Mac（M1/M2/M3 任意），重复第 2 步，
+   确认同一个 `.dmg` 在两种架构上都能正常运行
+4. `npm run package:win` 生成 `.exe`，在 Windows 机器（或虚拟机）上安装，
+   遇到 SmartScreen 提示后用「更多信息→仍要运行」绕过，确认正常启动
+5. 两个平台分别验证核心功能链路一次：创建四分屏、混搭 AI 和搜索引擎格子、
+   统一发送、重启后配置保留——不需要重新跑 Week 1-7 全部测试，
+   只验证「打包后的产物」和「开发环境下跑的版本」行为一致，
+   排除打包过程引入新问题的可能
+6. README.md 或安装说明中已经写好 Gatekeeper / SmartScreen 的绕过步骤，
+   配图清晰
 
 ---
 
@@ -884,3 +939,40 @@ function buildSearchUrl(template: string | undefined, query: string): string {
    Google/百度格子直接跳转到对应的搜索结果页，URL 正确带上了查询词
 4. 搜索引擎格子不会因为"找不到输入框"触发 inject-failed 提示（因为走的是 navigate，不是注入）
 5. 自定义 URL 时勾选"这是搜索引擎"开关后，行为按 search 模式处理
+
+---
+
+## 产品决策：格子 URL 持久化语义（2026年6月）
+
+### 背景
+
+Week 7 C 组验收时发现一个语义歧义：格子重启后恢复的 URL，是该网站经过登录跳转
+后的实际页面（如 `claude.ai/login`），而不是用户最初配置的原始地址（如 `claude.ai`）。
+Codex 正确识别了这是语义问题，未自行决定，已确认决策如下。
+
+### 决策：保留退出时实际停留的页面 URL（当前实现已经正确，不需要改代码）
+
+理由：MultiMind Browser 本质是浏览器，浏览器的标准行为就是记住用户上次停留的
+页面并原地恢复（类似 Chrome 重启后恢复标签页）。如果用户在某个 AI 对话中聊了
+很久，重启后应该回到那个具体对话，而不是回到模板配置的初始首页。
+
+`windowManager.ts` 中 `did-finish-load` 事件持久化当前 URL 到 `cells.<cellId>.url`
+的现有逻辑**无需修改**，这是正确行为。
+
+### 明确边界（避免未来产生歧义）
+
+1. **模板/预设的 URL 只在格子「从无到有创建」时生效一次**，作为该格子的初始
+   加载地址。此后该格子的 `url` 字段记录的永远是"最后一次实际停留的地址"，
+   不会、也不应该再回退到模板定义的原始值。
+
+2. **用户在「编辑格子」面板手动修改 URL 时**，新地址立即生效并触发 `navigate`，
+   随后该地址通过 `did-finish-load` 正常持久化，这与「记住最后停留页面」是
+   同一套逻辑，没有特殊处理，不需要额外代码路径。
+
+3. **如果某个格子从未登录过**，重启后理所当然停留在登录页——这不是 bug，
+   是「记住最后停留页面」语义下的正常结果，不需要做"自动跳回首页"之类的
+   特殊处理。
+
+4. 后续如果做"重置格子到默认地址"功能（比如格子右上角悬浮菜单加一个
+   "重置为默认"选项），才需要单独读取 `PresetSite.url` 或 `LayoutTemplate`
+   中的原始值，与持久化逻辑是两条独立路径，不要混在一起。

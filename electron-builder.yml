@@ -13,12 +13,14 @@ mac:
         - x64
         - arm64
   category: public.app-category.productivity
+  identity: null
 
 win:
   target:
     - target: nsis
       arch:
         - x64
+  signAndEditExecutable: false
 
 nsis:
   oneClick: false

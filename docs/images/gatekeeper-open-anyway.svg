@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" role="img" aria-labelledby="title desc">
+  <title id="title">macOS Gatekeeper bypass flow</title>
+  <desc id="desc">Open MultiMind Browser from Applications with right click Open, then choose Open Anyway in Privacy and Security if needed.</desc>
+  <rect width="960" height="520" fill="#f8fafc"/>
+  <rect x="60" y="60" width="360" height="310" rx="16" fill="#fff" stroke="#cbd5e1"/>
+  <text x="90" y="112" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#111827">Applications</text>
+  <rect x="92" y="150" width="92" height="92" rx="20" fill="#2563eb"/>
+  <text x="138" y="205" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#fff">M</text>
+  <text x="210" y="188" font-family="Arial, sans-serif" font-size="20" fill="#111827">MultiMind Browser</text>
+  <rect x="210" y="210" width="120" height="44" rx="8" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="270" y="238" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#1d4ed8">Right-click</text>
+  <rect x="92" y="285" width="250" height="50" rx="8" fill="#111827"/>
+  <text x="217" y="317" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#fff">Choose Open</text>
+  <path d="M450 215h90" stroke="#64748b" stroke-width="4" stroke-linecap="round"/>
+  <path d="M530 197l25 18-25 18" fill="none" stroke="#64748b" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="575" y="90" width="325" height="300" rx="18" fill="#fff" stroke="#cbd5e1"/>
+  <text x="610" y="140" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#111827">Privacy &amp; Security</text>
+  <text x="610" y="190" font-family="Arial, sans-serif" font-size="18" fill="#475569">MultiMind Browser was blocked</text>
+  <text x="610" y="220" font-family="Arial, sans-serif" font-size="18" fill="#475569">because it is from an unidentified developer.</text>
+  <rect x="610" y="265" width="170" height="52" rx="10" fill="#2563eb"/>
+  <text x="695" y="298" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#fff">Open Anyway</text>
+  <text x="60" y="455" font-family="Arial, sans-serif" font-size="20" fill="#334155">If Gatekeeper blocks the unsigned MVP, use right-click Open or System Settings → Privacy &amp; Security → Open Anyway.</text>
+</svg>
