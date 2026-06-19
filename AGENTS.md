@@ -308,8 +308,21 @@ nsis:
 格子间可拖拽调整比例，格子左上角显示 favicon 和域名。
 
 **Week 5-6：同步发送**
-完成后验收标准：底部输入框输入文字按 Enter 后，四个 AI 网站同时收到文字并发送，
-失败的格子显示提示条。
+
+> ⚠️ 以下验收标准已根据当前实际进度更新（原始版本写的是"四个 AI 网站"，
+> 已不适用——格子数量和内容现在由用户自定义，Gemini 已移除，cell-3 默认留空）。
+
+完成后验收标准：
+- 底部输入框输入文字按 Enter 后，所有**当前激活**（active=true）的格子同时收到文字并发送，
+  未激活或为空的格子不受影响
+- 各格子之间注入有 150ms 延迟（参考 adapter-reference.md 中的时序建议），不完全并发
+- 注入成功的格子无需额外提示
+- 注入失败的格子通过已有的 `SHOW_CELL_NOTICE`（`type: 'inject-failed'`）机制提示，
+  不要新建一套提示逻辑
+- 空格子（未配置 URL）在统一发送时自动跳过，不报错也不提示
+- 底部输入框旁的格子图标组（参考设计文档 5.4 节）可点击切换某格子是否参与本次发送，
+  状态持久化存入 `electron-store`（`cells.<cellId>.active`）
+- 发送后输入框自动清空；上箭头键可召回上一次发送的内容（本地内存即可，不需要持久化历史）
 
 **Week 7：体验打磨**
 完成后验收标准：快捷键可用，深色模式跟随系统，格子悬浮菜单可用，多标签页可用。
@@ -650,3 +663,85 @@ export const RISKY_SITES: RiskySite[] = [
 4. 添加 Gemini 后在该格子尝试登录，触发 `google-login-blocked` 提示，提示条样式中性、可关闭
 5. 模拟一次注入失败和一次加载失败，分别触发对应类型的提示，文案和样式符合统一规范
 6. 同一格子同一类型的提示在当前会话中只出现一次
+
+---
+
+## Week 5-6 实现要点（同步发送功能落地）
+
+这是 MVP 最核心的功能，把之前所有准备工作串联起来。实现顺序建议：
+
+### 1. windowManager.ts 新增 sendToAll 方法
+
+```typescript
+async sendToAll(text: string): Promise<void> {
+  const activeCells = [...this.views.entries()].filter(
+    ([cellId]) => this.cellStates.get(cellId)?.active && this.cellStates.get(cellId)?.url
+  );
+
+  for (const [cellId, view] of activeCells) {
+    const success = await this.injectScript(cellId, text);
+    if (!success) {
+      this.window.webContents.send(IPC.SHOW_CELL_NOTICE, {
+        cellId,
+        type: 'inject-failed',
+        message: NOTICE_MESSAGES['inject-failed'],
+      });
+    }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+}
+```
+
+`injectScript(cellId, text)` 内部根据该格子当前 URL 匹配 `adapters/index.ts` 中注册的
+适配器（用 adapter-reference.md 里各网站的 `urlPattern` 匹配），调用对应的注入脚本。
+
+### 2. adapters/index.ts 的适配器匹配逻辑
+
+```typescript
+export function getAdapterForUrl(url: string): SiteAdapter | null {
+  return ADAPTERS.find((a) => a.urlPattern.test(url)) ?? null;
+}
+```
+
+找不到匹配适配器（用户加载了清单外的网站）时，`injectScript` 直接返回 `false`，
+触发统一的失败提示，不要抛异常导致主进程崩溃。
+
+### 3. ipcHandlers.ts 注册 SEND_TO_ALL
+
+```typescript
+ipcMain.handle(IPC.SEND_TO_ALL, (_event, payload: { text: string }) => {
+  return windowManager.sendToAll(payload.text);
+});
+```
+
+### 4. BottomInput.tsx 交互逻辑
+
+- 文本框：受控组件，`Enter` 发送，`Shift+Enter` 换行
+- 发送时通过 `window.electronAPI.sendToAll(text)` 调用主进程（preload.ts 中需暴露此方法）
+- 发送中禁用输入框，显示 loading 态；`sendToAll` 是 `Promise<void>`，resolve 后恢复
+- 维护一个本地 `lastSentText` state，上箭头键回填到输入框（不需要历史列表，只存最近一条）
+- 左侧格子图标组：每个图标对应一个 cellId，点击切换 `active` 状态，
+  通过 `IPC.TOGGLE_CELL` 通知主进程并持久化
+
+### 5. cellStates 数据结构（windowManager.ts 内部状态）
+
+Week 3-4 可能还没有这个统一结构，如果没有需要补上：
+
+```typescript
+interface CellState {
+  url: string;
+  active: boolean;
+}
+
+private cellStates: Map<string, CellState> = new Map();
+```
+
+`active` 默认值：有配置 URL 的格子默认 `true`，空格子默认 `false`（无法发送）。
+
+### 验收时重点检查
+
+1. 四分屏下，cell-3 为空时点击发送，前三个格子正常收到文字，不报错
+2. 取消勾选某个格子的图标后发送，该格子不收到文字，其他格子不受影响
+3. 故意让某个格子停在一个不在适配器清单里的网站（比如百度首页），发送后该格子触发
+   `inject-failed` 提示，其他格子正常
+4. 连续发送两次不同内容，第二次发送前按上箭头键，输入框回填的是第一次发送的内容

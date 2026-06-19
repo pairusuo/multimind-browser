@@ -12,6 +12,7 @@ import {
   NoticeType,
   SplitRatiosPayload,
 } from '../shared/types';
+import { getAdapterForUrl } from './adapters';
 
 const TOOLBAR_HEIGHT = 52;
 const BOTTOM_INPUT_HEIGHT = 80;
@@ -150,6 +151,10 @@ export class WindowManager {
     this.rememberCurrentSitePartition(cellId);
     this.cellUrls[cellId] = url;
     this.store.set(`cells.${cellId}.url`, url);
+    if (!url) {
+      this.activeCells[cellId] = false;
+      this.store.set(`cells.${cellId}.active`, false);
+    }
     this.loadCellUrl(cellId, url);
     this.layout();
   }
@@ -179,6 +184,10 @@ export class WindowManager {
     this.rememberCurrentSitePartition(cellId);
     this.cellUrls[cellId] = url;
     this.store.set(`cells.${cellId}.url`, url);
+    if (!url) {
+      this.activeCells[cellId] = false;
+      this.store.set(`cells.${cellId}.active`, false);
+    }
     this.loadCellUrl(cellId, url);
     this.layout();
   }
@@ -199,6 +208,39 @@ export class WindowManager {
 
   reload(cellId: string): void {
     this.views.get(cellId)?.webContents.reload();
+  }
+
+  async sendToAll(text: string): Promise<void> {
+    const trimmedText = text.trim();
+    if (!trimmedText) {
+      return;
+    }
+
+    const targetCellIds = LAYOUT_CELLS[this.layoutMode].filter((cellId) => {
+      const url = this.cellUrls[cellId]?.trim();
+      return Boolean(this.activeCells[cellId] && url);
+    });
+
+    for (const cellId of targetCellIds) {
+      await this.injectText(cellId, trimmedText);
+      await delay(150);
+    }
+  }
+
+  async injectText(cellId: string, text: string): Promise<boolean> {
+    const url = this.cellUrls[cellId]?.trim();
+    if (!url) {
+      return false;
+    }
+
+    const adapter = getAdapterForUrl(url);
+    if (!adapter) {
+      this.showCellNotice(cellId, 'inject-failed');
+      return false;
+    }
+
+    const result = await this.injectScript(cellId, adapter.injectScript(text));
+    return result === true;
   }
 
   async injectScript(cellId: string, script: string): Promise<unknown> {
@@ -537,7 +579,8 @@ export class WindowManager {
 
   private getStoredActiveCells(): Record<string, boolean> {
     return CELL_IDS.reduce<Record<string, boolean>>((activeCells, cellId) => {
-      activeCells[cellId] = Boolean(this.store.get(`cells.${cellId}.active`, true));
+      const hasUrl = Boolean(this.cellUrls[cellId]?.trim());
+      activeCells[cellId] = Boolean(this.store.get(`cells.${cellId}.active`, hasUrl));
       return activeCells;
     }, {});
   }
@@ -558,6 +601,10 @@ function splitSize(total: number, ratio: number): number {
 
 function clampRatio(ratio: number): number {
   return Math.min(0.8, Math.max(0.2, ratio));
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function insetBounds(bounds: Electron.Rectangle, inset: number): Electron.Rectangle {

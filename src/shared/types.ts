@@ -65,6 +65,10 @@ export interface CellFocusedPayload {
   cellId: string;
 }
 
+export interface SendToAllPayload {
+  text: string;
+}
+
 export type NoticeType = 'google-login-blocked' | 'inject-failed' | 'load-failed';
 
 export interface CellNoticePayload {
@@ -108,6 +112,7 @@ export interface CellFaviconChangedPayload {
 export interface ElectronAPI {
   getBrowserState: () => Promise<BrowserState>;
   applyTemplate: (payload: ApplyTemplatePayload) => Promise<BrowserState>;
+  sendToAll: (payload: SendToAllPayload) => Promise<void>;
   setLayout: (mode: LayoutMode) => Promise<void>;
   setOverlayOpen: (open: boolean) => Promise<void>;
   setSplitRatios: (payload: SplitRatiosPayload) => Promise<void>;

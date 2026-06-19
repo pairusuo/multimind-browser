@@ -5,6 +5,7 @@ import {
   CellFocusedPayload,
   LayoutMode,
   NavigatePayload,
+  SendToAllPayload,
   SetCellUrlPayload,
   SplitRatiosPayload,
   ToggleCellPayload,
@@ -15,6 +16,10 @@ export function registerIpcHandlers(windowManager: WindowManager): void {
   ipcMain.handle(IPC.GET_BROWSER_STATE, () => windowManager.getBrowserState());
 
   ipcMain.handle(IPC.APPLY_TEMPLATE, (_event, payload: ApplyTemplatePayload) => windowManager.applyTemplate(payload));
+
+  ipcMain.handle(IPC.SEND_TO_ALL, (_event, payload: SendToAllPayload) => {
+    return windowManager.sendToAll(payload.text);
+  });
 
   ipcMain.handle(IPC.NAVIGATE, (_event, payload: NavigatePayload) => {
     windowManager.navigate(payload.cellId, payload.url);

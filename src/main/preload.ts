@@ -10,6 +10,7 @@ import {
   ElectronAPI,
   IPC,
   NavigatePayload,
+  SendToAllPayload,
   SetCellUrlPayload,
   SplitRatiosPayload,
   ToggleCellPayload,
@@ -18,6 +19,7 @@ import {
 const api: ElectronAPI = {
   getBrowserState: () => ipcRenderer.invoke(IPC.GET_BROWSER_STATE) as Promise<BrowserState>,
   applyTemplate: (payload: ApplyTemplatePayload) => ipcRenderer.invoke(IPC.APPLY_TEMPLATE, payload),
+  sendToAll: (payload: SendToAllPayload) => ipcRenderer.invoke(IPC.SEND_TO_ALL, payload),
   setLayout: (mode) => ipcRenderer.invoke(IPC.SET_LAYOUT, mode),
   setOverlayOpen: (open: boolean) => ipcRenderer.invoke(IPC.SET_OVERLAY_OPEN, open),
   setSplitRatios: (payload: SplitRatiosPayload) => ipcRenderer.invoke(IPC.SET_SPLIT_RATIOS, payload),

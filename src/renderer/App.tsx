@@ -97,8 +97,12 @@ export default function App() {
 
     for (const cellId of visibleCells) {
       const nextUrl = nextUrls[cellId]?.trim();
-      if (nextUrl) {
-        await window.electronAPI.setCellUrl({ cellId, url: nextUrl });
+      await window.electronAPI.setCellUrl({ cellId, url: nextUrl ?? '' });
+      if (!nextUrl) {
+        setActiveCells((current) => ({
+          ...current,
+          [cellId]: false,
+        }));
       }
     }
 
@@ -173,7 +177,12 @@ export default function App() {
           onToggleCell={handleToggleCell}
         />
       </main>
-      <BottomInput layoutMode={layoutMode} />
+      <BottomInput
+        activeCells={activeCells}
+        cellUrls={cellUrls}
+        layoutMode={layoutMode}
+        onToggleCell={handleToggleCell}
+      />
       {!hasCompletedOnboarding && <TemplateChooser onApplyTemplate={(template) => void handleApplyTemplate(template)} />}
       {showConfigPanel && (
         <CellConfigPanel

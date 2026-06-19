@@ -171,7 +171,7 @@ function getCellMeta(
   return {
     url: cellUrls[cellId] ?? '',
     favicon: favicons[cellId] ?? null,
-    active: activeCells[cellId] ?? true,
+    active: Boolean(activeCells[cellId] && cellUrls[cellId]?.trim()),
   };
 }
 
