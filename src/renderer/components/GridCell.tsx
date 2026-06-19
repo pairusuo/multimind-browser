@@ -13,12 +13,24 @@ interface GridCellProps {
     mode: CellMode;
     favicon: string | null;
     active: boolean;
+    muted: boolean;
   };
   onFocus: (cellId: string, url: string) => void;
+  onNewTab: (cellId: string, url?: string) => void;
+  onToggleMute: (cellId: string) => void;
   onToggle: (cellId: string, active: boolean) => void;
 }
 
-export default function GridCell({ cellId, className, focused, meta, onFocus, onToggle }: GridCellProps) {
+export default function GridCell({
+  cellId,
+  className,
+  focused,
+  meta,
+  onFocus,
+  onNewTab,
+  onToggleMute,
+  onToggle,
+}: GridCellProps) {
   const host = safeHost(meta.url);
   const [notice, setNotice] = useState<CellNoticePayload | null>(null);
 
@@ -65,6 +77,19 @@ export default function GridCell({ cellId, className, focused, meta, onFocus, on
         </button>
         <button type="button" title="Set address" aria-label="Set cell address" onClick={() => void changeUrl()}>
           ⌘
+        </button>
+        <button type="button" title="Open in new tab" aria-label="Open in new tab" onClick={() => onNewTab(cellId, meta.url)}>
+          +
+        </button>
+        <button
+          type="button"
+          className={meta.muted ? 'active' : ''}
+          title="Toggle mute"
+          aria-label="Toggle mute"
+          aria-pressed={meta.muted}
+          onClick={() => onToggleMute(cellId)}
+        >
+          M
         </button>
         <button
           type="button"

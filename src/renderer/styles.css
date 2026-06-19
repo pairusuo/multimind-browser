@@ -38,7 +38,7 @@ textarea {
   position: relative;
   z-index: 10;
   display: grid;
-  grid-template-columns: max-content max-content minmax(160px, 1fr) max-content;
+  grid-template-columns: max-content minmax(120px, 220px) max-content minmax(160px, 1fr) max-content;
   align-items: center;
   gap: 10px;
   height: 52px;
@@ -59,7 +59,26 @@ textarea {
   gap: 4px;
 }
 
+.tab-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px 32px;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tab-controls select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  border-radius: 6px;
+  padding: 0 8px;
+  background: #ffffff;
+  color: #1f2937;
+}
+
 .navigation-controls button,
+.tab-controls button,
 .layout-controls button,
 .cell-menu button {
   width: 32px;
@@ -73,6 +92,7 @@ textarea {
 }
 
 .navigation-controls button:hover,
+.tab-controls button:hover,
 .layout-controls button:hover,
 .cell-menu button:hover {
   background: #eef2ff;
@@ -80,7 +100,7 @@ textarea {
 
 .layout-controls {
   display: grid;
-  grid-template-columns: repeat(6, 34px);
+  grid-template-columns: repeat(7, 34px);
   gap: 4px;
 }
 
@@ -288,7 +308,7 @@ textarea {
   right: 10px;
   z-index: 4;
   display: grid;
-  grid-template-columns: repeat(3, 32px);
+  grid-template-columns: repeat(5, 32px);
   gap: 4px;
   opacity: 0;
   pointer-events: none;
@@ -617,9 +637,10 @@ textarea {
     grid-template-columns: 1fr max-content;
     grid-template-areas:
       "brand controls"
+      "tabs tabs"
       "address address"
       "layouts layouts";
-    height: 132px;
+    height: 170px;
     gap: 6px 8px;
   }
 
@@ -631,13 +652,17 @@ textarea {
     grid-area: controls;
   }
 
+  .tab-controls {
+    grid-area: tabs;
+  }
+
   .address-form {
     grid-area: address;
   }
 
   .layout-controls {
     grid-area: layouts;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
   }
 
   .layout-controls button {
@@ -645,14 +670,14 @@ textarea {
   }
 
   .browser-stage {
-    height: calc(100% - 132px);
+    height: calc(100% - 170px);
   }
 
   .browser-stage-horizontal,
   .browser-stage-vertical,
   .browser-stage-triple,
   .browser-stage-quad {
-    height: calc(100% - 212px);
+    height: calc(100% - 250px);
   }
 
   .bottom-input-shell {
@@ -709,9 +734,11 @@ textarea {
   }
 
   .navigation-controls button,
+  .tab-controls button,
   .layout-controls button,
   .cell-menu button,
-  .address-form input {
+  .address-form input,
+  .tab-controls select {
     border-color: rgba(255, 255, 255, 0.14);
     background: #171c23;
     color: #f9fafb;

@@ -6,9 +6,12 @@ interface SplitViewProps {
   activeCells: Record<string, boolean>;
   cellModes: Record<string, CellMode>;
   cellUrls: Record<string, string>;
+  mutedCells: Record<string, boolean>;
   focusedCellId: string;
   layoutMode: LayoutMode;
   onFocusCell: (cellId: string, url: string) => void;
+  onNewTab: (cellId: string, url?: string) => void;
+  onToggleMute: (cellId: string) => void;
   onToggleCell: (cellId: string, active: boolean) => void;
 }
 
@@ -23,9 +26,12 @@ export default function SplitView({
   activeCells,
   cellModes,
   cellUrls,
+  mutedCells,
   focusedCellId,
   layoutMode,
   onFocusCell,
+  onNewTab,
+  onToggleMute,
   onToggleCell,
 }: SplitViewProps) {
   const [cellFavicons, setCellFavicons] = useState<CellFavicons>(INITIAL_FAVICONS);
@@ -99,8 +105,10 @@ export default function SplitView({
           cellId="cell-0"
           className="cell-a"
           focused={focusedCellId === 'cell-0'}
-          meta={getCellMeta('cell-0', cellUrls, cellModes, activeCells, cellFavicons)}
+          meta={getCellMeta('cell-0', cellUrls, cellModes, activeCells, mutedCells, cellFavicons)}
           onFocus={onFocusCell}
+          onNewTab={onNewTab}
+          onToggleMute={onToggleMute}
           onToggle={onToggleCell}
         />
       )}
@@ -122,8 +130,10 @@ export default function SplitView({
           cellId="cell-1"
           className="cell-b"
           focused={focusedCellId === 'cell-1'}
-          meta={getCellMeta('cell-1', cellUrls, cellModes, activeCells, cellFavicons)}
+          meta={getCellMeta('cell-1', cellUrls, cellModes, activeCells, mutedCells, cellFavicons)}
           onFocus={onFocusCell}
+          onNewTab={onNewTab}
+          onToggleMute={onToggleMute}
           onToggle={onToggleCell}
         />
       )}
@@ -145,8 +155,10 @@ export default function SplitView({
           cellId="cell-2"
           className="cell-c"
           focused={focusedCellId === 'cell-2'}
-          meta={getCellMeta('cell-2', cellUrls, cellModes, activeCells, cellFavicons)}
+          meta={getCellMeta('cell-2', cellUrls, cellModes, activeCells, mutedCells, cellFavicons)}
           onFocus={onFocusCell}
+          onNewTab={onNewTab}
+          onToggleMute={onToggleMute}
           onToggle={onToggleCell}
         />
       )}
@@ -155,8 +167,10 @@ export default function SplitView({
           cellId="cell-3"
           className="cell-d"
           focused={focusedCellId === 'cell-3'}
-          meta={getCellMeta('cell-3', cellUrls, cellModes, activeCells, cellFavicons)}
+          meta={getCellMeta('cell-3', cellUrls, cellModes, activeCells, mutedCells, cellFavicons)}
           onFocus={onFocusCell}
+          onNewTab={onNewTab}
+          onToggleMute={onToggleMute}
           onToggle={onToggleCell}
         />
       )}
@@ -169,6 +183,7 @@ function getCellMeta(
   cellUrls: Record<string, string>,
   cellModes: Record<string, CellMode>,
   activeCells: Record<string, boolean>,
+  mutedCells: Record<string, boolean>,
   favicons: CellFavicons,
 ) {
   return {
@@ -176,6 +191,7 @@ function getCellMeta(
     mode: cellModes[cellId] ?? 'chat',
     favicon: favicons[cellId] ?? null,
     active: Boolean(activeCells[cellId] && cellUrls[cellId]?.trim()),
+    muted: Boolean(mutedCells[cellId]),
   };
 }
 

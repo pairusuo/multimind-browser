@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import {
   ApplyTemplatePayload,
+  CellTabPayload,
   IPC,
   CellFocusedPayload,
   LayoutMode,
@@ -8,6 +9,7 @@ import {
   SendToAllPayload,
   SetCellUrlPayload,
   SplitRatiosPayload,
+  ThemeMode,
   ToggleCellPayload,
 } from '../shared/types';
 import { WindowManager } from './windowManager';
@@ -19,6 +21,26 @@ export function registerIpcHandlers(windowManager: WindowManager): void {
 
   ipcMain.handle(IPC.SEND_TO_ALL, (_event, payload: SendToAllPayload) => {
     return windowManager.sendToAll(payload.text);
+  });
+
+  ipcMain.handle(IPC.SET_THEME_MODE, (_event, mode: ThemeMode) => {
+    return windowManager.setThemeMode(mode);
+  });
+
+  ipcMain.handle(IPC.NEW_TAB, (_event, payload: CellTabPayload) => {
+    return windowManager.newTab(payload.cellId, payload.url);
+  });
+
+  ipcMain.handle(IPC.CLOSE_TAB, (_event, payload: CellTabPayload) => {
+    return windowManager.closeTab(payload.cellId, payload.tabId);
+  });
+
+  ipcMain.handle(IPC.SWITCH_TAB, (_event, payload: CellTabPayload) => {
+    return windowManager.switchTab(payload.cellId, payload.tabId);
+  });
+
+  ipcMain.handle(IPC.TOGGLE_MUTE, (_event, cellId: string) => {
+    return windowManager.toggleMute(cellId);
   });
 
   ipcMain.handle(IPC.NAVIGATE, (_event, payload: NavigatePayload) => {

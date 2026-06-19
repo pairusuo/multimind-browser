@@ -4,7 +4,16 @@ import Toolbar from './components/Toolbar';
 import SplitView from './components/SplitView';
 import BottomInput from './components/BottomInput';
 import TemplateChooser from './components/TemplateChooser';
-import { BrowserState, CELL_IDS, CellMode, DEFAULT_URLS, LAYOUT_CELLS, LayoutMode } from '../shared/types';
+import {
+  BrowserState,
+  CELL_IDS,
+  CellMode,
+  CellTab,
+  DEFAULT_URLS,
+  LAYOUT_CELLS,
+  LayoutMode,
+  ThemeMode,
+} from '../shared/types';
 import { LayoutTemplate } from '../shared/presetTemplates';
 import { PRESET_SITES } from '../shared/presetSites';
 
@@ -28,12 +37,31 @@ const INITIAL_SEARCH_TEMPLATES = CELL_IDS.reduce<Record<string, string>>((templa
   return templates;
 }, {});
 
+const INITIAL_MUTED_CELLS = CELL_IDS.reduce<Record<string, boolean>>((mutedCells, cellId) => {
+  mutedCells[cellId] = false;
+  return mutedCells;
+}, {});
+
+const INITIAL_TABS = CELL_IDS.reduce<Record<string, CellTab[]>>((tabs, cellId) => {
+  tabs[cellId] = [];
+  return tabs;
+}, {});
+
+const INITIAL_ACTIVE_TAB_IDS = CELL_IDS.reduce<Record<string, string>>((activeTabIds, cellId) => {
+  activeTabIds[cellId] = '';
+  return activeTabIds;
+}, {});
+
 export default function App() {
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('single');
   const [cellUrls, setCellUrls] = useState<Record<string, string>>(INITIAL_URLS);
   const [cellModes, setCellModes] = useState<Record<string, CellMode>>(INITIAL_CELL_MODES);
   const [searchUrlTemplates, setSearchUrlTemplates] = useState<Record<string, string>>(INITIAL_SEARCH_TEMPLATES);
   const [activeCells, setActiveCells] = useState<Record<string, boolean>>(INITIAL_ACTIVE_CELLS);
+  const [mutedCells, setMutedCells] = useState<Record<string, boolean>>(INITIAL_MUTED_CELLS);
+  const [tabs, setTabs] = useState<Record<string, CellTab[]>>(INITIAL_TABS);
+  const [activeTabIds, setActiveTabIds] = useState<Record<string, string>>(INITIAL_ACTIVE_TAB_IDS);
+  const [themeMode, setThemeMode] = useState<ThemeMode>('system');
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [showConfigPanel, setShowConfigPanel] = useState(false);
   const [focusedCellId, setFocusedCellId] = useState('cell-0');
@@ -63,10 +91,14 @@ export default function App() {
         [payload.cellId]: payload.url,
       }));
     });
+    const removeLayoutListener = window.electronAPI.onLayoutChanged((payload) => {
+      setLayoutMode(payload.layoutMode);
+    });
 
     return () => {
       removeFocusListener();
       removeUrlListener();
+      removeLayoutListener();
     };
   }, []);
 
@@ -147,6 +179,31 @@ export default function App() {
     void window.electronAPI.toggleCell({ cellId, active });
   }
 
+  async function handleThemeModeChange(mode: ThemeMode) {
+    const state = await window.electronAPI.setThemeMode(mode);
+    applyBrowserState(state);
+  }
+
+  async function handleNewTab(cellId: string, url?: string) {
+    const state = await window.electronAPI.newTab({ cellId, url });
+    applyBrowserState(state);
+  }
+
+  async function handleCloseTab(cellId: string, tabId?: string) {
+    const state = await window.electronAPI.closeTab({ cellId, tabId });
+    applyBrowserState(state);
+  }
+
+  async function handleSwitchTab(cellId: string, tabId?: string) {
+    const state = await window.electronAPI.switchTab({ cellId, tabId });
+    applyBrowserState(state);
+  }
+
+  async function handleToggleMute(cellId: string) {
+    const state = await window.electronAPI.toggleMute(cellId);
+    applyBrowserState(state);
+  }
+
   function applyBrowserState(state: BrowserState) {
     setLayoutMode(state.layoutMode);
     setCellUrls({
@@ -165,6 +222,19 @@ export default function App() {
       ...INITIAL_ACTIVE_CELLS,
       ...state.activeCells,
     });
+    setMutedCells({
+      ...INITIAL_MUTED_CELLS,
+      ...state.mutedCells,
+    });
+    setTabs({
+      ...INITIAL_TABS,
+      ...state.tabs,
+    });
+    setActiveTabIds({
+      ...INITIAL_ACTIVE_TAB_IDS,
+      ...state.activeTabIds,
+    });
+    setThemeMode(state.themeMode);
     setFocusedCellId(state.focusedCellId);
     setHasCompletedOnboarding(state.hasCompletedOnboarding);
   }
@@ -182,6 +252,10 @@ export default function App() {
     setCellModes(INITIAL_CELL_MODES);
     setSearchUrlTemplates(INITIAL_SEARCH_TEMPLATES);
     setActiveCells(INITIAL_ACTIVE_CELLS);
+    setMutedCells(INITIAL_MUTED_CELLS);
+    setTabs(INITIAL_TABS);
+    setActiveTabIds(INITIAL_ACTIVE_TAB_IDS);
+    setThemeMode('system');
     setFocusedCellId('cell-0');
     setHasCompletedOnboarding(true);
     setShowConfigPanel(mode === 'config' || mode === 'risk');
@@ -201,9 +275,16 @@ export default function App() {
       <Toolbar
         currentUrl={url}
         focusedCellId={focusedCellId}
+        tabs={tabs[focusedCellId] ?? []}
+        activeTabId={activeTabIds[focusedCellId] ?? ''}
+        themeMode={themeMode}
         layoutMode={layoutMode}
         onLayoutChange={(mode) => void handleLayoutChange(mode)}
+        onNewTab={() => void handleNewTab(focusedCellId)}
+        onCloseTab={(tabId) => void handleCloseTab(focusedCellId, tabId)}
+        onSwitchTab={(tabId) => void handleSwitchTab(focusedCellId, tabId)}
         onOpenConfig={() => setShowConfigPanel(true)}
+        onThemeModeChange={(mode) => void handleThemeModeChange(mode)}
         onUrlChange={handleUrlChange}
       />
       <main className={`browser-stage browser-stage-${layoutMode}`} aria-label="Browser content">
@@ -211,9 +292,12 @@ export default function App() {
           activeCells={activeCells}
           cellModes={cellModes}
           cellUrls={cellUrls}
+          mutedCells={mutedCells}
           focusedCellId={focusedCellId}
           layoutMode={layoutMode}
           onFocusCell={handleFocusCell}
+          onNewTab={(cellId, url) => void handleNewTab(cellId, url)}
+          onToggleMute={(cellId) => void handleToggleMute(cellId)}
           onToggleCell={handleToggleCell}
         />
       </main>

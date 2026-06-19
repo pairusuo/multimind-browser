@@ -2,6 +2,7 @@ import type { LayoutTemplate } from './presetTemplates';
 
 export type LayoutMode = 'single' | 'horizontal' | 'vertical' | 'triple' | 'quad';
 export type CellMode = 'chat' | 'search';
+export type ThemeMode = 'system' | 'light' | 'dark';
 
 export interface CellConfig {
   id: string;
@@ -39,9 +40,15 @@ export const IPC = {
   RELOAD: 'reload',
   SET_CELL_URL: 'set-cell-url',
   TOGGLE_CELL: 'toggle-cell',
+  TOGGLE_MUTE: 'toggle-mute',
+  NEW_TAB: 'new-tab',
+  CLOSE_TAB: 'close-tab',
+  SWITCH_TAB: 'switch-tab',
+  SET_THEME_MODE: 'set-theme-mode',
   CELL_FOCUSED: 'cell-focused',
 
   SHOW_CELL_NOTICE: 'show-cell-notice',
+  LAYOUT_CHANGED: 'layout-changed',
   CELL_URL_CHANGED: 'cell-url-changed',
   CELL_TITLE_CHANGED: 'cell-title-changed',
   CELL_FAVICON_CHANGED: 'cell-favicon-changed',
@@ -72,6 +79,18 @@ export interface SendToAllPayload {
   text: string;
 }
 
+export interface CellTab {
+  id: string;
+  title: string;
+  url: string;
+}
+
+export interface CellTabPayload {
+  cellId: string;
+  tabId?: string;
+  url?: string;
+}
+
 export type NoticeType = 'google-login-blocked' | 'inject-failed' | 'load-failed';
 
 export interface CellNoticePayload {
@@ -91,6 +110,10 @@ export interface BrowserState {
   cellModes: Record<string, CellMode>;
   searchUrlTemplates: Record<string, string>;
   activeCells: Record<string, boolean>;
+  mutedCells: Record<string, boolean>;
+  tabs: Record<string, CellTab[]>;
+  activeTabIds: Record<string, string>;
+  themeMode: ThemeMode;
   focusedCellId: string;
   hasCompletedOnboarding: boolean;
 }
@@ -114,11 +137,16 @@ export interface CellFaviconChangedPayload {
   favicon: string;
 }
 
+export interface LayoutChangedPayload {
+  layoutMode: LayoutMode;
+}
+
 export interface ElectronAPI {
   getBrowserState: () => Promise<BrowserState>;
   applyTemplate: (payload: ApplyTemplatePayload) => Promise<BrowserState>;
   sendToAll: (payload: SendToAllPayload) => Promise<void>;
   setLayout: (mode: LayoutMode) => Promise<void>;
+  setThemeMode: (mode: ThemeMode) => Promise<BrowserState>;
   setOverlayOpen: (open: boolean) => Promise<void>;
   setSplitRatios: (payload: SplitRatiosPayload) => Promise<void>;
   navigate: (payload: NavigatePayload) => Promise<void>;
@@ -127,8 +155,13 @@ export interface ElectronAPI {
   reload: (cellId: string) => Promise<void>;
   setCellUrl: (payload: SetCellUrlPayload) => Promise<void>;
   toggleCell: (payload: ToggleCellPayload) => Promise<void>;
+  toggleMute: (cellId: string) => Promise<BrowserState>;
+  newTab: (payload: CellTabPayload) => Promise<BrowserState>;
+  closeTab: (payload: CellTabPayload) => Promise<BrowserState>;
+  switchTab: (payload: CellTabPayload) => Promise<BrowserState>;
   focusCell: (payload: CellFocusedPayload) => Promise<void>;
   onCellFocused: (callback: (payload: CellFocusedPayload) => void) => () => void;
+  onLayoutChanged: (callback: (payload: LayoutChangedPayload) => void) => () => void;
   onCellNotice: (callback: (payload: CellNoticePayload) => void) => () => void;
   onCellUrlChanged: (callback: (payload: CellUrlChangedPayload) => void) => () => void;
   onCellTitleChanged: (callback: (payload: CellTitleChangedPayload) => void) => () => void;

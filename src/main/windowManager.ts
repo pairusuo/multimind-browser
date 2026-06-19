@@ -1,10 +1,11 @@
-import { BrowserWindow, WebContentsView } from 'electron';
+import { BrowserWindow, WebContents, WebContentsView, nativeTheme } from 'electron';
 import { NOTICE_MESSAGES } from '../shared/notices';
 import { PRESET_SITES } from '../shared/presetSites';
 import {
   ApplyTemplatePayload,
   BrowserState,
   CELL_IDS,
+  CellTab,
   CellMode,
   DEFAULT_URLS,
   IPC,
@@ -12,6 +13,7 @@ import {
   LayoutMode,
   NoticeType,
   SplitRatiosPayload,
+  ThemeMode,
 } from '../shared/types';
 import { getAdapterForUrl } from './adapters';
 
@@ -53,6 +55,10 @@ export class WindowManager {
   private cellUrls: Record<string, string>;
   private cellModes: Record<string, CellMode>;
   private searchUrlTemplates: Record<string, string>;
+  private mutedCells: Record<string, boolean>;
+  private tabs: Record<string, CellTab[]>;
+  private activeTabIds: Record<string, string>;
+  private themeMode: ThemeMode;
   private activeCells: Record<string, boolean> = {
     'cell-0': true,
     'cell-1': true,
@@ -73,8 +79,14 @@ export class WindowManager {
     this.cellModes = this.getStoredCellModes();
     this.searchUrlTemplates = this.getStoredSearchUrlTemplates();
     this.activeCells = this.getStoredActiveCells();
+    this.mutedCells = this.getStoredMutedCells();
+    this.tabs = this.getStoredTabs();
+    this.activeTabIds = this.getStoredActiveTabIds();
+    this.themeMode = this.getStoredThemeMode();
+    nativeTheme.themeSource = this.themeMode;
     this.cellStates = this.createCellStates();
     this.focusedCellId = this.getStoredFocusedCellId();
+    this.bindShortcutEvents(this.window.webContents);
     this.registerLegacySitePartitions();
   }
 
@@ -113,6 +125,7 @@ export class WindowManager {
   setLayout(mode: LayoutMode, fillDefaults = true): void {
     this.layoutMode = mode;
     this.store.set('browser.layout', mode);
+    this.window.webContents.send(IPC.LAYOUT_CHANGED, { layoutMode: mode });
     const visibleCells = LAYOUT_CELLS[mode];
 
     if (fillDefaults) {
@@ -164,6 +177,7 @@ export class WindowManager {
     this.rememberCurrentSitePartition(cellId);
     this.cellUrls[cellId] = url;
     this.store.set(`cells.${cellId}.url`, url);
+    this.updateActiveTab(cellId, { url });
     this.setCellMode(cellId, mode ?? inferCellMode(url));
     this.setSearchUrlTemplate(cellId, searchUrlTemplate ?? inferSearchUrlTemplate(url, this.cellModes[cellId]));
     if (!url) {
@@ -201,6 +215,7 @@ export class WindowManager {
     this.rememberCurrentSitePartition(cellId);
     this.cellUrls[cellId] = url;
     this.store.set(`cells.${cellId}.url`, url);
+    this.updateActiveTab(cellId, { url });
     if (!url) {
       this.activeCells[cellId] = false;
       this.store.set(`cells.${cellId}.active`, false);
@@ -226,6 +241,82 @@ export class WindowManager {
 
   reload(cellId: string): void {
     this.views.get(cellId)?.webContents.reload();
+  }
+
+  setThemeMode(mode: ThemeMode): BrowserState {
+    this.themeMode = mode;
+    this.store.set('browser.themeMode', mode);
+    nativeTheme.themeSource = mode;
+    return this.getBrowserState();
+  }
+
+  toggleMute(cellId: string): BrowserState {
+    if (!isKnownCellId(cellId)) {
+      return this.getBrowserState();
+    }
+
+    const muted = !this.mutedCells[cellId];
+    this.mutedCells[cellId] = muted;
+    this.store.set(`cells.${cellId}.muted`, muted);
+    this.views.get(cellId)?.webContents.setAudioMuted(muted);
+    return this.getBrowserState();
+  }
+
+  newTab(cellId: string, rawUrl?: string): BrowserState {
+    if (!isKnownCellId(cellId)) {
+      return this.getBrowserState();
+    }
+
+    const url = normalizeUrl(rawUrl ?? '');
+    const tab = createTab(url || 'about:blank', 'New tab');
+    this.tabs[cellId] = [...(this.tabs[cellId] ?? []), tab];
+    this.activeTabIds[cellId] = tab.id;
+    this.storeTabs(cellId);
+    this.navigate(cellId, url);
+    return this.getBrowserState();
+  }
+
+  closeTab(cellId: string, tabId?: string): BrowserState {
+    if (!isKnownCellId(cellId)) {
+      return this.getBrowserState();
+    }
+
+    const tabs = this.tabs[cellId] ?? [];
+    const targetTabId = tabId ?? this.activeTabIds[cellId];
+    const targetIndex = tabs.findIndex((tab) => tab.id === targetTabId);
+    if (targetIndex === -1) {
+      return this.getBrowserState();
+    }
+
+    const nextTabs = tabs.filter((tab) => tab.id !== targetTabId);
+    if (!nextTabs.length) {
+      nextTabs.push(createTab('about:blank', 'New tab'));
+    }
+
+    this.tabs[cellId] = nextTabs;
+    if (this.activeTabIds[cellId] === targetTabId) {
+      const nextTab = nextTabs[Math.max(0, targetIndex - 1)] ?? nextTabs[0];
+      this.activeTabIds[cellId] = nextTab.id;
+      this.navigate(cellId, nextTab.url === 'about:blank' ? '' : nextTab.url);
+    }
+    this.storeTabs(cellId);
+    return this.getBrowserState();
+  }
+
+  switchTab(cellId: string, tabId?: string): BrowserState {
+    if (!isKnownCellId(cellId) || !tabId) {
+      return this.getBrowserState();
+    }
+
+    const tab = this.tabs[cellId]?.find((candidate) => candidate.id === tabId);
+    if (!tab) {
+      return this.getBrowserState();
+    }
+
+    this.activeTabIds[cellId] = tab.id;
+    this.storeTabs(cellId);
+    this.navigate(cellId, tab.url === 'about:blank' ? '' : tab.url);
+    return this.getBrowserState();
   }
 
   async sendToAll(text: string): Promise<void> {
@@ -293,6 +384,10 @@ export class WindowManager {
       cellModes: { ...this.cellModes },
       searchUrlTemplates: { ...this.searchUrlTemplates },
       activeCells: { ...this.activeCells },
+      mutedCells: { ...this.mutedCells },
+      tabs: cloneTabs(this.tabs),
+      activeTabIds: { ...this.activeTabIds },
+      themeMode: this.themeMode,
       focusedCellId: this.focusedCellId,
       hasCompletedOnboarding: Boolean(this.store.get('browser.hasCompletedOnboarding', false)),
     };
@@ -370,6 +465,7 @@ export class WindowManager {
     });
 
     view.webContents.setUserAgent(CHROME_USER_AGENT);
+    view.webContents.setAudioMuted(Boolean(this.mutedCells[cellId]));
     this.bindViewEvents(cellId, view);
     this.views.set(cellId, view);
     this.viewPartitions.set(cellId, partition);
@@ -514,6 +610,7 @@ export class WindowManager {
   }
 
   private bindViewEvents(cellId: string, view: WebContentsView): void {
+    this.bindShortcutEvents(view.webContents);
     view.webContents.on('focus', () => {
       this.focusCell(cellId);
     });
@@ -526,6 +623,7 @@ export class WindowManager {
       this.checkNavigationNotice(cellId, url);
     });
     view.webContents.on('page-title-updated', (_event, title) => {
+      this.updateActiveTab(cellId, { title });
       this.window.webContents.send(IPC.CELL_TITLE_CHANGED, { cellId, title });
     });
     view.webContents.on('page-favicon-updated', (_event, favicons) => {
@@ -537,6 +635,10 @@ export class WindowManager {
     view.webContents.on('did-finish-load', () => {
       this.cellUrls[cellId] = view.webContents.getURL();
       this.store.set(`cells.${cellId}.url`, view.webContents.getURL());
+      this.updateActiveTab(cellId, {
+        url: view.webContents.getURL(),
+        title: view.webContents.getTitle() || safeTabTitle(view.webContents.getURL()),
+      });
       this.syncCellState(cellId);
       this.sendUrl(cellId, view.webContents.getURL());
       this.checkNavigationNotice(cellId, view.webContents.getURL());
@@ -688,6 +790,66 @@ export class WindowManager {
     }, {});
   }
 
+  private getStoredMutedCells(): Record<string, boolean> {
+    return CELL_IDS.reduce<Record<string, boolean>>((mutedCells, cellId) => {
+      mutedCells[cellId] = Boolean(this.store.get(`cells.${cellId}.muted`, false));
+      return mutedCells;
+    }, {});
+  }
+
+  private getStoredTabs(): Record<string, CellTab[]> {
+    return CELL_IDS.reduce<Record<string, CellTab[]>>((tabs, cellId) => {
+      const storedTabs = this.store.get(`cells.${cellId}.tabs`);
+      tabs[cellId] = isCellTabList(storedTabs)
+        ? storedTabs
+        : [createTab(this.cellUrls[cellId] || 'about:blank', safeTabTitle(this.cellUrls[cellId]))];
+      return tabs;
+    }, {});
+  }
+
+  private getStoredActiveTabIds(): Record<string, string> {
+    return CELL_IDS.reduce<Record<string, string>>((activeTabIds, cellId) => {
+      const storedTabId = this.store.get(`cells.${cellId}.activeTabId`);
+      const tabs = this.tabs[cellId] ?? [];
+      const activeTab = tabs.find((tab) => tab.id === storedTabId) ?? tabs[0];
+      activeTabIds[cellId] = activeTab?.id ?? createTab('about:blank', 'New tab').id;
+      return activeTabIds;
+    }, {});
+  }
+
+  private getStoredThemeMode(): ThemeMode {
+    const storedThemeMode = this.store.get('browser.themeMode', 'system');
+    return isThemeMode(storedThemeMode) ? storedThemeMode : 'system';
+  }
+
+  private bindShortcutEvents(webContents: WebContents): void {
+    webContents.on('before-input-event', (event, input) => {
+      const nextLayout = getLayoutShortcut(input);
+      if (!nextLayout) {
+        return;
+      }
+
+      event.preventDefault();
+      this.setLayout(nextLayout);
+    });
+  }
+
+  private updateActiveTab(cellId: string, patch: Partial<Pick<CellTab, 'title' | 'url'>>): void {
+    const tabId = this.activeTabIds[cellId];
+    const tabs = this.tabs[cellId];
+    if (!tabId || !tabs) {
+      return;
+    }
+
+    this.tabs[cellId] = tabs.map((tab) => (tab.id === tabId ? { ...tab, ...patch } : tab));
+    this.storeTabs(cellId);
+  }
+
+  private storeTabs(cellId: string): void {
+    this.store.set(`cells.${cellId}.tabs`, this.tabs[cellId] ?? []);
+    this.store.set(`cells.${cellId}.activeTabId`, this.activeTabIds[cellId] ?? '');
+  }
+
   private getStoredFocusedCellId(): string {
     const storedCellId = this.store.get('browser.focusedCellId', 'cell-0');
     return typeof storedCellId === 'string' && isKnownCellId(storedCellId) ? storedCellId : 'cell-0';
@@ -725,6 +887,61 @@ function isKnownCellId(cellId: string): boolean {
 
 function isLayoutMode(value: unknown): value is LayoutMode {
   return typeof value === 'string' && value in LAYOUT_CELLS;
+}
+
+function isThemeMode(value: unknown): value is ThemeMode {
+  return value === 'system' || value === 'light' || value === 'dark';
+}
+
+function isCellTabList(value: unknown): value is CellTab[] {
+  return Array.isArray(value)
+    && value.every((tab) => (
+      tab
+      && typeof tab === 'object'
+      && typeof (tab as CellTab).id === 'string'
+      && typeof (tab as CellTab).title === 'string'
+      && typeof (tab as CellTab).url === 'string'
+    ));
+}
+
+function createTab(url: string, title?: string): CellTab {
+  return {
+    id: `tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    title: title || safeTabTitle(url),
+    url,
+  };
+}
+
+function cloneTabs(tabs: Record<string, CellTab[]>): Record<string, CellTab[]> {
+  return CELL_IDS.reduce<Record<string, CellTab[]>>((clonedTabs, cellId) => {
+    clonedTabs[cellId] = [...(tabs[cellId] ?? [])];
+    return clonedTabs;
+  }, {});
+}
+
+function safeTabTitle(url: string): string {
+  if (!url || url === 'about:blank') {
+    return 'New tab';
+  }
+
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
+function getLayoutShortcut(input: Electron.Input): LayoutMode | null {
+  if (!(input.meta || input.control) || input.alt || input.shift) {
+    return null;
+  }
+
+  const key = input.key.toLowerCase();
+  if (key === '1') return 'single';
+  if (key === '2') return 'horizontal';
+  if (key === '3') return 'triple';
+  if (key === '4') return 'quad';
+  return null;
 }
 
 function isCellMode(value: unknown): value is CellMode {

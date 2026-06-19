@@ -2,8 +2,10 @@ import { contextBridge, ipcRenderer } from 'electron';
 import {
   ApplyTemplatePayload,
   BrowserState,
+  CellTabPayload,
   CellFaviconChangedPayload,
   CellFocusedPayload,
+  LayoutChangedPayload,
   CellNoticePayload,
   CellTitleChangedPayload,
   CellUrlChangedPayload,
@@ -13,6 +15,7 @@ import {
   SendToAllPayload,
   SetCellUrlPayload,
   SplitRatiosPayload,
+  ThemeMode,
   ToggleCellPayload,
 } from '../shared/types';
 
@@ -21,6 +24,7 @@ const api: ElectronAPI = {
   applyTemplate: (payload: ApplyTemplatePayload) => ipcRenderer.invoke(IPC.APPLY_TEMPLATE, payload),
   sendToAll: (payload: SendToAllPayload) => ipcRenderer.invoke(IPC.SEND_TO_ALL, payload),
   setLayout: (mode) => ipcRenderer.invoke(IPC.SET_LAYOUT, mode),
+  setThemeMode: (mode: ThemeMode) => ipcRenderer.invoke(IPC.SET_THEME_MODE, mode),
   setOverlayOpen: (open: boolean) => ipcRenderer.invoke(IPC.SET_OVERLAY_OPEN, open),
   setSplitRatios: (payload: SplitRatiosPayload) => ipcRenderer.invoke(IPC.SET_SPLIT_RATIOS, payload),
   navigate: (payload: NavigatePayload) => ipcRenderer.invoke(IPC.NAVIGATE, payload),
@@ -29,11 +33,20 @@ const api: ElectronAPI = {
   reload: (cellId: string) => ipcRenderer.invoke(IPC.RELOAD, cellId),
   setCellUrl: (payload: SetCellUrlPayload) => ipcRenderer.invoke(IPC.SET_CELL_URL, payload),
   toggleCell: (payload: ToggleCellPayload) => ipcRenderer.invoke(IPC.TOGGLE_CELL, payload),
+  toggleMute: (cellId: string) => ipcRenderer.invoke(IPC.TOGGLE_MUTE, cellId),
+  newTab: (payload: CellTabPayload) => ipcRenderer.invoke(IPC.NEW_TAB, payload),
+  closeTab: (payload: CellTabPayload) => ipcRenderer.invoke(IPC.CLOSE_TAB, payload),
+  switchTab: (payload: CellTabPayload) => ipcRenderer.invoke(IPC.SWITCH_TAB, payload),
   focusCell: (payload: CellFocusedPayload) => ipcRenderer.invoke(IPC.CELL_FOCUSED, payload),
   onCellFocused: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: CellFocusedPayload) => callback(payload);
     ipcRenderer.on(IPC.CELL_FOCUSED, listener);
     return () => ipcRenderer.removeListener(IPC.CELL_FOCUSED, listener);
+  },
+  onLayoutChanged: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: LayoutChangedPayload) => callback(payload);
+    ipcRenderer.on(IPC.LAYOUT_CHANGED, listener);
+    return () => ipcRenderer.removeListener(IPC.LAYOUT_CHANGED, listener);
   },
   onCellNotice: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: CellNoticePayload) => callback(payload);

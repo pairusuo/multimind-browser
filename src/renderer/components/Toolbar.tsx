@@ -1,13 +1,20 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { getRiskySiteReason } from '../../shared/riskySites';
-import { LayoutMode } from '../../shared/types';
+import { CellTab, LayoutMode, ThemeMode } from '../../shared/types';
 
 interface ToolbarProps {
   currentUrl: string;
   focusedCellId: string;
+  tabs: CellTab[];
+  activeTabId: string;
+  themeMode: ThemeMode;
   layoutMode: LayoutMode;
   onLayoutChange: (mode: LayoutMode) => void;
+  onNewTab: () => void;
+  onCloseTab: (tabId: string) => void;
+  onSwitchTab: (tabId: string) => void;
   onOpenConfig: () => void;
+  onThemeModeChange: (mode: ThemeMode) => void;
   onUrlChange: (url: string) => void;
 }
 
@@ -22,9 +29,16 @@ const LAYOUT_OPTIONS: Array<{ mode: LayoutMode; label: string; title: string }> 
 export default function Toolbar({
   currentUrl,
   focusedCellId,
+  tabs,
+  activeTabId,
+  themeMode,
   layoutMode,
   onLayoutChange,
+  onNewTab,
+  onCloseTab,
+  onSwitchTab,
   onOpenConfig,
+  onThemeModeChange,
   onUrlChange,
 }: ToolbarProps) {
   const [draftUrl, setDraftUrl] = useState(currentUrl);
@@ -50,9 +64,39 @@ export default function Toolbar({
     await window.electronAPI.setLayout(mode);
   }
 
+  function cycleThemeMode() {
+    const nextMode: ThemeMode = themeMode === 'system' ? 'light' : themeMode === 'light' ? 'dark' : 'system';
+    onThemeModeChange(nextMode);
+  }
+
   return (
     <header className="toolbar">
       <div className="toolbar-brand">MultiMind Browser</div>
+      <div className="tab-controls" aria-label="Tabs">
+        <select
+          value={activeTabId}
+          aria-label="Active tab"
+          onChange={(event) => onSwitchTab(event.target.value)}
+        >
+          {tabs.map((tab) => (
+            <option key={tab.id} value={tab.id}>
+              {tab.title || tab.url || 'New tab'}
+            </option>
+          ))}
+        </select>
+        <button type="button" title="New tab" aria-label="New tab" onClick={onNewTab}>
+          +
+        </button>
+        <button
+          type="button"
+          title="Close tab"
+          aria-label="Close tab"
+          disabled={!activeTabId}
+          onClick={() => onCloseTab(activeTabId)}
+        >
+          ×
+        </button>
+      </div>
       <nav className="navigation-controls" aria-label="Browser navigation">
         <button type="button" aria-label="Go back" onClick={() => window.electronAPI.navigateBack(focusedCellId)}>
           ←
@@ -97,6 +141,9 @@ export default function Toolbar({
         ))}
         <button type="button" title="Edit cells" aria-label="Edit cells" onClick={onOpenConfig}>
           ⚙
+        </button>
+        <button type="button" title={`Theme: ${themeMode}`} aria-label="Toggle theme" onClick={cycleThemeMode}>
+          {themeMode === 'system' ? '◐' : themeMode === 'dark' ? '☾' : '☀'}
         </button>
       </div>
     </header>
