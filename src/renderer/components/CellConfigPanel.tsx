@@ -1,23 +1,40 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { PRESET_SITES } from '../../shared/presetSites';
 import { getRiskySiteReason } from '../../shared/riskySites';
-import { LAYOUT_CELLS, LayoutMode } from '../../shared/types';
+import { CellMode, LAYOUT_CELLS, LayoutMode } from '../../shared/types';
 
 interface CellConfigPanelProps {
   cellUrls: Record<string, string>;
+  cellModes: Record<string, CellMode>;
+  searchUrlTemplates: Record<string, string>;
   layoutMode: LayoutMode;
   onClose: () => void;
-  onSave: (nextUrls: Record<string, string>) => void;
+  onSave: (
+    nextUrls: Record<string, string>,
+    nextModes: Record<string, CellMode>,
+    nextSearchTemplates: Record<string, string>,
+  ) => void;
 }
 
-export default function CellConfigPanel({ cellUrls, layoutMode, onClose, onSave }: CellConfigPanelProps) {
+export default function CellConfigPanel({
+  cellUrls,
+  cellModes,
+  searchUrlTemplates,
+  layoutMode,
+  onClose,
+  onSave,
+}: CellConfigPanelProps) {
   const visibleCells = LAYOUT_CELLS[layoutMode];
   const [draftUrls, setDraftUrls] = useState<Record<string, string>>(() => ({ ...cellUrls }));
+  const [draftModes, setDraftModes] = useState<Record<string, CellMode>>(() => ({ ...cellModes }));
+  const [draftSearchTemplates, setDraftSearchTemplates] = useState<Record<string, string>>(() => ({
+    ...searchUrlTemplates,
+  }));
   const presetByUrl = useMemo(() => new Map(PRESET_SITES.map((site) => [site.url, site.id])), []);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onSave(draftUrls);
+    onSave(draftUrls, draftModes, draftSearchTemplates);
   }
 
   return (
@@ -42,18 +59,28 @@ export default function CellConfigPanel({ cellUrls, layoutMode, onClose, onSave 
                     ...current,
                     [cellId]: preset?.url ?? current[cellId] ?? '',
                   }));
+                  if (preset) {
+                    setDraftModes((current) => ({
+                      ...current,
+                      [cellId]: preset.mode,
+                    }));
+                    setDraftSearchTemplates((current) => ({
+                      ...current,
+                      [cellId]: preset.searchUrlTemplate ?? '',
+                    }));
+                  }
                 }}
               >
                 <option value="custom">自定义 URL</option>
-                <optgroup label="International">
-                  {PRESET_SITES.filter((site) => site.region === 'international').map((site) => (
+                <optgroup label="AI 助手">
+                  {PRESET_SITES.filter((site) => site.mode === 'chat').map((site) => (
                     <option key={site.id} value={site.id}>
                       {site.name}
                     </option>
                   ))}
                 </optgroup>
-                <optgroup label="China">
-                  {PRESET_SITES.filter((site) => site.region === 'china').map((site) => (
+                <optgroup label="搜索引擎">
+                  {PRESET_SITES.filter((site) => site.mode === 'search').map((site) => (
                     <option key={site.id} value={site.id}>
                       {site.name}
                     </option>
@@ -71,6 +98,40 @@ export default function CellConfigPanel({ cellUrls, layoutMode, onClose, onSave 
                 placeholder="https://example.com"
                 spellCheck={false}
               />
+              <label className="search-mode-toggle">
+                <input
+                  type="checkbox"
+                  checked={draftModes[cellId] === 'search'}
+                  onChange={(event) => {
+                    const nextMode: CellMode = event.target.checked ? 'search' : 'chat';
+                    setDraftModes((current) => ({
+                      ...current,
+                      [cellId]: nextMode,
+                    }));
+                    if (nextMode === 'search' && !draftSearchTemplates[cellId]) {
+                      setDraftSearchTemplates((current) => ({
+                        ...current,
+                        [cellId]: 'https://www.google.com/search?q={query}',
+                      }));
+                    }
+                  }}
+                />
+                这是搜索引擎
+              </label>
+              {draftModes[cellId] === 'search' && (
+                <input
+                  className="search-template-input"
+                  value={draftSearchTemplates[cellId] ?? ''}
+                  onChange={(event) =>
+                    setDraftSearchTemplates((current) => ({
+                      ...current,
+                      [cellId]: event.target.value,
+                    }))
+                  }
+                  placeholder="https://example.com/search?q={query}"
+                  spellCheck={false}
+                />
+              )}
               {getRiskySiteReason(draftUrls[cellId]) && (
                 <p className="risk-warning">{getRiskySiteReason(draftUrls[cellId])}</p>
               )}

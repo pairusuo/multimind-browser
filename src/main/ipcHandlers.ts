@@ -50,7 +50,7 @@ export function registerIpcHandlers(windowManager: WindowManager): void {
   });
 
   ipcMain.handle(IPC.SET_CELL_URL, (_event, payload: SetCellUrlPayload) => {
-    windowManager.setCellUrl(payload.cellId, payload.url);
+    windowManager.setCellUrl(payload.cellId, payload.url, payload.mode, payload.searchUrlTemplate);
   });
 
   ipcMain.handle(IPC.TOGGLE_CELL, (_event, payload: ToggleCellPayload) => {

@@ -1,9 +1,10 @@
 import { PointerEvent, useEffect, useMemo, useState } from 'react';
-import { CELL_IDS, LAYOUT_CELLS, LayoutMode } from '../../shared/types';
+import { CELL_IDS, CellMode, LAYOUT_CELLS, LayoutMode } from '../../shared/types';
 import GridCell from './GridCell';
 
 interface SplitViewProps {
   activeCells: Record<string, boolean>;
+  cellModes: Record<string, CellMode>;
   cellUrls: Record<string, string>;
   focusedCellId: string;
   layoutMode: LayoutMode;
@@ -20,6 +21,7 @@ const INITIAL_FAVICONS = CELL_IDS.reduce<CellFavicons>((favicons, cellId) => {
 
 export default function SplitView({
   activeCells,
+  cellModes,
   cellUrls,
   focusedCellId,
   layoutMode,
@@ -97,7 +99,7 @@ export default function SplitView({
           cellId="cell-0"
           className="cell-a"
           focused={focusedCellId === 'cell-0'}
-          meta={getCellMeta('cell-0', cellUrls, activeCells, cellFavicons)}
+          meta={getCellMeta('cell-0', cellUrls, cellModes, activeCells, cellFavicons)}
           onFocus={onFocusCell}
           onToggle={onToggleCell}
         />
@@ -120,7 +122,7 @@ export default function SplitView({
           cellId="cell-1"
           className="cell-b"
           focused={focusedCellId === 'cell-1'}
-          meta={getCellMeta('cell-1', cellUrls, activeCells, cellFavicons)}
+          meta={getCellMeta('cell-1', cellUrls, cellModes, activeCells, cellFavicons)}
           onFocus={onFocusCell}
           onToggle={onToggleCell}
         />
@@ -143,7 +145,7 @@ export default function SplitView({
           cellId="cell-2"
           className="cell-c"
           focused={focusedCellId === 'cell-2'}
-          meta={getCellMeta('cell-2', cellUrls, activeCells, cellFavicons)}
+          meta={getCellMeta('cell-2', cellUrls, cellModes, activeCells, cellFavicons)}
           onFocus={onFocusCell}
           onToggle={onToggleCell}
         />
@@ -153,7 +155,7 @@ export default function SplitView({
           cellId="cell-3"
           className="cell-d"
           focused={focusedCellId === 'cell-3'}
-          meta={getCellMeta('cell-3', cellUrls, activeCells, cellFavicons)}
+          meta={getCellMeta('cell-3', cellUrls, cellModes, activeCells, cellFavicons)}
           onFocus={onFocusCell}
           onToggle={onToggleCell}
         />
@@ -165,11 +167,13 @@ export default function SplitView({
 function getCellMeta(
   cellId: string,
   cellUrls: Record<string, string>,
+  cellModes: Record<string, CellMode>,
   activeCells: Record<string, boolean>,
   favicons: CellFavicons,
 ) {
   return {
     url: cellUrls[cellId] ?? '',
+    mode: cellModes[cellId] ?? 'chat',
     favicon: favicons[cellId] ?? null,
     active: Boolean(activeCells[cellId] && cellUrls[cellId]?.trim()),
   };

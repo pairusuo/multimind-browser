@@ -243,7 +243,7 @@ textarea {
   left: 10px;
   z-index: 2;
   display: inline-grid;
-  grid-template-columns: 16px minmax(0, max-content);
+  grid-template-columns: 16px minmax(0, max-content) minmax(0, max-content);
   align-items: center;
   gap: 6px;
   max-width: min(360px, calc(100vw - 32px));
@@ -256,6 +256,18 @@ textarea {
   font-size: 12px;
   box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
   pointer-events: none;
+}
+
+.cell-mode-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #e0ebff;
+  color: #1a56db;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .cell-overlay img,
@@ -538,6 +550,25 @@ textarea {
   line-height: 1.4;
 }
 
+.search-mode-toggle {
+  grid-column: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.search-mode-toggle input {
+  width: auto;
+  height: auto;
+}
+
+.cell-config-row .search-template-input {
+  grid-column: 3;
+}
+
 .cell-config-row label {
   font-size: 13px;
   font-weight: 700;
@@ -659,6 +690,11 @@ textarea {
   .risk-warning {
     grid-column: 1;
   }
+
+  .search-mode-toggle,
+  .cell-config-row .search-template-input {
+    grid-column: 1;
+  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -738,6 +774,11 @@ textarea {
     color: #f9fafb;
   }
 
+  .cell-mode-badge {
+    background: #173356;
+    color: #bfdbfe;
+  }
+
   .cell-notice {
     border-color: rgba(96, 165, 250, 0.24);
     background: rgba(23, 50, 86, 0.96);
@@ -766,6 +807,10 @@ textarea {
     border-color: rgba(234, 179, 8, 0.26);
     background: #3f3108;
     color: #fde68a;
+  }
+
+  .search-mode-toggle {
+    color: #cbd5e1;
   }
 
   .address-risk-warning {

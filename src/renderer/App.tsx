@@ -4,7 +4,7 @@ import Toolbar from './components/Toolbar';
 import SplitView from './components/SplitView';
 import BottomInput from './components/BottomInput';
 import TemplateChooser from './components/TemplateChooser';
-import { BrowserState, CELL_IDS, DEFAULT_URLS, LAYOUT_CELLS, LayoutMode } from '../shared/types';
+import { BrowserState, CELL_IDS, CellMode, DEFAULT_URLS, LAYOUT_CELLS, LayoutMode } from '../shared/types';
 import { LayoutTemplate } from '../shared/presetTemplates';
 import { PRESET_SITES } from '../shared/presetSites';
 
@@ -18,9 +18,21 @@ const INITIAL_ACTIVE_CELLS = CELL_IDS.reduce<Record<string, boolean>>((activeCel
   return activeCells;
 }, {});
 
+const INITIAL_CELL_MODES = CELL_IDS.reduce<Record<string, CellMode>>((modes, cellId) => {
+  modes[cellId] = 'chat';
+  return modes;
+}, {});
+
+const INITIAL_SEARCH_TEMPLATES = CELL_IDS.reduce<Record<string, string>>((templates, cellId) => {
+  templates[cellId] = '';
+  return templates;
+}, {});
+
 export default function App() {
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('single');
   const [cellUrls, setCellUrls] = useState<Record<string, string>>(INITIAL_URLS);
+  const [cellModes, setCellModes] = useState<Record<string, CellMode>>(INITIAL_CELL_MODES);
+  const [searchUrlTemplates, setSearchUrlTemplates] = useState<Record<string, string>>(INITIAL_SEARCH_TEMPLATES);
   const [activeCells, setActiveCells] = useState<Record<string, boolean>>(INITIAL_ACTIVE_CELLS);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [showConfigPanel, setShowConfigPanel] = useState(false);
@@ -88,16 +100,33 @@ export default function App() {
     setShowConfigPanel(template.id === 'custom');
   }
 
-  async function handleSaveCellConfig(nextUrls: Record<string, string>) {
+  async function handleSaveCellConfig(
+    nextUrls: Record<string, string>,
+    nextModes: Record<string, CellMode>,
+    nextSearchTemplates: Record<string, string>,
+  ) {
     const visibleCells = getVisibleCells(layoutMode);
     setCellUrls((current) => ({
       ...current,
       ...nextUrls,
     }));
+    setCellModes((current) => ({
+      ...current,
+      ...nextModes,
+    }));
+    setSearchUrlTemplates((current) => ({
+      ...current,
+      ...nextSearchTemplates,
+    }));
 
     for (const cellId of visibleCells) {
       const nextUrl = nextUrls[cellId]?.trim();
-      await window.electronAPI.setCellUrl({ cellId, url: nextUrl ?? '' });
+      await window.electronAPI.setCellUrl({
+        cellId,
+        url: nextUrl ?? '',
+        mode: nextModes[cellId],
+        searchUrlTemplate: nextSearchTemplates[cellId],
+      });
       if (!nextUrl) {
         setActiveCells((current) => ({
           ...current,
@@ -124,6 +153,14 @@ export default function App() {
       ...INITIAL_URLS,
       ...state.cellUrls,
     });
+    setCellModes({
+      ...INITIAL_CELL_MODES,
+      ...state.cellModes,
+    });
+    setSearchUrlTemplates({
+      ...INITIAL_SEARCH_TEMPLATES,
+      ...state.searchUrlTemplates,
+    });
     setActiveCells({
       ...INITIAL_ACTIVE_CELLS,
       ...state.activeCells,
@@ -142,6 +179,8 @@ export default function App() {
 
     setLayoutMode('triple');
     setCellUrls(demoUrls);
+    setCellModes(INITIAL_CELL_MODES);
+    setSearchUrlTemplates(INITIAL_SEARCH_TEMPLATES);
     setActiveCells(INITIAL_ACTIVE_CELLS);
     setFocusedCellId('cell-0');
     setHasCompletedOnboarding(true);
@@ -170,6 +209,7 @@ export default function App() {
       <main className={`browser-stage browser-stage-${layoutMode}`} aria-label="Browser content">
         <SplitView
           activeCells={activeCells}
+          cellModes={cellModes}
           cellUrls={cellUrls}
           focusedCellId={focusedCellId}
           layoutMode={layoutMode}
@@ -187,9 +227,13 @@ export default function App() {
       {showConfigPanel && (
         <CellConfigPanel
           cellUrls={cellUrls}
+          cellModes={cellModes}
+          searchUrlTemplates={searchUrlTemplates}
           layoutMode={layoutMode}
           onClose={() => setShowConfigPanel(false)}
-          onSave={(nextUrls) => void handleSaveCellConfig(nextUrls)}
+          onSave={(nextUrls, nextModes, nextSearchTemplates) =>
+            void handleSaveCellConfig(nextUrls, nextModes, nextSearchTemplates)
+          }
         />
       )}
     </div>

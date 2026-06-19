@@ -5,6 +5,7 @@ import {
   ApplyTemplatePayload,
   BrowserState,
   CELL_IDS,
+  CellMode,
   DEFAULT_URLS,
   IPC,
   LAYOUT_CELLS,
@@ -37,12 +38,21 @@ export async function createBrowserStore(): Promise<BrowserStore> {
   return new ElectronStore();
 }
 
+interface CellState {
+  url: string;
+  active: boolean;
+  mode: CellMode;
+}
+
 export class WindowManager {
   private views: Map<string, WebContentsView> = new Map();
   private viewPartitions: Map<string, string> = new Map();
   private attachedViews: Set<string> = new Set();
+  private cellStates: Map<string, CellState> = new Map();
   private layoutMode: LayoutMode;
   private cellUrls: Record<string, string>;
+  private cellModes: Record<string, CellMode>;
+  private searchUrlTemplates: Record<string, string>;
   private activeCells: Record<string, boolean> = {
     'cell-0': true,
     'cell-1': true,
@@ -60,7 +70,10 @@ export class WindowManager {
   ) {
     this.layoutMode = this.getStoredLayoutMode();
     this.cellUrls = this.getStoredCellUrls();
+    this.cellModes = this.getStoredCellModes();
+    this.searchUrlTemplates = this.getStoredSearchUrlTemplates();
     this.activeCells = this.getStoredActiveCells();
+    this.cellStates = this.createCellStates();
     this.focusedCellId = this.getStoredFocusedCellId();
     this.registerLegacySitePartitions();
   }
@@ -142,7 +155,7 @@ export class WindowManager {
     this.layout();
   }
 
-  setCellUrl(cellId: string, rawUrl: string): void {
+  setCellUrl(cellId: string, rawUrl: string, mode?: CellMode, searchUrlTemplate?: string): void {
     if (!isKnownCellId(cellId)) {
       return;
     }
@@ -151,10 +164,13 @@ export class WindowManager {
     this.rememberCurrentSitePartition(cellId);
     this.cellUrls[cellId] = url;
     this.store.set(`cells.${cellId}.url`, url);
+    this.setCellMode(cellId, mode ?? inferCellMode(url));
+    this.setSearchUrlTemplate(cellId, searchUrlTemplate ?? inferSearchUrlTemplate(url, this.cellModes[cellId]));
     if (!url) {
       this.activeCells[cellId] = false;
       this.store.set(`cells.${cellId}.active`, false);
     }
+    this.syncCellState(cellId);
     this.loadCellUrl(cellId, url);
     this.layout();
   }
@@ -163,6 +179,7 @@ export class WindowManager {
     if (isKnownCellId(cellId)) {
       this.activeCells[cellId] = active;
       this.store.set(`cells.${cellId}.active`, active);
+      this.syncCellState(cellId);
     }
   }
 
@@ -188,6 +205,7 @@ export class WindowManager {
       this.activeCells[cellId] = false;
       this.store.set(`cells.${cellId}.active`, false);
     }
+    this.syncCellState(cellId);
     this.loadCellUrl(cellId, url);
     this.layout();
   }
@@ -216,13 +234,20 @@ export class WindowManager {
       return;
     }
 
-    const targetCellIds = LAYOUT_CELLS[this.layoutMode].filter((cellId) => {
-      const url = this.cellUrls[cellId]?.trim();
-      return Boolean(this.activeCells[cellId] && url);
-    });
+    const visibleCells = new Set(LAYOUT_CELLS[this.layoutMode]);
+    const activeCells = [...this.cellStates.entries()].filter(
+      ([cellId, state]) => visibleCells.has(cellId) && state.active && state.url,
+    );
 
-    for (const cellId of targetCellIds) {
-      await this.injectText(cellId, trimmedText);
+    for (const [cellId, state] of activeCells) {
+      if (state.mode === 'search') {
+        const searchUrl = buildSearchUrl(this.getSearchUrlTemplate(cellId), trimmedText);
+        if (searchUrl) {
+          this.navigate(cellId, searchUrl);
+        }
+      } else {
+        await this.injectText(cellId, trimmedText);
+      }
       await delay(150);
     }
   }
@@ -265,6 +290,8 @@ export class WindowManager {
     return {
       layoutMode: this.layoutMode,
       cellUrls: { ...this.cellUrls },
+      cellModes: { ...this.cellModes },
+      searchUrlTemplates: { ...this.searchUrlTemplates },
       activeCells: { ...this.activeCells },
       focusedCellId: this.focusedCellId,
       hasCompletedOnboarding: Boolean(this.store.get('browser.hasCompletedOnboarding', false)),
@@ -283,14 +310,26 @@ export class WindowManager {
       }
 
       this.cellUrls[cellId] = site.url;
+      this.cellModes[cellId] = site.mode;
+      this.searchUrlTemplates[cellId] = site.searchUrlTemplate ?? '';
       this.store.set(`cells.${cellId}.url`, site.url);
+      this.store.set(`cells.${cellId}.mode`, site.mode);
+      this.store.set(`cells.${cellId}.searchUrlTemplate`, site.searchUrlTemplate ?? '');
       this.store.set(`cells.${cellId}.active`, true);
       this.activeCells[cellId] = true;
+      this.syncCellState(cellId);
     });
 
     LAYOUT_CELLS[template.layout].slice(template.siteIds.length).forEach((cellId) => {
       this.cellUrls[cellId] = '';
+      this.cellModes[cellId] = 'chat';
+      this.searchUrlTemplates[cellId] = '';
+      this.activeCells[cellId] = false;
       this.store.set(`cells.${cellId}.url`, '');
+      this.store.set(`cells.${cellId}.mode`, 'chat');
+      this.store.set(`cells.${cellId}.searchUrlTemplate`, '');
+      this.store.set(`cells.${cellId}.active`, false);
+      this.syncCellState(cellId);
     });
 
     this.focusCell('cell-0');
@@ -381,6 +420,49 @@ export class WindowManager {
 
       this.cellUrls[cellId] = defaultUrl;
       this.store.set(`cells.${cellId}.url`, defaultUrl);
+      this.setCellMode(cellId, inferCellMode(defaultUrl));
+      this.setSearchUrlTemplate(cellId, inferSearchUrlTemplate(defaultUrl, this.cellModes[cellId]));
+      this.syncCellState(cellId);
+    });
+  }
+
+  private setCellMode(cellId: string, mode: CellMode): void {
+    this.cellModes[cellId] = mode;
+    this.store.set(`cells.${cellId}.mode`, mode);
+    this.syncCellState(cellId);
+  }
+
+  private setSearchUrlTemplate(cellId: string, template: string): void {
+    this.searchUrlTemplates[cellId] = template;
+    this.store.set(`cells.${cellId}.searchUrlTemplate`, template);
+  }
+
+  private getSearchUrlTemplate(cellId: string): string {
+    return this.searchUrlTemplates[cellId] || inferSearchUrlTemplate(this.cellUrls[cellId], this.cellModes[cellId]);
+  }
+
+  private createCellStates(): Map<string, CellState> {
+    return new Map(
+      CELL_IDS.map((cellId) => [
+        cellId,
+        {
+          url: this.cellUrls[cellId] ?? '',
+          active: Boolean(this.activeCells[cellId] && this.cellUrls[cellId]?.trim()),
+          mode: this.cellModes[cellId] ?? 'chat',
+        },
+      ]),
+    );
+  }
+
+  private syncCellState(cellId: string): void {
+    if (!isKnownCellId(cellId)) {
+      return;
+    }
+
+    this.cellStates.set(cellId, {
+      url: this.cellUrls[cellId] ?? '',
+      active: Boolean(this.activeCells[cellId] && this.cellUrls[cellId]?.trim()),
+      mode: this.cellModes[cellId] ?? 'chat',
     });
   }
 
@@ -455,6 +537,7 @@ export class WindowManager {
     view.webContents.on('did-finish-load', () => {
       this.cellUrls[cellId] = view.webContents.getURL();
       this.store.set(`cells.${cellId}.url`, view.webContents.getURL());
+      this.syncCellState(cellId);
       this.sendUrl(cellId, view.webContents.getURL());
       this.checkNavigationNotice(cellId, view.webContents.getURL());
       this.window.webContents.send(IPC.CELL_TITLE_CHANGED, {
@@ -577,6 +660,26 @@ export class WindowManager {
     }, {});
   }
 
+  private getStoredCellModes(): Record<string, CellMode> {
+    return CELL_IDS.reduce<Record<string, CellMode>>((modes, cellId) => {
+      const storedMode = this.store.get(`cells.${cellId}.mode`);
+      modes[cellId] = isCellMode(storedMode) ? storedMode : inferCellMode(this.cellUrls[cellId]);
+      return modes;
+    }, {});
+  }
+
+  private getStoredSearchUrlTemplates(): Record<string, string> {
+    return CELL_IDS.reduce<Record<string, string>>((templates, cellId) => {
+      templates[cellId] = String(
+        this.store.get(
+          `cells.${cellId}.searchUrlTemplate`,
+          inferSearchUrlTemplate(this.cellUrls[cellId], this.cellModes[cellId]),
+        ),
+      );
+      return templates;
+    }, {});
+  }
+
   private getStoredActiveCells(): Record<string, boolean> {
     return CELL_IDS.reduce<Record<string, boolean>>((activeCells, cellId) => {
       const hasUrl = Boolean(this.cellUrls[cellId]?.trim());
@@ -622,6 +725,49 @@ function isKnownCellId(cellId: string): boolean {
 
 function isLayoutMode(value: unknown): value is LayoutMode {
   return typeof value === 'string' && value in LAYOUT_CELLS;
+}
+
+function isCellMode(value: unknown): value is CellMode {
+  return value === 'chat' || value === 'search';
+}
+
+function findPresetSiteByUrl(rawUrl: string) {
+  const url = parseUrl(rawUrl);
+  if (!url) {
+    return null;
+  }
+
+  return PRESET_SITES.find((site) => {
+    const siteUrl = parseUrl(site.url);
+    return siteUrl && normalizeHost(siteUrl.hostname) === normalizeHost(url.hostname);
+  }) ?? null;
+}
+
+function inferCellMode(rawUrl: string): CellMode {
+  return findPresetSiteByUrl(rawUrl)?.mode ?? 'chat';
+}
+
+function inferSearchUrlTemplate(rawUrl: string, mode: CellMode): string {
+  const presetTemplate = findPresetSiteByUrl(rawUrl)?.searchUrlTemplate;
+  if (presetTemplate) {
+    return presetTemplate;
+  }
+
+  if (mode !== 'search') {
+    return '';
+  }
+
+  const url = parseUrl(rawUrl);
+  if (!url) {
+    return '';
+  }
+
+  const queryParam = url.hostname.includes('baidu.') || url.hostname.includes('sogou.') ? 'wd' : 'q';
+  return `${url.origin}${url.pathname === '/' ? '' : url.pathname}?${queryParam}={query}`;
+}
+
+function buildSearchUrl(template: string, query: string): string {
+  return template ? template.replace('{query}', encodeURIComponent(query)) : '';
 }
 
 function getSiteKey(rawUrl: string): string | null {

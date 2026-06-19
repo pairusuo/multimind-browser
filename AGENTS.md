@@ -325,7 +325,39 @@ nsis:
 - 发送后输入框自动清空；上箭头键可召回上一次发送的内容（本地内存即可，不需要持久化历史）
 
 **Week 7：体验打磨**
-完成后验收标准：快捷键可用，深色模式跟随系统，格子悬浮菜单可用，多标签页可用。
+
+> ⚠️ 以下范围已根据实际开发进度重新梳理（原始版本只写了"快捷键、深色模式、
+> 悬浮菜单、多标签页"四项，未覆盖搜索引擎模式、提示系统等后续加入的功能）。
+
+完成后验收标准分为四组：
+
+**A. 原计划项**
+- 布局快捷键（Cmd/Ctrl+1/2/3/4）全部可用，且与当前聚焦格子无关，全局生效
+- 深色/浅色模式跟随系统设置，且应用内有手动切换开关（不强制跟随系统）
+- 格子悬浮菜单（刷新/修改地址/新标签页打开/移出同步发送/静音）全部可用
+- 多标签页管理可用（注：这里指的是"作为通用浏览器使用"时的标签页，
+  不是分屏格子本身）
+
+**B. 提示系统收尾**
+- `SHOW_CELL_NOTICE` 三种类型（google-login-blocked / inject-failed / load-failed）
+  在真实场景下都触发过且样式统一
+- 风险网址提示（`RISKY_SITES`）在「编辑格子」面板验证有效
+- 检查是否有遗漏的边界情况需要提示（例如：格子加载网址后一直空白超过 10 秒、
+  网络断开时的格子状态）
+
+**C. 格子配置体验**
+- 「编辑格子」面板里 AI 助手和搜索引擎分组显示清晰
+- 格子配置变更（URL、mode、active 状态）的持久化全部验证一遍，重启应用后
+  恢复正确
+- 首次启动的模板选择引导流程走一遍，确认"中美三强"等模板能正确创建对应
+  数量和内容的格子
+
+**D. 性能与稳定性**
+- 四分屏同时运行时，做一次内存占用检查（Activity Monitor / 任务管理器），
+  确认没有明显的内存泄漏（多次切换布局后内存只增不减则有问题）
+- 窗口快速连续 resize（拖动窗口边缘晃动几次），确认布局计算不报错、不卡顿
+- 统一发送时故意让 4 个格子同时是高负载状态（比如全部是从未加载过的新网址），
+  确认 150ms 的间隔机制让请求不会互相阻塞导致应用无响应
 
 **Week 8：打包**
 完成后验收标准：`npm run package:mac` 生成 Universal dmg，
@@ -745,3 +777,110 @@ private cellStates: Map<string, CellState> = new Map();
 3. 故意让某个格子停在一个不在适配器清单里的网站（比如百度首页），发送后该格子触发
    `inject-failed` 提示，其他格子正常
 4. 连续发送两次不同内容，第二次发送前按上箭头键，输入框回填的是第一次发送的内容
+
+---
+
+## 新增需求：支持搜索引擎格子，与 AI 格子混搭统一发送（2026年6月）
+
+### 背景
+
+格子不应局限于 AI 聊天网站，用户可能希望某个格子是传统搜索引擎（Google/百度等），
+统一发送时该格子直接跳转到搜索结果页，与 AI 格子的聊天响应并列展示，便于交叉验证。
+
+### 核心设计：两种格子行为模式
+
+```typescript
+// shared/types.ts 新增
+export type CellMode = 'chat' | 'search';
+```
+
+`chat` 模式沿用现有的 `injectScript` 注入逻辑（填表单 + 触发发送）。
+`search` 模式改为直接构造 URL 并调用 `navigate(cellId, url)`，不走 DOM 注入。
+
+### 1. 扩展 PresetSite 数据结构
+
+`shared/presetSites.ts` 中 `PresetSite` 接口新增 `mode` 字段，并新增搜索引擎条目：
+
+```typescript
+export interface PresetSite {
+  id: string;
+  name: string;
+  url: string;
+  region: 'international' | 'china';
+  mode: CellMode;          // 新增
+  searchUrlTemplate?: string;  // mode 为 'search' 时必填，{query} 为占位符
+}
+
+// 现有 AI 条目补充 mode: 'chat'
+// 新增搜索引擎条目：
+{ id: 'google', name: 'Google', url: 'https://www.google.com', region: 'international', mode: 'search', searchUrlTemplate: 'https://www.google.com/search?q={query}' },
+{ id: 'bing', name: 'Bing', url: 'https://www.bing.com', region: 'international', mode: 'search', searchUrlTemplate: 'https://www.bing.com/search?q={query}' },
+{ id: 'duckduckgo', name: 'DuckDuckGo', url: 'https://duckduckgo.com', region: 'international', mode: 'search', searchUrlTemplate: 'https://duckduckgo.com/?q={query}' },
+{ id: 'baidu', name: '百度', url: 'https://www.baidu.com', region: 'china', mode: 'search', searchUrlTemplate: 'https://www.baidu.com/s?wd={query}' },
+{ id: 'sogou', name: '搜狗', url: 'https://www.sogou.com', region: 'china', mode: 'search', searchUrlTemplate: 'https://www.sogou.com/web?query={query}' },
+```
+
+### 2. cellStates 结构增加 mode 字段
+
+`windowManager.ts` 中的 `CellState` 接口：
+
+```typescript
+interface CellState {
+  url: string;
+  active: boolean;
+  mode: CellMode;   // 新增，根据用户选择的 PresetSite 决定，自定义 URL 默认 'chat'
+}
+```
+
+用户通过「编辑格子」选择内置网站时，`mode` 跟随该 `PresetSite.mode` 自动设置。
+用户手动输入自定义 URL 时，默认 `mode: 'chat'`，并在面板上提供一个切换开关
+"这是搜索引擎"，让用户手动标记为 `search` 模式（此时需要额外让用户填写
+URL 查询参数名，简化为只支持 `?q=` 或 `?wd=` 两种常见格式的输入框）。
+
+### 3. sendToAll 方法分流处理
+
+修改 Week 5-6 中实现的 `sendToAll`：
+
+```typescript
+async sendToAll(text: string): Promise<void> {
+  const activeCells = [...this.cellStates.entries()].filter(
+    ([, state]) => state.active && state.url
+  );
+
+  for (const [cellId, state] of activeCells) {
+    if (state.mode === 'search') {
+      const site = findPresetSiteByUrl(state.url);
+      const searchUrl = buildSearchUrl(site?.searchUrlTemplate, text);
+      this.navigate(cellId, searchUrl);
+      // search 模式是页面跳转，不需要等待注入结果，无需失败提示
+    } else {
+      const success = await this.injectScript(cellId, text);
+      if (!success) {
+        this.window.webContents.send(IPC.SHOW_CELL_NOTICE, {
+          cellId, type: 'inject-failed', message: NOTICE_MESSAGES['inject-failed'],
+        });
+      }
+    }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+}
+
+function buildSearchUrl(template: string | undefined, query: string): string {
+  if (!template) return '';
+  return template.replace('{query}', encodeURIComponent(query));
+}
+```
+
+### 4. GridCell.tsx / CellConfigPanel.tsx 视觉区分
+
+- 格子左上角 favicon 旁，`search` 模式额外显示一个小放大镜图标，区分于 AI 聊天格子
+- 「编辑格子」面板的内置网站选择列表，按 `mode` 分组显示："AI 助手" 分组和 "搜索引擎" 分组
+
+### 验收标准
+
+1. 内置清单中能看到 Google / Bing / 百度等搜索引擎选项，归类在"搜索引擎"分组下
+2. 创建一个四分屏：cell-0/1 放 Claude + ChatGPT，cell-2/3 放 Google + 百度
+3. 在统一输入框输入一句话发送后：Claude/ChatGPT 格子正常收到文字并触发对话；
+   Google/百度格子直接跳转到对应的搜索结果页，URL 正确带上了查询词
+4. 搜索引擎格子不会因为"找不到输入框"触发 inject-failed 提示（因为走的是 navigate，不是注入）
+5. 自定义 URL 时勾选"这是搜索引擎"开关后，行为按 search 模式处理

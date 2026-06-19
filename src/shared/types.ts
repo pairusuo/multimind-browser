@@ -1,6 +1,7 @@
 import type { LayoutTemplate } from './presetTemplates';
 
 export type LayoutMode = 'single' | 'horizontal' | 'vertical' | 'triple' | 'quad';
+export type CellMode = 'chat' | 'search';
 
 export interface CellConfig {
   id: string;
@@ -54,6 +55,8 @@ export interface NavigatePayload {
 export interface SetCellUrlPayload {
   cellId: string;
   url: string;
+  mode?: CellMode;
+  searchUrlTemplate?: string;
 }
 
 export interface ToggleCellPayload {
@@ -85,6 +88,8 @@ export interface SplitRatiosPayload {
 export interface BrowserState {
   layoutMode: LayoutMode;
   cellUrls: Record<string, string>;
+  cellModes: Record<string, CellMode>;
+  searchUrlTemplates: Record<string, string>;
   activeCells: Record<string, boolean>;
   focusedCellId: string;
   hasCompletedOnboarding: boolean;

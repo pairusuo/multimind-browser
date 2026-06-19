@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { CellNoticePayload } from '../../shared/types';
+import type { CellMode, CellNoticePayload } from '../../shared/types';
 import CellNotice from './CellNotice';
 
 const shownNoticeKeys = new Set<string>();
@@ -10,6 +10,7 @@ interface GridCellProps {
   focused: boolean;
   meta: {
     url: string;
+    mode: CellMode;
     favicon: string | null;
     active: boolean;
   };
@@ -54,6 +55,7 @@ export default function GridCell({ cellId, className, focused, meta, onFocus, on
     >
       <div className="cell-overlay" aria-live="polite">
         {meta.favicon ? <img src={meta.favicon} alt="" /> : <span className="favicon-placeholder" />}
+        {meta.mode === 'search' && <span className="cell-mode-badge" title="Search cell">⌕</span>}
         <span>{host}</span>
       </div>
       {notice && <CellNotice notice={notice} onClose={() => setNotice(null)} />}

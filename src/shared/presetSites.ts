@@ -1,20 +1,64 @@
+import type { CellMode } from './types';
+
 export interface PresetSite {
   id: string;
   name: string;
   url: string;
   region: 'international' | 'china';
+  mode: CellMode;
+  searchUrlTemplate?: string;
 }
 
 export const PRESET_SITES: PresetSite[] = [
-  { id: 'claude', name: 'Claude', url: 'https://claude.ai', region: 'international' },
-  { id: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com', region: 'international' },
-  { id: 'grok', name: 'Grok', url: 'https://grok.com', region: 'international' },
-  { id: 'perplexity', name: 'Perplexity', url: 'https://perplexity.ai', region: 'international' },
-  { id: 'copilot', name: 'Copilot', url: 'https://copilot.microsoft.com', region: 'international' },
-  { id: 'deepseek', name: 'DeepSeek', url: 'https://chat.deepseek.com', region: 'china' },
-  { id: 'kimi', name: 'Kimi', url: 'https://kimi.moonshot.cn', region: 'china' },
-  { id: 'yiyan', name: '文心一言', url: 'https://yiyan.baidu.com', region: 'china' },
-  { id: 'tongyi', name: '通义千问', url: 'https://tongyi.aliyun.com', region: 'china' },
-  { id: 'doubao', name: '豆包', url: 'https://www.doubao.com', region: 'china' },
-  { id: 'chatglm', name: '智谱清言', url: 'https://chatglm.cn', region: 'china' },
+  { id: 'claude', name: 'Claude', url: 'https://claude.ai', region: 'international', mode: 'chat' },
+  { id: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com', region: 'international', mode: 'chat' },
+  { id: 'grok', name: 'Grok', url: 'https://grok.com', region: 'international', mode: 'chat' },
+  { id: 'perplexity', name: 'Perplexity', url: 'https://perplexity.ai', region: 'international', mode: 'chat' },
+  { id: 'copilot', name: 'Copilot', url: 'https://copilot.microsoft.com', region: 'international', mode: 'chat' },
+  { id: 'deepseek', name: 'DeepSeek', url: 'https://chat.deepseek.com', region: 'china', mode: 'chat' },
+  { id: 'kimi', name: 'Kimi', url: 'https://kimi.moonshot.cn', region: 'china', mode: 'chat' },
+  { id: 'yiyan', name: '文心一言', url: 'https://yiyan.baidu.com', region: 'china', mode: 'chat' },
+  { id: 'tongyi', name: '通义千问', url: 'https://tongyi.aliyun.com', region: 'china', mode: 'chat' },
+  { id: 'doubao', name: '豆包', url: 'https://www.doubao.com', region: 'china', mode: 'chat' },
+  { id: 'chatglm', name: '智谱清言', url: 'https://chatglm.cn', region: 'china', mode: 'chat' },
+  {
+    id: 'google',
+    name: 'Google',
+    url: 'https://www.google.com',
+    region: 'international',
+    mode: 'search',
+    searchUrlTemplate: 'https://www.google.com/search?q={query}',
+  },
+  {
+    id: 'bing',
+    name: 'Bing',
+    url: 'https://www.bing.com',
+    region: 'international',
+    mode: 'search',
+    searchUrlTemplate: 'https://www.bing.com/search?q={query}',
+  },
+  {
+    id: 'duckduckgo',
+    name: 'DuckDuckGo',
+    url: 'https://duckduckgo.com',
+    region: 'international',
+    mode: 'search',
+    searchUrlTemplate: 'https://duckduckgo.com/?q={query}',
+  },
+  {
+    id: 'baidu',
+    name: '百度',
+    url: 'https://www.baidu.com',
+    region: 'china',
+    mode: 'search',
+    searchUrlTemplate: 'https://www.baidu.com/s?wd={query}',
+  },
+  {
+    id: 'sogou',
+    name: '搜狗',
+    url: 'https://www.sogou.com',
+    region: 'china',
+    mode: 'search',
+    searchUrlTemplate: 'https://www.sogou.com/web?query={query}',
+  },
 ];
