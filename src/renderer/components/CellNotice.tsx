@@ -9,12 +9,14 @@ const NOTICE_LABELS: Record<CellNoticePayload['type'], string> = {
   'google-login-blocked': '登录受限',
   'inject-failed': '需要手动发送',
   'load-failed': '访问提示',
+  'load-timeout': '加载较慢',
 };
 
 const NOTICE_ICONS: Record<CellNoticePayload['type'], string> = {
   'google-login-blocked': 'i',
   'inject-failed': '↵',
   'load-failed': '!',
+  'load-timeout': '…',
 };
 
 export default function CellNotice({ notice, onClose }: CellNoticeProps) {

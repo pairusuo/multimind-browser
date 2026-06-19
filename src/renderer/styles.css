@@ -346,6 +346,12 @@ textarea {
   color: #155e75;
 }
 
+.cell-notice-load-timeout {
+  border-color: rgba(14, 116, 144, 0.24);
+  background: rgba(236, 254, 255, 0.96);
+  color: #155e75;
+}
+
 .cell-notice-icon {
   display: grid;
   place-items: center;
@@ -819,6 +825,12 @@ textarea {
   }
 
   .cell-notice-load-failed {
+    border-color: rgba(103, 232, 249, 0.24);
+    background: rgba(22, 78, 99, 0.96);
+    color: #cffafe;
+  }
+
+  .cell-notice-load-timeout {
     border-color: rgba(103, 232, 249, 0.24);
     background: rgba(22, 78, 99, 0.96);
     color: #cffafe;

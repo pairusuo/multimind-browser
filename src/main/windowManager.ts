@@ -22,6 +22,8 @@ const BOTTOM_INPUT_HEIGHT = 80;
 const CELL_BORDER_SIZE = 1;
 const FOCUSED_CELL_BORDER_SIZE = 2;
 const SPLITTER_SIZE = 4;
+const LOAD_TIMEOUT_MS = 10_000;
+const NOTICE_REPLAY_DELAY_MS = 500;
 const CHROME_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
@@ -51,6 +53,7 @@ export class WindowManager {
   private viewPartitions: Map<string, string> = new Map();
   private attachedViews: Set<string> = new Set();
   private cellStates: Map<string, CellState> = new Map();
+  private loadTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private layoutMode: LayoutMode;
   private cellUrls: Record<string, string>;
   private cellModes: Record<string, CellMode>;
@@ -478,6 +481,7 @@ export class WindowManager {
     const wasAttached = this.attachedViews.has(cellId);
 
     if (existingView) {
+      this.clearLoadTimeout(cellId);
       if (wasAttached) {
         this.window.contentView.removeChildView(existingView);
         this.attachedViews.delete(cellId);
@@ -614,6 +618,11 @@ export class WindowManager {
     view.webContents.on('focus', () => {
       this.focusCell(cellId);
     });
+    view.webContents.on('did-start-navigation', (_event, url, isInPlace, isMainFrame) => {
+      if (!isInPlace && isMainFrame) {
+        this.startLoadTimeout(cellId, url);
+      }
+    });
     view.webContents.on('did-navigate', (_event, url) => {
       this.sendUrl(cellId, url);
       this.checkNavigationNotice(cellId, url);
@@ -633,6 +642,7 @@ export class WindowManager {
       }
     });
     view.webContents.on('did-finish-load', () => {
+      this.clearLoadTimeout(cellId);
       this.cellUrls[cellId] = view.webContents.getURL();
       this.store.set(`cells.${cellId}.url`, view.webContents.getURL());
       this.updateActiveTab(cellId, {
@@ -648,9 +658,13 @@ export class WindowManager {
       });
     });
     view.webContents.on('did-fail-load', (_event, errorCode, _errorDescription, validatedURL, isMainFrame) => {
+      this.clearLoadTimeout(cellId);
       if (isMainFrame && errorCode !== -3 && validatedURL !== BLANK_URL) {
         this.showCellNotice(cellId, 'load-failed');
       }
+    });
+    view.webContents.on('destroyed', () => {
+      this.clearLoadTimeout(cellId);
     });
   }
 
@@ -732,6 +746,38 @@ export class WindowManager {
     };
   }
 
+  private startLoadTimeout(cellId: string, url: string): void {
+    this.clearLoadTimeout(cellId);
+    if (!url || url === BLANK_URL) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      const view = this.views.get(cellId);
+      if (!view || view.webContents.isDestroyed()) {
+        return;
+      }
+
+      const currentUrl = view.webContents.getURL();
+      if (currentUrl && currentUrl !== BLANK_URL && view.webContents.isLoading()) {
+        this.showCellNotice(cellId, 'load-timeout');
+      }
+      this.loadTimeouts.delete(cellId);
+    }, LOAD_TIMEOUT_MS);
+
+    this.loadTimeouts.set(cellId, timeout);
+  }
+
+  private clearLoadTimeout(cellId: string): void {
+    const timeout = this.loadTimeouts.get(cellId);
+    if (!timeout) {
+      return;
+    }
+
+    clearTimeout(timeout);
+    this.loadTimeouts.delete(cellId);
+  }
+
   private sendUrl(cellId: string, url: string): void {
     this.window.webContents.send(IPC.CELL_URL_CHANGED, { cellId, url });
   }
@@ -743,11 +789,18 @@ export class WindowManager {
   }
 
   private showCellNotice(cellId: string, type: NoticeType): void {
-    this.window.webContents.send(IPC.SHOW_CELL_NOTICE, {
+    const payload = {
       cellId,
       type,
       message: NOTICE_MESSAGES[type],
-    });
+    };
+
+    this.window.webContents.send(IPC.SHOW_CELL_NOTICE, payload);
+    setTimeout(() => {
+      if (!this.window.isDestroyed()) {
+        this.window.webContents.send(IPC.SHOW_CELL_NOTICE, payload);
+      }
+    }, NOTICE_REPLAY_DELAY_MS);
   }
 
   private getStoredLayoutMode(): LayoutMode {

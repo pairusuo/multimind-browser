@@ -91,7 +91,7 @@ export interface CellTabPayload {
   url?: string;
 }
 
-export type NoticeType = 'google-login-blocked' | 'inject-failed' | 'load-failed';
+export type NoticeType = 'google-login-blocked' | 'inject-failed' | 'load-failed' | 'load-timeout';
 
 export interface CellNoticePayload {
   cellId: string;
