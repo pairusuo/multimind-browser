@@ -1,0 +1,25 @@
+appId: com.multimind.browser
+productName: MultiMind Browser
+directories:
+  output: release
+files:
+  - dist/**
+  - package.json
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  category: public.app-category.productivity
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
