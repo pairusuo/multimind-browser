@@ -15,71 +15,76 @@ import {
 import { WindowManager } from './windowManager';
 
 export function registerIpcHandlers(windowManager: WindowManager): void {
-  ipcMain.handle(IPC.GET_BROWSER_STATE, () => windowManager.getBrowserState());
+  registerHandler(IPC.GET_BROWSER_STATE, () => windowManager.getBrowserState());
 
-  ipcMain.handle(IPC.APPLY_TEMPLATE, (_event, payload: ApplyTemplatePayload) => windowManager.applyTemplate(payload));
+  registerHandler(IPC.APPLY_TEMPLATE, (_event, payload: ApplyTemplatePayload) => windowManager.applyTemplate(payload));
 
-  ipcMain.handle(IPC.SEND_TO_ALL, (_event, payload: SendToAllPayload) => {
+  registerHandler(IPC.SEND_TO_ALL, (_event, payload: SendToAllPayload) => {
     return windowManager.sendToAll(payload.text);
   });
 
-  ipcMain.handle(IPC.SET_THEME_MODE, (_event, mode: ThemeMode) => {
+  registerHandler(IPC.SET_THEME_MODE, (_event, mode: ThemeMode) => {
     return windowManager.setThemeMode(mode);
   });
 
-  ipcMain.handle(IPC.NEW_TAB, (_event, payload: CellTabPayload) => {
+  registerHandler(IPC.NEW_TAB, (_event, payload: CellTabPayload) => {
     return windowManager.newTab(payload.cellId, payload.url);
   });
 
-  ipcMain.handle(IPC.CLOSE_TAB, (_event, payload: CellTabPayload) => {
+  registerHandler(IPC.CLOSE_TAB, (_event, payload: CellTabPayload) => {
     return windowManager.closeTab(payload.cellId, payload.tabId);
   });
 
-  ipcMain.handle(IPC.SWITCH_TAB, (_event, payload: CellTabPayload) => {
+  registerHandler(IPC.SWITCH_TAB, (_event, payload: CellTabPayload) => {
     return windowManager.switchTab(payload.cellId, payload.tabId);
   });
 
-  ipcMain.handle(IPC.TOGGLE_MUTE, (_event, cellId: string) => {
+  registerHandler(IPC.TOGGLE_MUTE, (_event, cellId: string) => {
     return windowManager.toggleMute(cellId);
   });
 
-  ipcMain.handle(IPC.NAVIGATE, (_event, payload: NavigatePayload) => {
+  registerHandler(IPC.NAVIGATE, (_event, payload: NavigatePayload) => {
     return windowManager.navigate(payload.cellId, payload.url);
   });
 
-  ipcMain.handle(IPC.NAVIGATE_BACK, (_event, cellId: string) => {
+  registerHandler(IPC.NAVIGATE_BACK, (_event, cellId: string) => {
     windowManager.navigateBack(cellId);
   });
 
-  ipcMain.handle(IPC.NAVIGATE_FORWARD, (_event, cellId: string) => {
+  registerHandler(IPC.NAVIGATE_FORWARD, (_event, cellId: string) => {
     windowManager.navigateForward(cellId);
   });
 
-  ipcMain.handle(IPC.RELOAD, (_event, cellId: string) => {
+  registerHandler(IPC.RELOAD, (_event, cellId: string) => {
     windowManager.reload(cellId);
   });
 
-  ipcMain.handle(IPC.SET_LAYOUT, (_event, mode: LayoutMode) => {
+  registerHandler(IPC.SET_LAYOUT, (_event, mode: LayoutMode) => {
     windowManager.setLayout(mode);
   });
 
-  ipcMain.handle(IPC.SET_OVERLAY_OPEN, (_event, open: boolean) => {
+  registerHandler(IPC.SET_OVERLAY_OPEN, (_event, open: boolean) => {
     windowManager.setOverlayOpen(open);
   });
 
-  ipcMain.handle(IPC.SET_SPLIT_RATIOS, (_event, payload: SplitRatiosPayload) => {
+  registerHandler(IPC.SET_SPLIT_RATIOS, (_event, payload: SplitRatiosPayload) => {
     windowManager.setSplitRatios(payload);
   });
 
-  ipcMain.handle(IPC.SET_CELL_URL, (_event, payload: SetCellUrlPayload) => {
+  registerHandler(IPC.SET_CELL_URL, (_event, payload: SetCellUrlPayload) => {
     windowManager.setCellUrl(payload.cellId, payload.url, payload.mode, payload.searchUrlTemplate);
   });
 
-  ipcMain.handle(IPC.TOGGLE_CELL, (_event, payload: ToggleCellPayload) => {
+  registerHandler(IPC.TOGGLE_CELL, (_event, payload: ToggleCellPayload) => {
     windowManager.toggleCell(payload.cellId, payload.active);
   });
 
-  ipcMain.handle(IPC.CELL_FOCUSED, (_event, payload: CellFocusedPayload) => {
+  registerHandler(IPC.CELL_FOCUSED, (_event, payload: CellFocusedPayload) => {
     windowManager.focusCell(payload.cellId);
   });
+}
+
+function registerHandler(channel: string, listener: Parameters<typeof ipcMain.handle>[1]): void {
+  ipcMain.removeHandler(channel);
+  ipcMain.handle(channel, listener);
 }

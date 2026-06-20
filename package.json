@@ -10,11 +10,12 @@
     "dev": "concurrently \"vite\" \"electron .\"",
     "generate-icons": "node scripts/generate-icons.mjs",
     "build:renderer": "vite build",
-    "build:main": "tsc -p tsconfig.main.json",
+    "freeze-main-constants": "node scripts/freeze-main-constants.mjs",
+    "build:main": "tsc -p tsconfig.main.json && npm run freeze-main-constants",
     "build": "npm run build:renderer && npm run build:main",
     "package:mac": "npm run generate-icons && npm run build && electron-builder --mac --universal",
-    "package:win": "npm run generate-icons && npm run build && electron-builder --win --x64",
-    "package:all": "npm run generate-icons && npm run build && electron-builder --mac --universal --win --x64"
+    "package:win": "cross-env BUILD_TARGET=win npm run generate-icons && cross-env BUILD_TARGET=win npm run build && electron-builder --win --x64",
+    "package:all": "npm run package:mac && npm run package:win"
   },
   "dependencies": {
     "electron-store": "^10.0.0",
@@ -28,6 +29,7 @@
     "@vitejs/plugin-react": "^4.0.0",
     "autoprefixer": "^10.4.19",
     "concurrently": "^8.2.2",
+    "cross-env": "^10.1.0",
     "electron": "^33.0.0",
     "electron-builder": "^25.0.0",
     "postcss": "^8.4.38",

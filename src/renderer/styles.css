@@ -202,14 +202,29 @@ textarea {
 }
 
 .layout-controls button {
+  display: inline-grid;
+  place-items: center;
   width: 34px;
+  height: 34px;
   font-size: 11px;
   font-weight: 700;
+  line-height: 1;
 }
 
 .layout-controls .toolbar-icon-button {
-  font-size: 18px;
-  font-weight: 700;
+  color: #1f2937;
+}
+
+.toolbar-svg-icon {
+  display: block;
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  overflow: visible;
 }
 
 .layout-controls button.active,
@@ -891,6 +906,10 @@ textarea {
   .layout-controls button:hover,
   .cell-menu button:hover {
     background: #243042;
+  }
+
+  .layout-controls .toolbar-icon-button {
+    color: #f9fafb;
   }
 
   .layout-controls button.active,

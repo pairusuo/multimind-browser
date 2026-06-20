@@ -16,6 +16,7 @@ import {
   ThemeMode,
 } from '../shared/types';
 import { getAdapterForUrl } from './adapters';
+import { CHROME_USER_AGENT } from './constants';
 
 const TOOLBAR_HEIGHT = 52;
 const BOTTOM_INPUT_HEIGHT = 64;
@@ -24,10 +25,8 @@ const FOCUSED_CELL_BORDER_SIZE = 2;
 const SPLITTER_SIZE = 4;
 const LOAD_TIMEOUT_MS = 10_000;
 const NOTICE_REPLAY_DELAY_MS = 500;
-const CHROME_USER_AGENT =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
-  '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 const BLANK_URL = 'about:blank';
+const EMPTY_STATE_URL = createEmptyStateUrl();
 
 export interface BrowserStore {
   get: (key: string, defaultValue?: unknown) => unknown;
@@ -72,6 +71,7 @@ export class WindowManager {
   private verticalRatio = 0.5;
   private focusedCellId: string;
   private overlayOpen = false;
+  private destroyed = false;
 
   constructor(
     private readonly window: BrowserWindow,
@@ -94,11 +94,15 @@ export class WindowManager {
   }
 
   createInitialView(): void {
+    if (this.isDestroyed()) {
+      return;
+    }
+
     this.setLayout(this.layoutMode);
   }
 
   layout(): void {
-    if (this.window.isDestroyed()) {
+    if (this.isDestroyed()) {
       return;
     }
 
@@ -116,19 +120,27 @@ export class WindowManager {
         return;
       }
 
-      if (this.overlayOpen || !cells.includes(cellId)) {
-        view.setBounds({ x: -10000, y: -10000, width: 0, height: 0 });
+      if (view.webContents.isDestroyed()) {
         return;
       }
 
-      view.setBounds(insetBounds(boundsByCell[cellId], cellId === this.focusedCellId ? FOCUSED_CELL_BORDER_SIZE : CELL_BORDER_SIZE));
+      if (this.overlayOpen || !cells.includes(cellId)) {
+        safeSetBounds(view, { x: -10000, y: -10000, width: 0, height: 0 });
+        return;
+      }
+
+      safeSetBounds(view, insetBounds(boundsByCell[cellId], cellId === this.focusedCellId ? FOCUSED_CELL_BORDER_SIZE : CELL_BORDER_SIZE));
     });
   }
 
   setLayout(mode: LayoutMode, fillDefaults = true): void {
+    if (this.isDestroyed()) {
+      return;
+    }
+
     this.layoutMode = mode;
     this.store.set('browser.layout', mode);
-    this.window.webContents.send(IPC.LAYOUT_CHANGED, { layoutMode: mode });
+    this.sendToRenderer(IPC.LAYOUT_CHANGED, { layoutMode: mode });
     const visibleCells = LAYOUT_CELLS[mode];
 
     if (fillDefaults) {
@@ -138,7 +150,7 @@ export class WindowManager {
     visibleCells.forEach((cellId) => {
       const view = this.ensureView(cellId);
       if (!this.attachedViews.has(cellId)) {
-        this.window.contentView.addChildView(view);
+        this.addChildView(view);
         this.attachedViews.add(cellId);
       }
     });
@@ -146,7 +158,7 @@ export class WindowManager {
     this.attachedViews.forEach((cellId) => {
       const view = this.views.get(cellId);
       if (view && !visibleCells.includes(cellId)) {
-        this.window.contentView.removeChildView(view);
+        this.removeChildView(view);
         this.attachedViews.delete(cellId);
       }
     });
@@ -155,6 +167,10 @@ export class WindowManager {
   }
 
   setSplitRatios(payload: SplitRatiosPayload): void {
+    if (this.isDestroyed()) {
+      return;
+    }
+
     if (typeof payload.horizontalRatio === 'number') {
       this.horizontalRatio = clampRatio(payload.horizontalRatio);
     }
@@ -167,12 +183,16 @@ export class WindowManager {
   }
 
   setOverlayOpen(open: boolean): void {
+    if (this.isDestroyed()) {
+      return;
+    }
+
     this.overlayOpen = open;
     this.layout();
   }
 
   setCellUrl(cellId: string, rawUrl: string, mode?: CellMode, searchUrlTemplate?: string): void {
-    if (!isKnownCellId(cellId)) {
+    if (this.isDestroyed() || !isKnownCellId(cellId)) {
       return;
     }
 
@@ -193,7 +213,7 @@ export class WindowManager {
   }
 
   toggleCell(cellId: string, active: boolean): void {
-    if (isKnownCellId(cellId)) {
+    if (!this.isDestroyed() && isKnownCellId(cellId)) {
       this.activeCells[cellId] = active;
       this.store.set(`cells.${cellId}.active`, active);
       this.syncCellState(cellId);
@@ -201,16 +221,16 @@ export class WindowManager {
   }
 
   focusCell(cellId: string): void {
-    if (isKnownCellId(cellId)) {
+    if (!this.isDestroyed() && isKnownCellId(cellId)) {
       this.focusedCellId = cellId;
       this.store.set('browser.focusedCellId', cellId);
-      this.window.webContents.send(IPC.CELL_FOCUSED, { cellId });
+      this.sendToRenderer(IPC.CELL_FOCUSED, { cellId });
       this.layout();
     }
   }
 
   navigate(cellId: string, rawUrl: string): BrowserState {
-    if (!isKnownCellId(cellId)) {
+    if (this.isDestroyed() || !isKnownCellId(cellId)) {
       return this.getBrowserState();
     }
 
@@ -219,6 +239,7 @@ export class WindowManager {
     this.cellUrls[cellId] = url;
     this.store.set(`cells.${cellId}.url`, url);
     this.updateActiveTab(cellId, { url });
+    this.updateKnownSiteMetadata(cellId, url);
     if (!url) {
       this.activeCells[cellId] = false;
       this.store.set(`cells.${cellId}.active`, false);
@@ -230,24 +251,43 @@ export class WindowManager {
   }
 
   navigateBack(cellId: string): void {
+    if (this.isDestroyed()) {
+      return;
+    }
+
     const view = this.views.get(cellId);
-    if (view?.webContents.canGoBack()) {
+    if (view && !view.webContents.isDestroyed() && view.webContents.canGoBack()) {
       view.webContents.goBack();
     }
   }
 
   navigateForward(cellId: string): void {
+    if (this.isDestroyed()) {
+      return;
+    }
+
     const view = this.views.get(cellId);
-    if (view?.webContents.canGoForward()) {
+    if (view && !view.webContents.isDestroyed() && view.webContents.canGoForward()) {
       view.webContents.goForward();
     }
   }
 
   reload(cellId: string): void {
-    this.views.get(cellId)?.webContents.reload();
+    if (this.isDestroyed()) {
+      return;
+    }
+
+    const view = this.views.get(cellId);
+    if (view && !view.webContents.isDestroyed()) {
+      view.webContents.reload();
+    }
   }
 
   setThemeMode(mode: ThemeMode): BrowserState {
+    if (this.isDestroyed()) {
+      return this.getBrowserState();
+    }
+
     this.themeMode = mode;
     this.store.set('browser.themeMode', mode);
     nativeTheme.themeSource = mode;
@@ -255,24 +295,27 @@ export class WindowManager {
   }
 
   toggleMute(cellId: string): BrowserState {
-    if (!isKnownCellId(cellId)) {
+    if (this.isDestroyed() || !isKnownCellId(cellId)) {
       return this.getBrowserState();
     }
 
     const muted = !this.mutedCells[cellId];
     this.mutedCells[cellId] = muted;
     this.store.set(`cells.${cellId}.muted`, muted);
-    this.views.get(cellId)?.webContents.setAudioMuted(muted);
+    const view = this.views.get(cellId);
+    if (view && !view.webContents.isDestroyed()) {
+      view.webContents.setAudioMuted(muted);
+    }
     return this.getBrowserState();
   }
 
   newTab(cellId: string, rawUrl?: string): BrowserState {
-    if (!isKnownCellId(cellId)) {
+    if (this.isDestroyed() || !isKnownCellId(cellId)) {
       return this.getBrowserState();
     }
 
     const url = normalizeUrl(rawUrl ?? '');
-    const tab = createTab(url || 'about:blank', 'New tab');
+    const tab = createTab(url, 'New tab');
     this.tabs[cellId] = [...(this.tabs[cellId] ?? []), tab];
     this.activeTabIds[cellId] = tab.id;
     this.storeTabs(cellId);
@@ -281,7 +324,7 @@ export class WindowManager {
   }
 
   closeTab(cellId: string, tabId?: string): BrowserState {
-    if (!isKnownCellId(cellId)) {
+    if (this.isDestroyed() || !isKnownCellId(cellId)) {
       return this.getBrowserState();
     }
 
@@ -294,21 +337,21 @@ export class WindowManager {
 
     const nextTabs = tabs.filter((tab) => tab.id !== targetTabId);
     if (!nextTabs.length) {
-      nextTabs.push(createTab('about:blank', 'New tab'));
+      nextTabs.push(createTab('', 'New tab'));
     }
 
     this.tabs[cellId] = nextTabs;
     if (this.activeTabIds[cellId] === targetTabId) {
       const nextTab = nextTabs[Math.max(0, targetIndex - 1)] ?? nextTabs[0];
       this.activeTabIds[cellId] = nextTab.id;
-      this.navigate(cellId, nextTab.url === 'about:blank' ? '' : nextTab.url);
+      this.navigate(cellId, nextTab.url);
     }
     this.storeTabs(cellId);
     return this.getBrowserState();
   }
 
   switchTab(cellId: string, tabId?: string): BrowserState {
-    if (!isKnownCellId(cellId) || !tabId) {
+    if (this.isDestroyed() || !isKnownCellId(cellId) || !tabId) {
       return this.getBrowserState();
     }
 
@@ -319,11 +362,15 @@ export class WindowManager {
 
     this.activeTabIds[cellId] = tab.id;
     this.storeTabs(cellId);
-    this.navigate(cellId, tab.url === 'about:blank' ? '' : tab.url);
+    this.navigate(cellId, tab.url);
     return this.getBrowserState();
   }
 
   async sendToAll(text: string): Promise<void> {
+    if (this.isDestroyed()) {
+      return;
+    }
+
     const trimmedText = text.trim();
     if (!trimmedText) {
       return;
@@ -335,6 +382,10 @@ export class WindowManager {
     );
 
     for (const [cellId, state] of activeCells) {
+      if (this.isDestroyed()) {
+        return;
+      }
+
       if (state.mode === 'search') {
         const searchUrl = buildSearchUrl(this.getSearchUrlTemplate(cellId), trimmedText);
         if (searchUrl) {
@@ -348,6 +399,10 @@ export class WindowManager {
   }
 
   async injectText(cellId: string, text: string): Promise<boolean> {
+    if (this.isDestroyed()) {
+      return false;
+    }
+
     const url = this.cellUrls[cellId]?.trim();
     if (!url) {
       return false;
@@ -364,12 +419,19 @@ export class WindowManager {
   }
 
   async injectScript(cellId: string, script: string): Promise<unknown> {
+    if (this.isDestroyed()) {
+      return false;
+    }
+
     const view = this.views.get(cellId);
-    if (!view) {
+    if (!view || view.webContents.isDestroyed()) {
       return false;
     }
 
     try {
+      if (this.isDestroyed() || view.webContents.isDestroyed()) {
+        return false;
+      }
       const result = await view.webContents.executeJavaScript(script);
       if (result === false) {
         this.showCellNotice(cellId, 'inject-failed');
@@ -398,6 +460,10 @@ export class WindowManager {
   }
 
   applyTemplate(payload: ApplyTemplatePayload): BrowserState {
+    if (this.isDestroyed()) {
+      return this.getBrowserState();
+    }
+
     const { template } = payload;
     this.store.set('browser.hasCompletedOnboarding', true);
 
@@ -443,7 +509,27 @@ export class WindowManager {
     return this.getBrowserState();
   }
 
+  dispose(): void {
+    if (this.destroyed) {
+      return;
+    }
+
+    this.destroyed = true;
+    this.loadTimeouts.forEach((timeout) => clearTimeout(timeout));
+    this.loadTimeouts.clear();
+
+    this.views.forEach((view) => {
+      if (!view.webContents.isDestroyed()) {
+        view.webContents.removeAllListeners();
+      }
+    });
+  }
+
   private ensureView(cellId: string): WebContentsView {
+    if (this.isDestroyed()) {
+      throw new Error('WindowManager has been destroyed');
+    }
+
     const partition = this.getPartitionForUrl(this.cellUrls[cellId], cellId);
     const existingView = this.views.get(cellId);
     if (existingView) {
@@ -458,6 +544,10 @@ export class WindowManager {
   }
 
   private createView(cellId: string, partition: string): WebContentsView {
+    if (this.isDestroyed()) {
+      throw new Error('WindowManager has been destroyed');
+    }
+
     this.rememberSitePartition(this.cellUrls[cellId], partition);
 
     const view = new WebContentsView({
@@ -468,12 +558,14 @@ export class WindowManager {
       },
     });
 
-    view.webContents.setUserAgent(CHROME_USER_AGENT);
-    view.webContents.setAudioMuted(Boolean(this.mutedCells[cellId]));
+    if (!view.webContents.isDestroyed()) {
+      view.webContents.setUserAgent(CHROME_USER_AGENT);
+      view.webContents.setAudioMuted(Boolean(this.mutedCells[cellId]));
+    }
     this.bindViewEvents(cellId, view);
     this.views.set(cellId, view);
     this.viewPartitions.set(cellId, partition);
-    void view.webContents.loadURL(this.cellUrls[cellId] || BLANK_URL);
+    this.loadViewUrl(view, this.getLoadUrl(this.cellUrls[cellId]));
     return view;
   }
 
@@ -484,19 +576,21 @@ export class WindowManager {
     if (existingView) {
       this.clearLoadTimeout(cellId);
       if (wasAttached) {
-        this.window.contentView.removeChildView(existingView);
+        this.removeChildView(existingView);
         this.attachedViews.delete(cellId);
       }
 
-      existingView.webContents.removeAllListeners();
-      existingView.webContents.close({ waitForBeforeUnload: false });
+      if (!existingView.webContents.isDestroyed()) {
+        existingView.webContents.removeAllListeners();
+        existingView.webContents.close({ waitForBeforeUnload: false });
+      }
       this.views.delete(cellId);
       this.viewPartitions.delete(cellId);
     }
 
     const view = this.createView(cellId, partition);
     if (wasAttached) {
-      this.window.contentView.addChildView(view);
+      this.addChildView(view);
       this.attachedViews.add(cellId);
     }
 
@@ -504,8 +598,12 @@ export class WindowManager {
   }
 
   private loadCellUrl(cellId: string, url: string): void {
+    if (this.isDestroyed()) {
+      return;
+    }
+
     const view = this.ensureView(cellId);
-    void view.webContents.loadURL(url || BLANK_URL);
+    this.loadViewUrl(view, this.getLoadUrl(url));
   }
 
   private fillDefaultUrlsForVisibleCells(cellIds: string[]): void {
@@ -540,6 +638,19 @@ export class WindowManager {
 
   private getSearchUrlTemplate(cellId: string): string {
     return this.searchUrlTemplates[cellId] || inferSearchUrlTemplate(this.cellUrls[cellId], this.cellModes[cellId]);
+  }
+
+  private updateKnownSiteMetadata(cellId: string, url: string): void {
+    const site = findPresetSiteByUrl(url);
+    if (!site) {
+      return;
+    }
+
+    const searchUrlTemplate = site.searchUrlTemplate ?? inferSearchUrlTemplate(url, site.mode);
+    this.cellModes[cellId] = site.mode;
+    this.searchUrlTemplates[cellId] = searchUrlTemplate;
+    this.store.set(`cells.${cellId}.mode`, site.mode);
+    this.store.set(`cells.${cellId}.searchUrlTemplate`, searchUrlTemplate);
   }
 
   private createCellStates(): Map<string, CellState> {
@@ -617,51 +728,87 @@ export class WindowManager {
   private bindViewEvents(cellId: string, view: WebContentsView): void {
     this.bindShortcutEvents(view.webContents);
     view.webContents.on('focus', () => {
+      if (this.isDestroyed() || view.webContents.isDestroyed()) {
+        return;
+      }
+
       this.focusCell(cellId);
     });
     view.webContents.on('did-start-navigation', (_event, url, isInPlace, isMainFrame) => {
-      if (!isInPlace && isMainFrame) {
+      if (this.isDestroyed() || view.webContents.isDestroyed()) {
+        return;
+      }
+
+      if (!isInPlace && isMainFrame && !isEmptyStateUrl(url)) {
         this.startLoadTimeout(cellId, url);
       }
     });
     view.webContents.on('did-navigate', (_event, url) => {
-      this.sendUrl(cellId, url);
-      this.checkNavigationNotice(cellId, url);
+      if (this.isDestroyed() || view.webContents.isDestroyed()) {
+        return;
+      }
+
+      const publicUrl = this.toPublicUrl(url);
+      this.sendUrl(cellId, publicUrl);
+      this.checkNavigationNotice(cellId, publicUrl);
     });
     view.webContents.on('did-navigate-in-page', (_event, url) => {
-      this.sendUrl(cellId, url);
-      this.checkNavigationNotice(cellId, url);
+      if (this.isDestroyed() || view.webContents.isDestroyed()) {
+        return;
+      }
+
+      const publicUrl = this.toPublicUrl(url);
+      this.sendUrl(cellId, publicUrl);
+      this.checkNavigationNotice(cellId, publicUrl);
     });
     view.webContents.on('page-title-updated', (_event, title) => {
+      if (this.isDestroyed() || view.webContents.isDestroyed()) {
+        return;
+      }
+
       this.updateActiveTab(cellId, { title });
-      this.window.webContents.send(IPC.CELL_TITLE_CHANGED, { cellId, title });
+      this.sendToRenderer(IPC.CELL_TITLE_CHANGED, { cellId, title });
     });
     view.webContents.on('page-favicon-updated', (_event, favicons) => {
+      if (this.isDestroyed() || view.webContents.isDestroyed()) {
+        return;
+      }
+
       const favicon = favicons[0];
       if (favicon) {
         this.updateActiveTab(cellId, { favicon });
-        this.window.webContents.send(IPC.CELL_FAVICON_CHANGED, { cellId, favicon });
+        this.sendToRenderer(IPC.CELL_FAVICON_CHANGED, { cellId, favicon });
       }
     });
     view.webContents.on('did-finish-load', () => {
+      if (this.isDestroyed() || view.webContents.isDestroyed()) {
+        return;
+      }
+
       this.clearLoadTimeout(cellId);
-      this.cellUrls[cellId] = view.webContents.getURL();
-      this.store.set(`cells.${cellId}.url`, view.webContents.getURL());
+      const publicUrl = this.toPublicUrl(view.webContents.getURL());
+      this.cellUrls[cellId] = publicUrl;
+      this.store.set(`cells.${cellId}.url`, publicUrl);
+      this.updateKnownSiteMetadata(cellId, publicUrl);
       this.updateActiveTab(cellId, {
-        url: view.webContents.getURL(),
-        title: view.webContents.getTitle() || safeTabTitle(view.webContents.getURL()),
+        url: publicUrl,
+        title: publicUrl ? view.webContents.getTitle() || safeTabTitle(publicUrl) : 'New tab',
       });
       this.syncCellState(cellId);
-      this.sendUrl(cellId, view.webContents.getURL());
-      this.checkNavigationNotice(cellId, view.webContents.getURL());
-      this.window.webContents.send(IPC.CELL_TITLE_CHANGED, {
+      this.sendUrl(cellId, publicUrl);
+      this.checkNavigationNotice(cellId, publicUrl);
+      this.sendToRenderer(IPC.CELL_TITLE_CHANGED, {
         cellId,
-        title: view.webContents.getTitle(),
+        title: publicUrl ? view.webContents.getTitle() : 'New tab',
       });
     });
     view.webContents.on('did-fail-load', (_event, errorCode, _errorDescription, validatedURL, isMainFrame) => {
+      if (this.isDestroyed() || view.webContents.isDestroyed()) {
+        return;
+      }
+
       this.clearLoadTimeout(cellId);
-      if (isMainFrame && errorCode !== -3 && validatedURL !== BLANK_URL) {
+      if (isMainFrame && errorCode !== -3 && validatedURL !== BLANK_URL && !isEmptyStateUrl(validatedURL)) {
         this.showCellNotice(cellId, 'load-failed');
       }
     });
@@ -749,12 +896,20 @@ export class WindowManager {
   }
 
   private startLoadTimeout(cellId: string, url: string): void {
+    if (this.isDestroyed()) {
+      return;
+    }
+
     this.clearLoadTimeout(cellId);
     if (!url || url === BLANK_URL) {
       return;
     }
 
     const timeout = setTimeout(() => {
+      if (this.isDestroyed()) {
+        return;
+      }
+
       const view = this.views.get(cellId);
       if (!view || view.webContents.isDestroyed()) {
         return;
@@ -781,26 +936,34 @@ export class WindowManager {
   }
 
   private sendUrl(cellId: string, url: string): void {
-    this.window.webContents.send(IPC.CELL_URL_CHANGED, { cellId, url });
+    this.sendToRenderer(IPC.CELL_URL_CHANGED, { cellId, url });
   }
 
   private checkNavigationNotice(cellId: string, url: string): void {
+    if (this.isDestroyed()) {
+      return;
+    }
+
     if (url.includes('signin/rejected')) {
       this.showCellNotice(cellId, 'google-login-blocked');
     }
   }
 
   private showCellNotice(cellId: string, type: NoticeType): void {
+    if (this.isDestroyed()) {
+      return;
+    }
+
     const payload = {
       cellId,
       type,
       message: NOTICE_MESSAGES[type],
     };
 
-    this.window.webContents.send(IPC.SHOW_CELL_NOTICE, payload);
+    this.sendToRenderer(IPC.SHOW_CELL_NOTICE, payload);
     setTimeout(() => {
-      if (!this.window.isDestroyed()) {
-        this.window.webContents.send(IPC.SHOW_CELL_NOTICE, payload);
+      if (!this.isDestroyed()) {
+        this.sendToRenderer(IPC.SHOW_CELL_NOTICE, payload);
       }
     }, NOTICE_REPLAY_DELAY_MS);
   }
@@ -857,7 +1020,7 @@ export class WindowManager {
       const storedTabs = this.store.get(`cells.${cellId}.tabs`);
       tabs[cellId] = isCellTabList(storedTabs)
         ? storedTabs
-        : [createTab(this.cellUrls[cellId] || 'about:blank', safeTabTitle(this.cellUrls[cellId]))];
+        : [createTab(this.cellUrls[cellId], safeTabTitle(this.cellUrls[cellId]))];
       return tabs;
     }, {});
   }
@@ -867,7 +1030,7 @@ export class WindowManager {
       const storedTabId = this.store.get(`cells.${cellId}.activeTabId`);
       const tabs = this.tabs[cellId] ?? [];
       const activeTab = tabs.find((tab) => tab.id === storedTabId) ?? tabs[0];
-      activeTabIds[cellId] = activeTab?.id ?? createTab('about:blank', 'New tab').id;
+      activeTabIds[cellId] = activeTab?.id ?? createTab('', 'New tab').id;
       return activeTabIds;
     }, {});
   }
@@ -908,6 +1071,72 @@ export class WindowManager {
   private getStoredFocusedCellId(): string {
     const storedCellId = this.store.get('browser.focusedCellId', 'cell-0');
     return typeof storedCellId === 'string' && isKnownCellId(storedCellId) ? storedCellId : 'cell-0';
+  }
+
+  private isDestroyed(): boolean {
+    return this.destroyed || this.window.isDestroyed() || this.window.webContents.isDestroyed();
+  }
+
+  private sendToRenderer(channel: string, payload: unknown): void {
+    if (this.isDestroyed()) {
+      return;
+    }
+
+    try {
+      this.window.webContents.send(channel, payload);
+    } catch (error) {
+      if (!isDestroyedObjectError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  private addChildView(view: WebContentsView): void {
+    if (this.isDestroyed() || view.webContents.isDestroyed()) {
+      return;
+    }
+
+    try {
+      this.window.contentView.addChildView(view);
+    } catch (error) {
+      if (!isDestroyedObjectError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  private removeChildView(view: WebContentsView): void {
+    if (this.isDestroyed() || view.webContents.isDestroyed()) {
+      return;
+    }
+
+    try {
+      this.window.contentView.removeChildView(view);
+    } catch (error) {
+      if (!isDestroyedObjectError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  private loadViewUrl(view: WebContentsView, url: string): void {
+    if (this.isDestroyed() || view.webContents.isDestroyed()) {
+      return;
+    }
+
+    void view.webContents.loadURL(url).catch((error) => {
+      if (!this.isDestroyed() && !isDestroyedObjectError(error)) {
+        console.error('Failed to load URL:', error);
+      }
+    });
+  }
+
+  private getLoadUrl(url: string): string {
+    return url || EMPTY_STATE_URL;
+  }
+
+  private toPublicUrl(url: string): string {
+    return isEmptyStateUrl(url) || url === BLANK_URL ? '' : url;
   }
 }
 
@@ -976,7 +1205,7 @@ function cloneTabs(tabs: Record<string, CellTab[]>): Record<string, CellTab[]> {
 }
 
 function safeTabTitle(url: string): string {
-  if (!url || url === 'about:blank') {
+  if (!url || url === 'about:blank' || isEmptyStateUrl(url)) {
     return 'New tab';
   }
 
@@ -1052,7 +1281,7 @@ function getSitePartitionStoreKey(siteKey: string): string {
 
 function parseUrl(rawUrl: string): URL | null {
   const trimmed = rawUrl.trim();
-  if (!trimmed || trimmed === BLANK_URL) {
+  if (!trimmed || trimmed === BLANK_URL || isEmptyStateUrl(trimmed)) {
     return null;
   }
 
@@ -1065,6 +1294,25 @@ function parseUrl(rawUrl: string): URL | null {
       return null;
     }
   }
+}
+
+function isEmptyStateUrl(url: string): boolean {
+  return url === EMPTY_STATE_URL || url.startsWith('data:text/html;charset=utf-8,%3C!doctype%20html%3E%3Chtml%20lang%3D%22zh-CN%22%3E');
+}
+
+function createEmptyStateUrl(): string {
+  const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="color-scheme" content="light dark"><title>New tab</title><style>
+body{margin:0;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f8fafc;color:#111827;display:grid;place-items:center;height:100vh}
+main{width:min(560px,calc(100vw - 48px));text-align:center}
+h1{margin:0 0 10px;font-size:24px}
+p{margin:0 0 22px;color:#64748b}
+.links{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+a{display:block;border:1px solid rgba(15,23,42,.12);border-radius:8px;padding:12px;background:#fff;color:#1d4ed8;text-decoration:none;font-weight:600}
+@media (prefers-color-scheme:dark){body{background:#0f172a;color:#f8fafc}p{color:#94a3b8}a{background:#111827;border-color:rgba(255,255,255,.14);color:#93c5fd}}
+</style></head><body><main><h1>新标签页</h1><p>在地址栏输入网址或搜索内容，或选择常用站点开始。</p><div class="links">
+<a href="https://claude.ai">Claude</a><a href="https://chatgpt.com">ChatGPT</a><a href="https://chat.deepseek.com">DeepSeek</a><a href="https://www.doubao.com">豆包</a>
+</div></main></body></html>`;
+  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }
 
 function normalizeHost(hostname: string): string {
@@ -1091,4 +1339,22 @@ function normalizeUrl(rawUrl: string): string {
   }
 
   return `https://www.google.com/search?q=${encodeURIComponent(trimmed)}`;
+}
+
+function safeSetBounds(view: WebContentsView, bounds: Electron.Rectangle): void {
+  if (view.webContents.isDestroyed()) {
+    return;
+  }
+
+  try {
+    view.setBounds(bounds);
+  } catch (error) {
+    if (!isDestroyedObjectError(error)) {
+      throw error;
+    }
+  }
+}
+
+function isDestroyedObjectError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('Object has been destroyed');
 }

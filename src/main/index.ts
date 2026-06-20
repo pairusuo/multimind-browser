@@ -5,8 +5,10 @@ import { registerIpcHandlers } from './ipcHandlers';
 import { createBrowserStore, WindowManager } from './windowManager';
 
 let mainWindow: BrowserWindow | null = null;
+let windowManager: WindowManager | null = null;
 
 configureAppIdentity();
+bindProcessExceptionHandlers();
 
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
@@ -24,11 +26,16 @@ async function createWindow(): Promise<void> {
   });
 
   const store = await createBrowserStore();
-  const windowManager = new WindowManager(mainWindow, store);
+  windowManager = new WindowManager(mainWindow, store);
   registerIpcHandlers(windowManager);
 
-  mainWindow.on('resize', () => windowManager.layout());
+  mainWindow.on('resize', () => windowManager?.layout());
+  mainWindow.on('close', () => {
+    windowManager?.dispose();
+  });
   mainWindow.on('closed', () => {
+    windowManager?.dispose();
+    windowManager = null;
     mainWindow = null;
   });
 
@@ -50,6 +57,10 @@ app.whenReady().then(() => {
       void createWindow();
     }
   });
+});
+
+app.on('before-quit', () => {
+  windowManager?.dispose();
 });
 
 app.on('window-all-closed', () => {
@@ -79,12 +90,20 @@ async function loadDevRenderer(window: BrowserWindow): Promise<void> {
   }`;
 
   for (let attempt = 0; attempt < 40; attempt += 1) {
+    if (window.isDestroyed()) {
+      return;
+    }
+
     try {
       await window.loadURL(devServerUrl);
       return;
     } catch {
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
+  }
+
+  if (window.isDestroyed()) {
+    return;
   }
 
   await window.loadURL(devServerUrl);
@@ -97,6 +116,24 @@ function scheduleDevCapture(window: BrowserWindow): void {
   }
 
   setTimeout(() => {
-    void window.capturePage().then((image) => fs.writeFile(capturePath, image.toPNG()));
+    if (window.isDestroyed()) {
+      return;
+    }
+
+    void window.capturePage().then((image) => fs.writeFile(capturePath, image.toPNG())).catch((error) => {
+      if (!isDestroyedObjectError(error)) {
+        console.error('Failed to capture page:', error);
+      }
+    });
   }, 5000);
+}
+
+function bindProcessExceptionHandlers(): void {
+  process.on('uncaughtException', (error) => {
+    console.error('Uncaught exception:', error);
+  });
+}
+
+function isDestroyedObjectError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('Object has been destroyed');
 }

@@ -139,7 +139,7 @@ export default function Toolbar({
           id="address-input"
           value={draftUrl}
           onChange={(event) => setDraftUrl(event.target.value)}
-          placeholder="Search or enter website address"
+          placeholder="输入网址或搜索"
           autoComplete="off"
           spellCheck={false}
         />
@@ -162,14 +162,53 @@ export default function Toolbar({
             {option.label}
           </button>
         ))}
-        <button type="button" className="toolbar-icon-button" title="Edit cells" aria-label="Edit cells" onClick={onOpenConfig}>
-          ⚙
+        <button type="button" className="toolbar-icon-button toolbar-settings-button" title="Edit cells" aria-label="Edit cells" onClick={onOpenConfig}>
+          <SettingsIcon />
         </button>
         <button type="button" className="toolbar-icon-button" title={`Theme: ${themeMode}`} aria-label="Toggle theme" onClick={cycleThemeMode}>
-          {themeMode === 'system' ? '◐' : themeMode === 'dark' ? '☾' : '☀'}
+          <ThemeIcon mode={themeMode} />
         </button>
       </div>
     </header>
+  );
+}
+
+function SettingsIcon() {
+  return (
+    <svg className="toolbar-svg-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M4 7h7" />
+      <path d="M15 7h5" />
+      <circle cx="13" cy="7" r="2" />
+      <path d="M4 17h5" />
+      <path d="M13 17h7" />
+      <circle cx="11" cy="17" r="2" />
+    </svg>
+  );
+}
+
+function ThemeIcon({ mode }: { mode: ThemeMode }) {
+  if (mode === 'light') {
+    return (
+      <svg className="toolbar-svg-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="12" r="4.25" />
+        <path d="M12 2.75v2.1M12 19.15v2.1M4.4 4.4l1.48 1.48M18.12 18.12l1.48 1.48M2.75 12h2.1M19.15 12h2.1M4.4 19.6l1.48-1.48M18.12 5.88 19.6 4.4" />
+      </svg>
+    );
+  }
+
+  if (mode === 'dark') {
+    return (
+      <svg className="toolbar-svg-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M20 15.35A8.7 8.7 0 0 1 8.65 4a8.75 8.75 0 1 0 11.35 11.35Z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg className="toolbar-svg-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <circle cx="12" cy="12" r="8.25" />
+      <path d="M12 3.75a8.25 8.25 0 0 1 0 16.5Z" />
+    </svg>
   );
 }
 
