@@ -44,7 +44,7 @@ export function registerIpcHandlers(windowManager: WindowManager): void {
   });
 
   ipcMain.handle(IPC.NAVIGATE, (_event, payload: NavigatePayload) => {
-    windowManager.navigate(payload.cellId, payload.url);
+    return windowManager.navigate(payload.cellId, payload.url);
   });
 
   ipcMain.handle(IPC.NAVIGATE_BACK, (_event, cellId: string) => {

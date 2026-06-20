@@ -1,10 +1,12 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, nativeImage } from 'electron';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { registerIpcHandlers } from './ipcHandlers';
 import { createBrowserStore, WindowManager } from './windowManager';
 
 let mainWindow: BrowserWindow | null = null;
+
+configureAppIdentity();
 
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
@@ -55,6 +57,20 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+
+function configureAppIdentity(): void {
+  app.setName('MultiMind Browser');
+
+  if (process.platform !== 'darwin' || app.isPackaged) {
+    return;
+  }
+
+  const dockIconPath = path.join(__dirname, '../../build/icon.png');
+  const dockIcon = nativeImage.createFromPath(dockIconPath);
+  if (!dockIcon.isEmpty()) {
+    app.dock.setIcon(dockIcon);
+  }
+}
 
 async function loadDevRenderer(window: BrowserWindow): Promise<void> {
   const screenshotMode = process.env.MULTIMIND_SCREENSHOT_MODE;

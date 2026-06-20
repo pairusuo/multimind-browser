@@ -83,6 +83,7 @@ export interface CellTab {
   id: string;
   title: string;
   url: string;
+  favicon?: string;
 }
 
 export interface CellTabPayload {
@@ -149,7 +150,7 @@ export interface ElectronAPI {
   setThemeMode: (mode: ThemeMode) => Promise<BrowserState>;
   setOverlayOpen: (open: boolean) => Promise<void>;
   setSplitRatios: (payload: SplitRatiosPayload) => Promise<void>;
-  navigate: (payload: NavigatePayload) => Promise<void>;
+  navigate: (payload: NavigatePayload) => Promise<BrowserState>;
   navigateBack: (cellId: string) => Promise<void>;
   navigateForward: (cellId: string) => Promise<void>;
   reload: (cellId: string) => Promise<void>;

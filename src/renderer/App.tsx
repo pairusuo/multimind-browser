@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import CellConfigPanel from './components/CellConfigPanel';
 import Toolbar from './components/Toolbar';
 import SplitView from './components/SplitView';
@@ -61,11 +61,16 @@ export default function App() {
   const [mutedCells, setMutedCells] = useState<Record<string, boolean>>(INITIAL_MUTED_CELLS);
   const [tabs, setTabs] = useState<Record<string, CellTab[]>>(INITIAL_TABS);
   const [activeTabIds, setActiveTabIds] = useState<Record<string, string>>(INITIAL_ACTIVE_TAB_IDS);
+  const activeTabIdsRef = useRef<Record<string, string>>(INITIAL_ACTIVE_TAB_IDS);
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [showConfigPanel, setShowConfigPanel] = useState(false);
   const [focusedCellId, setFocusedCellId] = useState('cell-0');
   const url = cellUrls[focusedCellId] ?? '';
+
+  useEffect(() => {
+    activeTabIdsRef.current = activeTabIds;
+  }, [activeTabIds]);
 
   useEffect(() => {
     const screenshotMode = new URLSearchParams(window.location.search).get('screenshotMode');
@@ -90,6 +95,13 @@ export default function App() {
         ...current,
         [payload.cellId]: payload.url,
       }));
+      patchActiveTab(payload.cellId, { url: payload.url });
+    });
+    const removeTitleListener = window.electronAPI.onCellTitleChanged((payload) => {
+      patchActiveTab(payload.cellId, { title: payload.title });
+    });
+    const removeFaviconListener = window.electronAPI.onCellFaviconChanged((payload) => {
+      patchActiveTab(payload.cellId, { favicon: payload.favicon });
     });
     const removeLayoutListener = window.electronAPI.onLayoutChanged((payload) => {
       setLayoutMode(payload.layoutMode);
@@ -98,6 +110,8 @@ export default function App() {
     return () => {
       removeFocusListener();
       removeUrlListener();
+      removeTitleListener();
+      removeFaviconListener();
       removeLayoutListener();
     };
   }, []);
@@ -111,11 +125,21 @@ export default function App() {
     void window.electronAPI.focusCell({ cellId });
   }
 
-  function handleUrlChange(nextUrl: string) {
+  function patchActiveTab(cellId: string, patch: Partial<CellTab>) {
+    const tabId = activeTabIdsRef.current[cellId];
+    setTabs((current) => ({
+      ...current,
+      [cellId]: patchTabList(current[cellId] ?? [], tabId, patch),
+    }));
+  }
+
+  async function handleNavigate(nextUrl: string) {
     setCellUrls((current) => ({
       ...current,
       [focusedCellId]: nextUrl,
     }));
+    const state = await window.electronAPI.navigate({ cellId: focusedCellId, url: nextUrl });
+    applyBrowserState(state);
   }
 
   async function handleLayoutChange(mode: LayoutMode) {
@@ -234,6 +258,10 @@ export default function App() {
       ...INITIAL_ACTIVE_TAB_IDS,
       ...state.activeTabIds,
     });
+    activeTabIdsRef.current = {
+      ...INITIAL_ACTIVE_TAB_IDS,
+      ...state.activeTabIds,
+    };
     setThemeMode(state.themeMode);
     setFocusedCellId(state.focusedCellId);
     setHasCompletedOnboarding(state.hasCompletedOnboarding);
@@ -285,7 +313,7 @@ export default function App() {
         onSwitchTab={(tabId) => void handleSwitchTab(focusedCellId, tabId)}
         onOpenConfig={() => setShowConfigPanel(true)}
         onThemeModeChange={(mode) => void handleThemeModeChange(mode)}
-        onUrlChange={handleUrlChange}
+        onNavigate={(url) => void handleNavigate(url)}
       />
       <main className={`browser-stage browser-stage-${layoutMode}`} aria-label="Browser content">
         <SplitView
@@ -322,6 +350,14 @@ export default function App() {
       )}
     </div>
   );
+}
+
+function patchTabList(tabs: CellTab[], tabId: string, patch: Partial<CellTab>): CellTab[] {
+  if (!tabId) {
+    return tabs;
+  }
+
+  return tabs.map((tab) => (tab.id === tabId ? { ...tab, ...patch } : tab));
 }
 
 function getVisibleCells(layoutMode: LayoutMode): string[] {

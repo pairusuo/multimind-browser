@@ -38,7 +38,7 @@ textarea {
   position: relative;
   z-index: 10;
   display: grid;
-  grid-template-columns: max-content minmax(120px, 220px) max-content minmax(160px, 1fr) max-content;
+  grid-template-columns: 40px max-content minmax(160px, 1fr) max-content;
   align-items: center;
   gap: 10px;
   height: 52px;
@@ -48,9 +48,20 @@ textarea {
 }
 
 .toolbar-brand {
-  font-size: 13px;
-  font-weight: 700;
-  white-space: nowrap;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+}
+
+.toolbar-single {
+  grid-template-columns: 40px minmax(180px, 320px) max-content minmax(160px, 1fr) max-content;
+}
+
+.multimind-logo {
+  display: block;
+  width: 32px;
+  height: 32px;
 }
 
 .navigation-controls {
@@ -61,24 +72,110 @@ textarea {
 
 .tab-controls {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 32px 32px;
-  gap: 4px;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  align-self: end;
+  gap: 3px;
   min-width: 0;
 }
 
-.tab-controls select {
-  width: 100%;
+.browser-tabs {
+  display: flex;
   min-width: 0;
-  height: 32px;
+  height: 34px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(37, 99, 235, 0.45) transparent;
+}
+
+.browser-tabs::-webkit-scrollbar {
+  height: 5px;
+}
+
+.browser-tabs::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.45);
+}
+
+.browser-tabs::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.browser-tab {
+  flex: 0 0 150px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22px;
+  align-items: center;
+  min-width: 96px;
+  max-width: 220px;
+  height: 34px;
+  margin-right: -1px;
   border: 1px solid rgba(17, 24, 39, 0.14);
-  border-radius: 6px;
-  padding: 0 8px;
+  border-bottom-color: rgba(17, 24, 39, 0.24);
+  border-radius: 8px 8px 0 0;
+  background: #eef2f7;
+  color: #475569;
+}
+
+.browser-tab.active {
+  position: relative;
+  z-index: 1;
+  border-bottom-color: #ffffff;
   background: #ffffff;
-  color: #1f2937;
+  color: #111827;
+}
+
+.browser-tab-title,
+.browser-tab-close {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.browser-tab-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  overflow: hidden;
+  padding: 0 6px 0 10px;
+  font-size: 12px;
+  line-height: 32px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browser-tab-favicon {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+
+.browser-tab-title span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browser-tab-close {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  font-size: 16px;
+  line-height: 20px;
+}
+
+.browser-tab-close:hover {
+  background: rgba(15, 23, 42, 0.08);
 }
 
 .navigation-controls button,
-.tab-controls button,
+.tab-controls > button,
 .layout-controls button,
 .cell-menu button {
   width: 32px;
@@ -92,7 +189,7 @@ textarea {
 }
 
 .navigation-controls button:hover,
-.tab-controls button:hover,
+.tab-controls > button:hover,
 .layout-controls button:hover,
 .cell-menu button:hover {
   background: #eef2ff;
@@ -107,6 +204,11 @@ textarea {
 .layout-controls button {
   width: 34px;
   font-size: 11px;
+  font-weight: 700;
+}
+
+.layout-controls .toolbar-icon-button {
+  font-size: 18px;
   font-weight: 700;
 }
 
@@ -172,7 +274,7 @@ textarea {
 .browser-stage-vertical,
 .browser-stage-triple,
 .browser-stage-quad {
-  height: calc(100% - 132px);
+  height: calc(100% - 116px);
 }
 
 .split-view {
@@ -403,8 +505,8 @@ textarea {
   grid-template-columns: max-content minmax(0, 1fr) max-content;
   align-items: center;
   gap: 10px;
-  height: 80px;
-  padding: 12px;
+  height: 64px;
+  padding: 10px 12px;
   border-top: 1px solid rgba(17, 24, 39, 0.12);
   background: rgba(255, 255, 255, 0.96);
 }
@@ -446,12 +548,12 @@ textarea {
 
 .bottom-input-shell textarea {
   width: 100%;
-  height: 48px;
+  height: 40px;
   min-width: 0;
   resize: none;
   border: 1px solid rgba(17, 24, 39, 0.14);
   border-radius: 7px;
-  padding: 8px 10px;
+  padding: 9px 10px;
   background: #ffffff;
   color: #111827;
   outline: none;
@@ -650,6 +752,14 @@ textarea {
     gap: 6px 8px;
   }
 
+  .toolbar:not(.toolbar-single) {
+    grid-template-areas:
+      "brand controls"
+      "address address"
+      "layouts layouts";
+    height: 132px;
+  }
+
   .toolbar-brand {
     grid-area: brand;
   }
@@ -679,17 +789,28 @@ textarea {
     height: calc(100% - 170px);
   }
 
+  .toolbar:not(.toolbar-single) + .browser-stage {
+    height: calc(100% - 132px);
+  }
+
   .browser-stage-horizontal,
   .browser-stage-vertical,
   .browser-stage-triple,
   .browser-stage-quad {
-    height: calc(100% - 250px);
+    height: calc(100% - 234px);
+  }
+
+  .toolbar:not(.toolbar-single) + .browser-stage-horizontal,
+  .toolbar:not(.toolbar-single) + .browser-stage-vertical,
+  .toolbar:not(.toolbar-single) + .browser-stage-triple,
+  .toolbar:not(.toolbar-single) + .browser-stage-quad {
+    height: calc(100% - 196px);
   }
 
   .bottom-input-shell {
     grid-template-columns: minmax(0, 1fr) max-content;
     grid-template-rows: max-content max-content;
-    height: 80px;
+    height: 64px;
     gap: 6px 8px;
     padding: 8px;
   }
@@ -701,7 +822,7 @@ textarea {
   .bottom-input-shell textarea {
     grid-column: 1 / 3;
     grid-row: 2;
-    height: 36px;
+    height: 34px;
   }
 
   .send-all-button {
@@ -740,14 +861,30 @@ textarea {
   }
 
   .navigation-controls button,
-  .tab-controls button,
+  .tab-controls > button,
   .layout-controls button,
   .cell-menu button,
   .address-form input,
-  .tab-controls select {
+  .browser-tab {
     border-color: rgba(255, 255, 255, 0.14);
     background: #171c23;
     color: #f9fafb;
+  }
+
+  .browser-tab {
+    border-bottom-color: rgba(255, 255, 255, 0.22);
+    background: #111827;
+    color: #cbd5e1;
+  }
+
+  .browser-tab.active {
+    border-bottom-color: #171c23;
+    background: #171c23;
+    color: #f9fafb;
+  }
+
+  .browser-tab-close:hover {
+    background: rgba(255, 255, 255, 0.1);
   }
 
   .navigation-controls button:hover,

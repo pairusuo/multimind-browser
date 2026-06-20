@@ -62,3 +62,46 @@ export const PRESET_SITES: PresetSite[] = [
     searchUrlTemplate: 'https://www.sogou.com/web?query={query}',
   },
 ];
+
+export function inferModeFromUrl(rawUrl: string): CellMode | 'unknown' {
+  return findPresetSiteByUrl(rawUrl)?.mode ?? 'unknown';
+}
+
+export function findPresetSiteByUrl(rawUrl: string): PresetSite | null {
+  const url = parseUrl(rawUrl);
+  if (!url) {
+    return null;
+  }
+
+  return PRESET_SITES.find((site) => {
+    const siteUrl = parseUrl(site.url);
+    return siteUrl ? hostsMatch(url.hostname, siteUrl.hostname) : false;
+  }) ?? null;
+}
+
+function parseUrl(rawUrl: string): URL | null {
+  const trimmedUrl = rawUrl.trim();
+  if (!trimmedUrl) {
+    return null;
+  }
+
+  try {
+    return new URL(trimmedUrl);
+  } catch {
+    try {
+      return new URL(`https://${trimmedUrl}`);
+    } catch {
+      return null;
+    }
+  }
+}
+
+function hostsMatch(inputHost: string, presetHost: string): boolean {
+  const input = normalizeHost(inputHost);
+  const preset = normalizeHost(presetHost);
+  return input === preset || input.endsWith(`.${preset}`);
+}
+
+function normalizeHost(hostname: string): string {
+  return hostname.toLowerCase().replace(/^www\./, '');
+}

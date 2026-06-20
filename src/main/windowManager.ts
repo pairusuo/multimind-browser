@@ -1,6 +1,6 @@
 import { BrowserWindow, WebContents, WebContentsView, nativeTheme } from 'electron';
 import { NOTICE_MESSAGES } from '../shared/notices';
-import { PRESET_SITES } from '../shared/presetSites';
+import { findPresetSiteByUrl, inferModeFromUrl, PRESET_SITES } from '../shared/presetSites';
 import {
   ApplyTemplatePayload,
   BrowserState,
@@ -18,7 +18,7 @@ import {
 import { getAdapterForUrl } from './adapters';
 
 const TOOLBAR_HEIGHT = 52;
-const BOTTOM_INPUT_HEIGHT = 80;
+const BOTTOM_INPUT_HEIGHT = 64;
 const CELL_BORDER_SIZE = 1;
 const FOCUSED_CELL_BORDER_SIZE = 2;
 const SPLITTER_SIZE = 4;
@@ -209,9 +209,9 @@ export class WindowManager {
     }
   }
 
-  navigate(cellId: string, rawUrl: string): void {
+  navigate(cellId: string, rawUrl: string): BrowserState {
     if (!isKnownCellId(cellId)) {
-      return;
+      return this.getBrowserState();
     }
 
     const url = normalizeUrl(rawUrl);
@@ -226,6 +226,7 @@ export class WindowManager {
     this.syncCellState(cellId);
     this.loadCellUrl(cellId, url);
     this.layout();
+    return this.getBrowserState();
   }
 
   navigateBack(cellId: string): void {
@@ -638,6 +639,7 @@ export class WindowManager {
     view.webContents.on('page-favicon-updated', (_event, favicons) => {
       const favicon = favicons[0];
       if (favicon) {
+        this.updateActiveTab(cellId, { favicon });
         this.window.webContents.send(IPC.CELL_FAVICON_CHANGED, { cellId, favicon });
       }
     });
@@ -887,7 +889,7 @@ export class WindowManager {
     });
   }
 
-  private updateActiveTab(cellId: string, patch: Partial<Pick<CellTab, 'title' | 'url'>>): void {
+  private updateActiveTab(cellId: string, patch: Partial<Pick<CellTab, 'title' | 'url' | 'favicon'>>): void {
     const tabId = this.activeTabIds[cellId];
     const tabs = this.tabs[cellId];
     if (!tabId || !tabs) {
@@ -954,6 +956,7 @@ function isCellTabList(value: unknown): value is CellTab[] {
       && typeof (tab as CellTab).id === 'string'
       && typeof (tab as CellTab).title === 'string'
       && typeof (tab as CellTab).url === 'string'
+      && (typeof (tab as CellTab).favicon === 'undefined' || typeof (tab as CellTab).favicon === 'string')
     ));
 }
 
@@ -1001,20 +1004,9 @@ function isCellMode(value: unknown): value is CellMode {
   return value === 'chat' || value === 'search';
 }
 
-function findPresetSiteByUrl(rawUrl: string) {
-  const url = parseUrl(rawUrl);
-  if (!url) {
-    return null;
-  }
-
-  return PRESET_SITES.find((site) => {
-    const siteUrl = parseUrl(site.url);
-    return siteUrl && normalizeHost(siteUrl.hostname) === normalizeHost(url.hostname);
-  }) ?? null;
-}
-
 function inferCellMode(rawUrl: string): CellMode {
-  return findPresetSiteByUrl(rawUrl)?.mode ?? 'chat';
+  const inferredMode = inferModeFromUrl(rawUrl);
+  return inferredMode === 'unknown' ? 'chat' : inferredMode;
 }
 
 function inferSearchUrlTemplate(rawUrl: string, mode: CellMode): string {

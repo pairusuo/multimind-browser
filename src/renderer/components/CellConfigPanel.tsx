@@ -1,5 +1,5 @@
-import { FormEvent, useMemo, useState } from 'react';
-import { PRESET_SITES } from '../../shared/presetSites';
+import { FormEvent, useState } from 'react';
+import { findPresetSiteByUrl, inferModeFromUrl, PRESET_SITES } from '../../shared/presetSites';
 import { getRiskySiteReason } from '../../shared/riskySites';
 import { CellMode, LAYOUT_CELLS, LayoutMode } from '../../shared/types';
 
@@ -30,7 +30,50 @@ export default function CellConfigPanel({
   const [draftSearchTemplates, setDraftSearchTemplates] = useState<Record<string, string>>(() => ({
     ...searchUrlTemplates,
   }));
-  const presetByUrl = useMemo(() => new Map(PRESET_SITES.map((site) => [site.url, site.id])), []);
+
+  function updateDraftUrl(cellId: string, nextUrl: string) {
+    const inferredMode = inferModeFromUrl(nextUrl);
+    const matchedPreset = findPresetSiteByUrl(nextUrl);
+
+    setDraftUrls((current) => ({
+      ...current,
+      [cellId]: nextUrl,
+    }));
+
+    if (inferredMode === 'unknown') {
+      const previousUrl = draftUrls[cellId] ?? '';
+      const previousWasUnknown = previousUrl.trim() !== '' && inferModeFromUrl(previousUrl) === 'unknown';
+      setDraftModes((current) => ({
+        ...current,
+        [cellId]: previousWasUnknown ? current[cellId] ?? 'chat' : 'chat',
+      }));
+      if (!previousWasUnknown) {
+        setDraftSearchTemplates((current) => ({
+          ...current,
+          [cellId]: '',
+        }));
+      }
+      return;
+    }
+
+    setDraftModes((current) => ({
+      ...current,
+      [cellId]: inferredMode,
+    }));
+    setDraftSearchTemplates((current) => ({
+      ...current,
+      [cellId]: matchedPreset?.searchUrlTemplate ?? '',
+    }));
+  }
+
+  function shouldShowSearchModeToggle(cellId: string): boolean {
+    const url = draftUrls[cellId]?.trim() ?? '';
+    return url !== '' && inferModeFromUrl(url) === 'unknown';
+  }
+
+  function getSelectedPresetId(cellId: string): string {
+    return findPresetSiteByUrl(draftUrls[cellId] ?? '')?.id ?? 'custom';
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -52,26 +95,16 @@ export default function CellConfigPanel({
               <label htmlFor={`${cellId}-preset`}>格子 {index + 1}</label>
               <select
                 id={`${cellId}-preset`}
-                value={presetByUrl.get(draftUrls[cellId]) ?? 'custom'}
+                value={getSelectedPresetId(cellId)}
                 onChange={(event) => {
                   const preset = PRESET_SITES.find((site) => site.id === event.target.value);
-                  setDraftUrls((current) => ({
-                    ...current,
-                    [cellId]: preset?.url ?? current[cellId] ?? '',
-                  }));
                   if (preset) {
-                    setDraftModes((current) => ({
-                      ...current,
-                      [cellId]: preset.mode,
-                    }));
-                    setDraftSearchTemplates((current) => ({
-                      ...current,
-                      [cellId]: preset.searchUrlTemplate ?? '',
-                    }));
+                    updateDraftUrl(cellId, preset.url);
+                  } else {
+                    updateDraftUrl(cellId, '');
                   }
                 }}
               >
-                <option value="custom">自定义 URL</option>
                 <optgroup label="AI 助手">
                   {PRESET_SITES.filter((site) => site.mode === 'chat').map((site) => (
                     <option key={site.id} value={site.id}>
@@ -86,39 +119,37 @@ export default function CellConfigPanel({
                     </option>
                   ))}
                 </optgroup>
+                <option value="custom">自定义 URL</option>
               </select>
               <input
                 value={draftUrls[cellId] ?? ''}
-                onChange={(event) =>
-                  setDraftUrls((current) => ({
-                    ...current,
-                    [cellId]: event.target.value,
-                  }))
-                }
+                onChange={(event) => updateDraftUrl(cellId, event.target.value)}
                 placeholder="https://example.com"
                 spellCheck={false}
               />
-              <label className="search-mode-toggle">
-                <input
-                  type="checkbox"
-                  checked={draftModes[cellId] === 'search'}
-                  onChange={(event) => {
-                    const nextMode: CellMode = event.target.checked ? 'search' : 'chat';
-                    setDraftModes((current) => ({
-                      ...current,
-                      [cellId]: nextMode,
-                    }));
-                    if (nextMode === 'search' && !draftSearchTemplates[cellId]) {
-                      setDraftSearchTemplates((current) => ({
+              {shouldShowSearchModeToggle(cellId) && (
+                <label className="search-mode-toggle">
+                  <input
+                    type="checkbox"
+                    checked={draftModes[cellId] === 'search'}
+                    onChange={(event) => {
+                      const nextMode: CellMode = event.target.checked ? 'search' : 'chat';
+                      setDraftModes((current) => ({
                         ...current,
-                        [cellId]: 'https://www.google.com/search?q={query}',
+                        [cellId]: nextMode,
                       }));
-                    }
-                  }}
-                />
-                这是搜索引擎
-              </label>
-              {draftModes[cellId] === 'search' && (
+                      if (nextMode === 'search' && !draftSearchTemplates[cellId]) {
+                        setDraftSearchTemplates((current) => ({
+                          ...current,
+                          [cellId]: 'https://www.google.com/search?q={query}',
+                        }));
+                      }
+                    }}
+                  />
+                  这是搜索引擎
+                </label>
+              )}
+              {shouldShowSearchModeToggle(cellId) && draftModes[cellId] === 'search' && (
                 <input
                   className="search-template-input"
                   value={draftSearchTemplates[cellId] ?? ''}
