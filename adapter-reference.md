@@ -354,3 +354,120 @@ async function sendToAll(text: string, cells: string[]) {
   return results;
 }
 ```
+
+---
+
+## 读取适配器（第二阶段新增）
+
+> 这部分是第二阶段「讨论 → 文档沉淀」流程的技术基础。在写入适配器的
+> 基础上新增"读取 AI 回答内容"和"判断回答是否生成完毕"两个能力。
+
+### 为什么读取比写入难
+
+写入只需要找到输入框、填值、触发发送，是一次性的离散动作。读取需要：
+
+1. 准确定位"最新一条 AI 回答"在 DOM 中的位置（不是用户的问题，是 AI 的回复）
+2. 判断这条回答是否已经生成完毕（流式输出过程中读取会拿到不完整的内容）
+3. 处理回答内容中可能包含的代码块、列表、表格等富文本结构，决定提取
+   纯文本还是保留基本格式
+
+### 通用判断"生成是否完毕"的常见模式
+
+不同网站实现方式不同，但大致可归为以下几类信号，按可靠性排序：
+
+**模式一：停止生成按钮消失/变回发送按钮**（最可靠）
+
+AI 网站在生成过程中通常会把发送按钮替换为"停止生成"按钮，生成完毕后
+变回正常的发送按钮（可点击状态）。这是最明确的完成信号。
+
+```javascript
+function isGenerating() {
+  // 检查是否存在"停止生成"按钮（具体选择器因站点而异）
+  const stopButton = document.querySelector('button[aria-label*="Stop"]')
+    || document.querySelector('button[aria-label*="停止"]');
+  return !!stopButton;
+}
+
+// 完成判断：轮询直到 isGenerating() 返回 false
+async function waitForCompletion(timeout = 60000) {
+  const start = Date.now();
+  while (isGenerating()) {
+    if (Date.now() - start > timeout) return false;  // 超时
+    await new Promise(r => setTimeout(r, 500));
+  }
+  return true;
+}
+```
+
+**模式二：流式光标元素消失**
+
+部分网站在 AI 正在输出时，回答末尾会有一个闪烁的光标占位元素
+（class 名常包含 `cursor`、`typing`、`streaming` 等关键词），生成完毕后
+该元素被移除。
+
+```javascript
+function isStreaming() {
+  return !!document.querySelector('.result-streaming, .typing-cursor, [data-streaming="true"]');
+}
+```
+
+**模式三：最后一条消息的内容在一段时间内不再变化**（兜底方案，不推荐
+作为首选，因为不够精确）
+
+```javascript
+async function waitForContentStable(getContent, stableMs = 1500, timeout = 60000) {
+  const start = Date.now();
+  let lastContent = getContent();
+  let lastChangeTime = Date.now();
+
+  while (Date.now() - start < timeout) {
+    await new Promise(r => setTimeout(r, 300));
+    const current = getContent();
+    if (current !== lastContent) {
+      lastContent = current;
+      lastChangeTime = Date.now();
+    } else if (Date.now() - lastChangeTime > stableMs) {
+      return true;  // 内容已经稳定 stableMs 毫秒，认为生成完毕
+    }
+  }
+  return false;  // 超时
+}
+```
+
+### 提取最新回答内容
+
+定位到最后一条由 AI（非用户）发出的消息容器，提取其文本内容：
+
+```javascript
+// 通用思路：AI 消息和用户消息通常有不同的 class 或 data 属性区分
+function extractLatestResponse() {
+  // 具体选择器需要按各站点 DOM 结构调整，以下为示意结构
+  const messages = document.querySelectorAll('[data-message-author="assistant"]');
+  if (messages.length === 0) return '';
+  const latest = messages[messages.length - 1];
+  return latest.innerText.trim();
+}
+```
+
+**关于格式保留**：第二阶段的"交叉验证"场景下，转述给另一个 AI 时使用
+纯文本（`innerText`）即可，不需要保留 markdown 格式或代码高亮，因为
+转述的目的是让另一个 AI 理解内容大意，不是完整还原原始排版。
+
+### 各站点适配状态（开发时逐步填充，建立一个跟踪表）
+
+| 网站 | 完成判断模式 | 回答提取选择器 | 验证状态 |
+|-----|------------|-------------|---------|
+| Claude (claude.ai) | 待确认（建议先试模式一：发送按钮状态） | 待确认 | 未开始 |
+| ChatGPT (chatgpt.com) | 待确认（建议先试模式一：Stop generating 按钮） | 待确认 | 未开始 |
+| DeepSeek (chat.deepseek.com) | 待确认 | 待确认 | 未开始 |
+
+> 开发第二阶段时，每完成一个站点的读取适配器验证，在此表格中更新具体
+> 选择器和验证状态，避免后续维护时重新摸索。这个表格是「读取适配器」
+> 的活文档，应该随开发进度持续更新，不要等全部完成后一次性补充。
+
+### 读取适配器的失败处理
+
+如果在超时时间内无法判断生成是否完毕，或者提取不到任何回答内容，
+读取适配器应该返回明确的失败信号（如返回 `null` 而不是空字符串），
+调用方据此判断该格子在本轮交叉验证中跳过，不阻塞其他格子的流程，
+并通过统一提示系统告知用户"某个 AI 的回答未能读取，已跳过"。
