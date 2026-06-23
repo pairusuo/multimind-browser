@@ -375,7 +375,14 @@ async function sendToAll(text: string, cells: string[]) {
 
 不同网站实现方式不同，但大致可归为以下几类信号，按可靠性排序：
 
-**模式一：停止生成按钮消失/变回发送按钮**（最可靠）
+**模式一：停止生成按钮消失/变回发送按钮**（需逐站验证，不能假设通用）
+
+> ⚠️ 三站点实测结论（2026年6月）：ChatGPT 和 Claude 上模式一验证可靠
+> （前提是准确识别真实的停止控件，不要被"已停止思考"一类的伪信号
+> 误导）；DeepSeek 上模式一不可靠，生成过程中也会返回已完成的信号，
+> 原因待查，已改用模式三替代。**结论：模式一不是默认安全选项，每个
+> 新站点接入时都必须实测，失败时切换到模式三。** 详见下方「各站点
+> 适配状态」表格的完整实测记录。
 
 AI 网站在生成过程中通常会把发送按钮替换为"停止生成"按钮，生成完毕后
 变回正常的发送按钮（可点击状态）。这是最明确的完成信号。
@@ -453,13 +460,26 @@ function extractLatestResponse() {
 纯文本（`innerText`）即可，不需要保留 markdown 格式或代码高亮，因为
 转述的目的是让另一个 AI 理解内容大意，不是完整还原原始排版。
 
-### 各站点适配状态（开发时逐步填充，建立一个跟踪表）
+### 各站点适配状态（2026年6月，三站点首轮验证已全部完成）
 
 | 网站 | 完成判断模式 | 回答提取选择器 | 验证状态 |
 |-----|------------|-------------|---------|
-| Claude (claude.ai) | 待确认（建议先试模式一：发送按钮状态） | 待确认 | 未开始 |
-| ChatGPT (chatgpt.com) | 待确认（建议先试模式一：Stop generating 按钮） | 待确认 | 未开始 |
-| DeepSeek (chat.deepseek.com) | 待确认 | 待确认 | 未开始 |
+| Claude (claude.ai) | 模式一，识别真实停止控件（`button[aria-label="Stop response"]`） | `[class*="standard-markdown"]` 优先，兼容 `font-claude-message` / `message-content` 等旧选择器 | **已验证通过**。验证条件：账号 dirkchou，窗口保持前台且未锁屏。发送按钮现场确认为 `button[aria-label="Send message"]`，点击后 3 秒内出现用户消息、`Claude is responding` 和 `Stop response`；生成中 `isResponseComplete()` 返回 `false`，约 6.8 秒后停止控件消失并返回 `true`；`extractLatestResponse()` 提取到正文 476 字，未混入界面文字 |
+| ChatGPT (chatgpt.com) | 模式一，识别真实 `stop` 控件（`button[data-testid="stop-button"]`） | `[data-message-author-role="assistant"]`，内容取 `.markdown` | **已验证通过**。修正记录：最初实现误把"已停止思考"按钮当成正在生成中的信号，导致 `isResponseComplete()` 一直返回 `false`，修正为只识别真实 stop 控件后才正确 |
+| DeepSeek (chat.deepseek.com) | **模式一不可靠，已改用模式三**（最新回答文本稳定 1.5 秒后判定完成） | `.ds-markdown.ds-assistant-message-main-content`（取整条，不只取最后一段） | **已验证通过**。重要教训：模式一（检测停止生成按钮）在 DeepSeek 上不可靠，生成过程中也会返回 `true`，原因待查（可能该站点的停止按钮状态和实际生成状态不同步）。改用模式三后验证通过。发送控件也非标准 `button`，实际是 `div[role="button"].ds-button--primary`，写入适配器已同步修正 |
+
+**关键经验**：不要假设所有站点都适用同一种"生成完毕"判断模式。Claude
+和 ChatGPT 上模式一可靠，但 DeepSeek 上模式一会误判，必须针对每个
+站点实际验证后才能确定该用哪种模式，不能从一个站点的成功经验直接
+套用到另一个站点。另外这轮排查也发现：测试时窗口必须保持前台且不能
+锁屏，否则系统对后台应用的节流可能导致"点击后页面未响应"这类假阴性，
+容易和真正的选择器错误混淆，下一次遇到类似现象先排除这个变量。
+
+**待补充验证项（不阻塞当前进度，第二阶段后续推进时记得回头补）**：
+- ChatGPT 当前验证样本是较短的图示型回答，建议找机会用更长的正文
+  内容（如几百字的解释性回答）重新测一次，确认长回答下生成完成的
+  判断依然准确，且 `extractLatestResponse()` 不会因为内容过长而截断
+  或遗漏
 
 > 开发第二阶段时，每完成一个站点的读取适配器验证，在此表格中更新具体
 > 选择器和验证状态，避免后续维护时重新摸索。这个表格是「读取适配器」

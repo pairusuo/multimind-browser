@@ -18,7 +18,8 @@ MultiMind 是一个三阶段产品：
   或搜索引擎。
 - **第二阶段（开发中）**：讨论 → 文档沉淀。AI 互相查看彼此回答、交叉验证，
   用户指定一个 AI 汇总成结构化文档，存入本地长期记忆。
-- **第三阶段（远期）**：浏览器 + Agent。内置 Agent 能力驱动代码生成或通用
+- **第三阶段（远期）**：浏览器 + 终端 + Agent。内置真实终端（可运行用户
+  已安装的 Codex CLI 等工具），内置 Agent 能力驱动代码生成或通用
   任务执行，用户自备 API Key。
 
 产品设计的完整产品层描述见 `MultiMind_设计文档_v0.2.md`，本文件只关注
@@ -45,6 +46,13 @@ vite              ^5.0.0
 better-sqlite3    （SQLite，含 FTS5 全文检索支持）
 ```
 
+第三阶段引入内置终端时，新增（**第一个需要原生编译的依赖，见下方
+「内置终端模块」章节的打包注意事项**）：
+```
+@homebridge/node-pty-prebuilt-multiarch    （PTY 进程管理，多平台预编译）
+xterm.js                                    （终端渲染前端）
+```
+
 ---
 
 ## 目录结构
@@ -62,6 +70,7 @@ multimind/
 │   ├── main/                   # Electron 主进程
 │   │   ├── index.ts
 │   │   ├── windowManager.ts    # 管理所有 WebContentsView 和标签页状态
+│   │   ├── terminalManager.ts  # 管理所有终端 PTY 进程（第三阶段，独立于 windowManager）
 │   │   ├── ipcHandlers.ts
 │   │   ├── constants.ts        # UA 等构建时常量
 │   │   └── adapters/           # 各 AI/搜索引擎网站的读写适配器
@@ -78,7 +87,8 @@ multimind/
 │   │       ├── GridCell.tsx
 │   │       ├── BottomInput.tsx
 │   │       ├── CellConfigPanel.tsx
-│   │       └── CellNotice.tsx
+│   │       ├── CellNotice.tsx
+│   │       └── TerminalPane.tsx # 终端面板渲染（xterm.js 容器，第三阶段）
 │   └── shared/
 │       ├── types.ts            # IPC 频道、CellState、LayoutMode 等共享类型
 │       ├── presetSites.ts      # 内置 AI/搜索引擎清单
@@ -222,6 +232,141 @@ export interface PresetSite {
 格子的 `url` 字段记录"最后一次实际停留的地址"，不是模板/预设的原始地址。
 模板 URL 只在格子「从无到有创建」时生效一次。这是有意为之的浏览器标准
 行为（类似 Chrome 重启恢复标签页），不是 bug。
+
+---
+
+## 内置终端模块（第三阶段，独立于格子系统）
+
+### 核心架构原则：终端与浏览器格子是两套独立系统
+
+终端管理的是 PTY 进程的生命周期，浏览器格子管理的是 `WebContentsView` 的
+生命周期，两者底层无共享逻辑。**终端绝对不进入 `CellState` / `cellStates`
+这套数据结构**，不要因为"终端也能出现在分屏网格里"而试图把两者合并。
+
+### 网格位置的内容类型抽象
+
+为了让终端可以出现在分屏网格的任意位置（同时和浏览器格子混排），引入一层
+独立于 `CellState` 的抽象：
+
+```typescript
+export type PaneContent =
+  | { type: 'cell'; cellId: string }
+  | { type: 'terminal'; terminalId: string };
+
+// 每个网格位置（'cell-0' | 'cell-1' | 'cell-2' | 'cell-3'，复用现有的
+// 位置编号）绑定一个 PaneContent，而不是直接绑定一个 CellState
+private paneAssignments: Map<string, PaneContent> = new Map();
+```
+
+`SplitView.tsx` 渲染每个网格位置时，先查 `paneAssignments` 判断这个位置
+应该渲染浏览器格子还是终端，再分别调用对应的渲染逻辑和数据源
+（`cellStates` 或 `terminalManager` 的状态）。布局网格的尺寸计算
+（`LayoutMode` 对应的矩形划分）保持不变，不区分位置上放的是格子还是终端。
+
+### TerminalManager（主进程，独立于 WindowManager）
+
+```typescript
+interface TerminalState {
+  id: string;
+  cwd: string;        // 当前工作目录
+  title: string;       // 显示标题（默认 shell 名称，用户可重命名）
+}
+
+class TerminalManager {
+  private terminals: Map<string, IPty> = new Map();  // IPty 来自 node-pty
+
+  createTerminal(cwd?: string): string {
+    const id = generateId();
+    const shell = process.platform === 'win32' ? 'powershell.exe' : (process.env.SHELL || 'bash');
+    const ptyProcess = pty.spawn(shell, [], {
+      name: 'xterm-color',
+      cols: 80,
+      rows: 30,
+      cwd: cwd || process.env.HOME,
+      env: process.env,
+    });
+    this.terminals.set(id, ptyProcess);
+    return id;
+  }
+
+  write(id: string, data: string): void {
+    this.terminals.get(id)?.write(data);
+  }
+
+  resize(id: string, cols: number, rows: number): void {
+    this.terminals.get(id)?.resize(cols, rows);
+  }
+
+  destroy(id: string): void {
+    this.terminals.get(id)?.kill();
+    this.terminals.delete(id);
+  }
+
+  destroyAll(): void {
+    // 应用退出时调用，避免残留子进程
+    for (const id of this.terminals.keys()) this.destroy(id);
+  }
+}
+```
+
+应用退出时（`before-quit` 或 `window-all-closed`）必须调用
+`terminalManager.destroyAll()`，避免 PTY 子进程成为孤儿进程残留在用户
+系统里，这是终端模块特有的清理责任，浏览器格子（WebContentsView）不需要
+这一步是因为它们随窗口销毁自动清理。
+
+### IPC（终端专属频道，不复用浏览器格子的 IPC）
+
+```typescript
+export const TERMINAL_IPC = {
+  CREATE: 'terminal-create',
+  WRITE: 'terminal-write',       // 渲染进程 → 主进程，用户输入
+  DATA: 'terminal-data',          // 主进程 → 渲染进程，PTY 输出
+  RESIZE: 'terminal-resize',
+  DESTROY: 'terminal-destroy',
+} as const;
+```
+
+终端的 IPC 频道独立命名（`TERMINAL_IPC` 而不是塞进现有的 `IPC`
+常量对象），避免和浏览器格子的导航/状态广播频道混在一起。
+
+### 渲染前端：xterm.js
+
+`TerminalPane.tsx` 用 `xterm.js` 渲染终端界面，通过 IPC 把用户键盘输入
+转发给主进程的 `TerminalManager.write()`，并监听 `TERMINAL_IPC.DATA`
+把 PTY 输出写入 xterm 实例。窗口/网格尺寸变化时调用
+`TERMINAL_IPC.RESIZE` 同步终端的行列数，否则会出现内容显示错乱。
+
+### 打包注意事项（原生模块，必须额外处理）
+
+`node-pty` 是当前技术栈第一个需要原生编译的依赖，打包时必须注意：
+
+1. **依赖选型**：使用 `@homebridge/node-pty-prebuilt-multiarch`，它为
+   macOS（x64/arm64）、Windows、Linux 提供预编译二进制，安装时自动
+   匹配当前平台，避免本机从源码编译（需要 Python + C++ 编译器，
+   普通用户环境很可能没有）
+2. **asar 解包**：`node-pty` 除了 `.node` 二进制本身，还包含一个独立的
+   `spawn-helper` 可执行文件，打包成 `asar` 后这个 helper 的相对路径
+   会失效。`electron-builder.yml` 中需要配置：
+   ```yaml
+   asarUnpack:
+     - "**/node_modules/@homebridge/node-pty-prebuilt-multiarch/**"
+   ```
+3. **跨架构验证**：macOS Universal Binary 打包后，除了之前用 `lipo -info`
+   验证主程序架构，还需要单独确认 `node-pty` 这个原生模块在 Intel 和
+   Apple Silicon 上都能正常加载（不能假设和主程序的 Universal Binary
+   是同一回事，原生依赖可能需要分别验证）
+4. **首次接入预期**：这是新增的工程脆弱点，第一次让终端在三个平台的
+   打包产物里都正常工作，大概率不会一次成功，需要预留排查时间，
+   常见的失败现象是"开发环境能跑、打包后的产物里终端打不开"，遇到这种
+   情况先检查 `asarUnpack` 配置和路径解析逻辑
+
+### 当前阶段边界（有意收窄，不要在没有需求验证的情况下扩展）
+
+- 不做"讨论结果自动传递给终端"这类跨模块数据打通，本阶段只做终端本身
+  的接入和可用性
+- 不做代码编辑器（语法高亮、文件树等），只做终端
+- 终端默认收起还是常驻、能否开多个终端标签，留待开发时按实际体验调整，
+  不在本阶段提前锁定设计
 
 ---
 
@@ -487,10 +632,14 @@ export const CHROME_USER_AGENT =
 - 禁止绕过验证码、双重验证等网站安全机制
 - 禁止运行时动态切换 User-Agent
 - 第三阶段 Agent 的文件操作禁止超出用户明确授权的目录范围，禁止静默写入
+- 禁止把终端的 `TerminalState` / PTY 进程合并进 `cellStates` 这套数据
+  结构，两者必须保持独立（见「内置终端模块」章节）
+- 禁止应用退出时遗漏 `terminalManager.destroyAll()`，避免 PTY 子进程
+  成为孤儿进程残留在用户系统
 
 ---
 
-## 第二阶段开发指引（当前阶段，优先级最高）
+## 第二阶段开发指引（当前开发优先级，内置终端模块见上方独立章节）
 
 按以下顺序推进，每步验证通过后才进入下一步：
 
