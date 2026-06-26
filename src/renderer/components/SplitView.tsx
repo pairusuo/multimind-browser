@@ -1,4 +1,5 @@
 import { PointerEvent, useEffect, useMemo, useState } from 'react';
+import { findPresetSiteByUrl } from '../../shared/presetSites';
 import { CELL_IDS, CellMode, LAYOUT_CELLS, LayoutMode } from '../../shared/types';
 import GridCell from './GridCell';
 
@@ -105,6 +106,7 @@ export default function SplitView({
           cellId="cell-0"
           className="cell-a"
           focused={focusedCellId === 'cell-0'}
+          targetCells={getTargetCells('cell-0', visibleCells, cellUrls)}
           meta={getCellMeta('cell-0', cellUrls, cellModes, activeCells, mutedCells, cellFavicons)}
           onFocus={onFocusCell}
           onNewTab={onNewTab}
@@ -130,6 +132,7 @@ export default function SplitView({
           cellId="cell-1"
           className="cell-b"
           focused={focusedCellId === 'cell-1'}
+          targetCells={getTargetCells('cell-1', visibleCells, cellUrls)}
           meta={getCellMeta('cell-1', cellUrls, cellModes, activeCells, mutedCells, cellFavicons)}
           onFocus={onFocusCell}
           onNewTab={onNewTab}
@@ -155,6 +158,7 @@ export default function SplitView({
           cellId="cell-2"
           className="cell-c"
           focused={focusedCellId === 'cell-2'}
+          targetCells={getTargetCells('cell-2', visibleCells, cellUrls)}
           meta={getCellMeta('cell-2', cellUrls, cellModes, activeCells, mutedCells, cellFavicons)}
           onFocus={onFocusCell}
           onNewTab={onNewTab}
@@ -167,6 +171,7 @@ export default function SplitView({
           cellId="cell-3"
           className="cell-d"
           focused={focusedCellId === 'cell-3'}
+          targetCells={getTargetCells('cell-3', visibleCells, cellUrls)}
           meta={getCellMeta('cell-3', cellUrls, cellModes, activeCells, mutedCells, cellFavicons)}
           onFocus={onFocusCell}
           onNewTab={onNewTab}
@@ -193,6 +198,28 @@ function getCellMeta(
     active: Boolean(activeCells[cellId] && cellUrls[cellId]?.trim()),
     muted: Boolean(mutedCells[cellId]),
   };
+}
+
+function getTargetCells(sourceCellId: string, visibleCells: string[], cellUrls: Record<string, string>) {
+  return visibleCells
+    .filter((cellId) => cellId !== sourceCellId)
+    .map((cellId) => ({
+      cellId,
+      label: getCellLabel(cellUrls[cellId] ?? '', cellId),
+    }));
+}
+
+function getCellLabel(url: string, cellId: string): string {
+  const preset = findPresetSiteByUrl(url);
+  if (preset) {
+    return preset.name;
+  }
+
+  try {
+    return url ? new URL(url).hostname.replace(/^www\./, '') : cellId.replace('cell-', 'Cell ');
+  } catch {
+    return url || cellId.replace('cell-', 'Cell ');
+  }
 }
 
 function clamp(value: number): number {

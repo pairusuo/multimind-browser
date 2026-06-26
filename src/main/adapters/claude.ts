@@ -1,7 +1,7 @@
 import type { SiteAdapter } from './index';
 
 export const claudeAdapter: SiteAdapter = {
-  urlPattern: /https:\/\/claude\.ai/i,
+  urlPattern: /https:\/\/claude\.(ai|com)/i,
   injectScript: (text: string) => `
     (async () => {
       const input = document.querySelector('div[contenteditable="true"][data-testid="chat-input"]')
@@ -11,19 +11,101 @@ export const claudeAdapter: SiteAdapter = {
       input.focus();
       document.execCommand('selectAll', false, null);
       document.execCommand('insertText', false, ${JSON.stringify(text)});
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      const button = document.querySelector('button[data-testid="send-button"]')
-        || document.querySelector('button[aria-label="Send message"]');
-      if (button && !button.disabled) {
-        button.click();
-        return true;
+      const isVisible = (element) => {
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+      };
+      const findComposer = () => {
+        let element = input;
+        for (let i = 0; i < 6 && element; i += 1) {
+          if (element.querySelectorAll?.('button').length >= 2) {
+            return element;
+          }
+          element = element.parentElement;
+        }
+        return input.closest('form') || input.parentElement;
+      };
+      const composer = findComposer();
+      const buttonLabel = (button) => [
+        button.getAttribute('aria-label'),
+        button.getAttribute('title'),
+        button.getAttribute('data-testid'),
+        button.innerText
+      ].filter(Boolean).join(' ').toLowerCase();
+      const isEnabled = (candidate) => candidate
+        && candidate.getAttribute('aria-disabled') !== 'true'
+        && candidate.getAttribute('disabled') === null
+        && !candidate.disabled
+        && !candidate.className?.toString().includes('disabled');
+      const isExcludedComposerButton = (button) => {
+        const label = buttonLabel(button);
+        return /attach|upload|add files|connector|microphone|record|voice|dictate|model|settings|附件|上传|添加|麦克风|录音|语音|模型|设置/.test(label);
+      };
+      const clickElement = (element) => {
+        element.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+        for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+          element.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+        }
+        element.click?.();
+      };
+      const currentInputText = () => (input.innerText || input.textContent || '').trim();
+      const waitForInputToClear = async () => {
+        for (let i = 0; i < 10; i += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 120));
+          if (!currentInputText()) return true;
+        }
+        return false;
+      };
+      const pressEnter = async (modifiers = {}) => {
+        input.focus();
+        for (const type of ['keydown', 'keypress', 'keyup']) {
+          input.dispatchEvent(new KeyboardEvent(type, {
+            key: 'Enter',
+            code: 'Enter',
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            ...modifiers
+          }));
+        }
+        return waitForInputToClear();
+      };
+      const findSendButton = () => {
+        const interactiveSelector = 'button, [role="button"], [aria-label], [tabindex]';
+        const explicitButton = [...document.querySelectorAll(interactiveSelector)]
+          .find((candidate) => {
+            const label = buttonLabel(candidate);
+            return isVisible(candidate)
+              && isEnabled(candidate)
+              && (/send|submit|发送|提交/.test(label) || candidate.getAttribute('type') === 'submit');
+          });
+        if (explicitButton) return explicitButton;
+
+        const fallbackButtons = composer
+          ? [...composer.querySelectorAll(interactiveSelector)]
+              .filter((candidate) => isVisible(candidate) && isEnabled(candidate))
+              .filter((candidate) => !isExcludedComposerButton(candidate))
+              .sort((a, b) => a.getBoundingClientRect().right - b.getBoundingClientRect().right)
+          : [];
+        return fallbackButtons.at(-1);
+      };
+
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < 2500) {
+        const button = findSendButton();
+        if (button) {
+          clickElement(button);
+          if (await waitForInputToClear()) return true;
+          if (await pressEnter({ metaKey: true })) return true;
+          if (await pressEnter({ ctrlKey: true })) return true;
+          if (await pressEnter()) return true;
+          return true;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
-      input.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'Enter',
-        code: 'Enter',
-        bubbles: true,
-        cancelable: true
-      }));
+
+      await pressEnter({ metaKey: true });
       return true;
     })();
   `,
@@ -31,5 +113,94 @@ export const claudeAdapter: SiteAdapter = {
     Boolean(document.querySelector('div[contenteditable="true"][data-testid="chat-input"]')
       || document.querySelector('div[contenteditable="true"].ProseMirror')
       || document.querySelector('div[contenteditable="true"]'));
+  `,
+  extractLatestResponse: () => `
+    (() => {
+      const getText = (element) => (element?.innerText || element?.textContent || '').trim();
+      const isVisible = (element) => {
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+      };
+      const selectors = [
+        '[data-testid="message-content"]',
+        '[class*="font-claude-message"]',
+        '[data-message-author-role="assistant"]',
+        '[class*="standard-markdown"]'
+      ];
+      const seen = new Set();
+      const candidates = selectors
+        .flatMap((selector) => [...document.querySelectorAll(selector)])
+        .filter((element) => {
+          if (seen.has(element)) return false;
+          seen.add(element);
+          if (!isVisible(element)) return false;
+          if (element.closest('button, a, nav, aside, header, footer, [contenteditable="true"], textarea, input')) {
+            return false;
+          }
+          if (element.closest('[data-testid="user-message"], [data-message-author-role="user"]')) return false;
+          return getText(element).length > 0;
+        });
+
+      const latest = candidates.at(-1);
+      if (latest) return getText(latest);
+
+      const fallbackBlocks = [...document.querySelectorAll('p, li, pre')]
+        .filter((element) => {
+          if (!isVisible(element)) return false;
+          if (element.closest('button, a, nav, aside, header, footer, [contenteditable="true"], textarea, input')) {
+            return false;
+          }
+          const text = getText(element);
+          return text.length > 0
+            && !/Claude is AI|Write a message|How can I help|Free plan|Try Team/i.test(text);
+        });
+
+      const containers = [];
+      const seenContainers = new Set();
+      for (const block of fallbackBlocks) {
+        let current = block;
+        let best = block;
+        for (let i = 0; i < 7 && current.parentElement; i += 1) {
+          const parent = current.parentElement;
+          if (parent === document.body || parent.tagName === 'MAIN') break;
+          const parentText = getText(parent);
+          const blockCount = parent.querySelectorAll('p, li, pre').length;
+          if (parentText.length > 0 && parentText.length < 5000 && blockCount <= 20) {
+            best = parent;
+          }
+          current = parent;
+        }
+        if (!seenContainers.has(best)) {
+          seenContainers.add(best);
+          containers.push(best);
+        }
+      }
+
+      const fallback = containers
+        .map((element) => getText(element))
+        .filter((text) => text.length > 20)
+        .at(-1);
+      return fallback || null;
+    })();
+  `,
+  isResponseComplete: () => `
+    (() => {
+      const isVisible = (element) => {
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+      };
+      const stopButton = [...document.querySelectorAll('button')].find((button) => {
+        const label = [
+          button.getAttribute('aria-label'),
+          button.getAttribute('title'),
+          button.getAttribute('data-testid'),
+          button.innerText
+        ].filter(Boolean).join(' ').toLowerCase();
+        return isVisible(button) && /(stop response|stop generating|stop responding|停止生成|停止回答|停止响应)/.test(label);
+      });
+      return !stopButton;
+    })();
   `,
 };

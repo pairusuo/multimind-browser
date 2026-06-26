@@ -8,6 +8,7 @@ interface GridCellProps {
   cellId: string;
   className: string;
   focused: boolean;
+  targetCells: Array<{ cellId: string; label: string }>;
   meta: {
     url: string;
     mode: CellMode;
@@ -30,9 +31,13 @@ export default function GridCell({
   onNewTab,
   onToggleMute,
   onToggle,
+  targetCells,
 }: GridCellProps) {
   const host = safeHost(meta.url);
   const [notice, setNotice] = useState<CellNoticePayload | null>(null);
+  const [targetPickerOpen, setTargetPickerOpen] = useState(false);
+  const [forwardingTargetId, setForwardingTargetId] = useState<string | null>(null);
+  const [forwardStatus, setForwardStatus] = useState<string | null>(null);
 
   useEffect(() => {
     return window.electronAPI.onCellNotice((payload) => {
@@ -59,6 +64,22 @@ export default function GridCell({
     await window.electronAPI.setCellUrl({ cellId, url: nextUrl });
   }
 
+  async function forwardTo(targetCellId: string) {
+    setTargetPickerOpen(false);
+    setForwardingTargetId(targetCellId);
+    setForwardStatus(`Forwarding to ${getTargetLabel(targetCells, targetCellId)}...`);
+
+    try {
+      await window.electronAPI.forwardResponse({ sourceCellId: cellId, targetCellId });
+      setForwardStatus(`Forwarded to ${getTargetLabel(targetCells, targetCellId)}`);
+    } catch (error) {
+      console.error('Forward response failed:', error);
+      setForwardStatus('Forward could not be completed');
+    } finally {
+      setForwardingTargetId(null);
+    }
+  }
+
   return (
     <article
       className={`grid-cell ${className}${focused ? ' focused' : ''}`}
@@ -71,7 +92,27 @@ export default function GridCell({
         <span>{host}</span>
       </div>
       {notice && <CellNotice notice={notice} onClose={() => setNotice(null)} />}
+      {forwardStatus && (
+        <div className="cell-forward-status" role="status">
+          <span>{forwardStatus}</span>
+          <button type="button" aria-label="Dismiss forward status" onClick={() => setForwardStatus(null)}>
+            ×
+          </button>
+        </div>
+      )}
       <div className="cell-menu" aria-label={`${host} cell controls`}>
+        <button
+          type="button"
+          title="Forward To"
+          aria-label="Forward To"
+          aria-expanded={targetPickerOpen}
+          onClick={(event) => {
+            event.stopPropagation();
+            setTargetPickerOpen((open) => !open);
+          }}
+        >
+          ⇥
+        </button>
         <button type="button" title="Reload" aria-label="Reload cell" onClick={() => window.electronAPI.reload(cellId)}>
           ↻
         </button>
@@ -102,6 +143,22 @@ export default function GridCell({
           ✓
         </button>
       </div>
+      {targetPickerOpen && (
+        <div className="forward-target-picker" aria-label="Choose forward target" onClick={(event) => event.stopPropagation()}>
+          <div className="forward-target-options">
+            {targetCells.map((target) => (
+              <button
+                key={target.cellId}
+                type="button"
+                disabled={forwardingTargetId !== null}
+                onClick={() => void forwardTo(target.cellId)}
+              >
+                {target.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </article>
   );
 }
@@ -112,4 +169,8 @@ function safeHost(url: string): string {
   } catch {
     return url || 'Empty cell';
   }
+}
+
+function getTargetLabel(targetCells: Array<{ cellId: string; label: string }>, cellId: string): string {
+  return targetCells.find((target) => target.cellId === cellId)?.label ?? cellId.replace('cell-', 'Cell ');
 }

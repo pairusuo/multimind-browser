@@ -14,6 +14,8 @@ export interface SiteAdapter {
   urlPattern: RegExp;
   injectScript: (text: string) => string;
   readyCheckScript: string;
+  extractLatestResponse?: () => string;
+  isResponseComplete?: () => string;
 }
 
 export const adapters: SiteAdapter[] = [

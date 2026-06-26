@@ -1,5 +1,67 @@
 import type { SiteAdapter } from './index';
 
+const extractDoubaoLatestResponseScript = `
+  (() => {
+    const getText = (element) => (element?.innerText || element?.textContent || '').trim();
+    const isVisible = (element) => {
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+    };
+    const isChrome = (element) => element.closest(
+      'button, a, nav, aside, header, footer, textarea, input, [contenteditable="true"], [role="textbox"]'
+    );
+    const isUiText = (text) => /给豆包发送消息|内容由 AI 生成|内容由AI生成|深度思考|联网搜索|按 Enter|Shift\\+Enter|新建对话|历史记录/.test(text);
+    const selectors = [
+      '[data-testid*="message"]',
+      '[class*="message"]',
+      '[class*="markdown"]',
+      '[class*="answer"]',
+      '[class*="chat"] [class*="content"]',
+      'main p',
+      'main li',
+      'main [dir="auto"]'
+    ];
+    const seen = new Set();
+    const candidates = selectors
+      .flatMap((selector) => [...document.querySelectorAll(selector)])
+      .filter((element) => {
+        if (seen.has(element)) return false;
+        seen.add(element);
+        if (!isVisible(element) || isChrome(element)) return false;
+        const text = getText(element);
+        if (text.length < 20 || text.length > 8000 || isUiText(text)) return false;
+        return !element.querySelector('textarea, input, [contenteditable="true"], [role="textbox"]');
+      })
+      .map((element) => {
+        let best = element;
+        let current = element;
+        for (let i = 0; i < 5 && current.parentElement; i += 1) {
+          const parent = current.parentElement;
+          if (parent === document.body || parent.tagName === 'MAIN') break;
+          const text = getText(parent);
+          if (text.length >= getText(best).length && text.length <= 8000 && !isUiText(text) && !isChrome(parent)) {
+            best = parent;
+          }
+          current = parent;
+        }
+        return best;
+      });
+
+    const unique = [];
+    const uniqueTexts = new Set();
+    for (const candidate of candidates) {
+      const text = getText(candidate);
+      if (!uniqueTexts.has(text)) {
+        uniqueTexts.add(text);
+        unique.push({ element: candidate, text });
+      }
+    }
+
+    return unique.at(-1)?.text || null;
+  })();
+`;
+
 export const doubaoAdapter: SiteAdapter = {
   urlPattern: /https:\/\/(?:www\.)?doubao\.com/i,
   injectScript: (text: string) => `
@@ -76,5 +138,34 @@ export const doubaoAdapter: SiteAdapter = {
     Boolean(document.querySelector('textarea')
       || document.querySelector('[contenteditable="true"][role="textbox"]')
       || document.querySelector('[contenteditable="true"]'));
+  `,
+  extractLatestResponse: () => extractDoubaoLatestResponseScript,
+  isResponseComplete: () => `
+    (() => {
+      const isVisible = (element) => {
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+      };
+      const stopControl = [...document.querySelectorAll('button, [role="button"]')].find((element) => {
+        const label = [
+          element.getAttribute('aria-label'),
+          element.getAttribute('title'),
+          element.textContent
+        ].filter(Boolean).join(' ').toLowerCase();
+        return isVisible(element) && /(stop|停止|取消生成|停止生成|停止回答)/.test(label);
+      });
+      if (stopControl) return false;
+
+      const text = ${extractDoubaoLatestResponseScript};
+      const now = Date.now();
+      const state = window.__multimindDoubaoReadState || { text: '', changedAt: now };
+      if (text !== state.text) {
+        window.__multimindDoubaoReadState = { text, changedAt: now };
+        return false;
+      }
+      window.__multimindDoubaoReadState = state;
+      return Boolean(text) && now - state.changedAt > 1500;
+    })();
   `,
 };

@@ -8,6 +8,8 @@ import {
   CellTab,
   CellMode,
   DEFAULT_URLS,
+  ForwardRecord,
+  ForwardResponsePayload,
   IPC,
   LAYOUT_CELLS,
   LayoutMode,
@@ -22,9 +24,12 @@ const TOOLBAR_HEIGHT = 52;
 const BOTTOM_INPUT_HEIGHT = 64;
 const CELL_BORDER_SIZE = 1;
 const FOCUSED_CELL_BORDER_SIZE = 2;
+const CELL_HEADER_HEIGHT = 164;
 const SPLITTER_SIZE = 4;
 const LOAD_TIMEOUT_MS = 10_000;
 const NOTICE_REPLAY_DELAY_MS = 500;
+const RESPONSE_POLL_INTERVAL_MS = 800;
+const RESPONSE_WAIT_TIMEOUT_MS = 120_000;
 const BLANK_URL = 'about:blank';
 const EMPTY_STATE_URL = createEmptyStateUrl();
 
@@ -72,6 +77,7 @@ export class WindowManager {
   private focusedCellId: string;
   private overlayOpen = false;
   private destroyed = false;
+  private forwardRecords: ForwardRecord[] = [];
 
   constructor(
     private readonly window: BrowserWindow,
@@ -129,7 +135,10 @@ export class WindowManager {
         return;
       }
 
-      safeSetBounds(view, insetBounds(boundsByCell[cellId], cellId === this.focusedCellId ? FOCUSED_CELL_BORDER_SIZE : CELL_BORDER_SIZE));
+      safeSetBounds(
+        view,
+        insetBoundsWithHeader(boundsByCell[cellId], cellId === this.focusedCellId ? FOCUSED_CELL_BORDER_SIZE : CELL_BORDER_SIZE),
+      );
     });
   }
 
@@ -418,6 +427,167 @@ export class WindowManager {
     return result === true;
   }
 
+  async forwardResponse(payload: ForwardResponsePayload): Promise<ForwardRecord> {
+    if (this.isDestroyed()) {
+      throw new Error('Window has been destroyed.');
+    }
+
+    const { sourceCellId, targetCellId } = payload;
+    if (!isKnownCellId(sourceCellId) || !isKnownCellId(targetCellId)) {
+      throw new Error('Unknown source or target cell.');
+    }
+    if (sourceCellId === targetCellId) {
+      throw new Error('Source and target cells must be different.');
+    }
+
+    await this.waitForResponseComplete(sourceCellId);
+    const sourceContent = await this.extractLatestResponse(sourceCellId);
+    if (!sourceContent) {
+      throw new Error(`No readable source response in ${sourceCellId}.`);
+    }
+
+    const targetReply = await this.crossValidateCells(sourceCellId, targetCellId, sourceContent);
+    const record: ForwardRecord = {
+      id: createRecordId(),
+      sourceCellId,
+      targetCellId,
+      sourceContent,
+      targetReply,
+      timestamp: Date.now(),
+    };
+    this.forwardRecords.push(record);
+    this.sendToRenderer(IPC.FORWARD_COMPLETED, { record });
+    return record;
+  }
+
+  private async crossValidateCells(sourceCellId: string, targetCellId: string, sourceResponse: string): Promise<string> {
+    await Promise.all([
+      this.waitForResponseComplete(sourceCellId),
+      this.waitForResponseComplete(targetCellId),
+    ]);
+
+    const previousTargetResponse = await this.extractLatestResponse(targetCellId);
+    const targetPrompt = `这是另一个 AI 的观点：${sourceResponse}---你怎么看，有没有需要补充或反驳的地方`;
+    const injected = await this.injectText(targetCellId, targetPrompt);
+    if (!injected) {
+      throw new Error(`Unable to inject cross-validation prompt into ${targetCellId}.`);
+    }
+
+    const targetResponse = await this.waitForNextResponse(targetCellId, previousTargetResponse);
+    return targetResponse;
+  }
+
+  async extractLatestResponse(cellId: string): Promise<string | null> {
+    if (this.isDestroyed()) {
+      return null;
+    }
+
+    const adapter = this.getReadableAdapter(cellId);
+    const result = await this.executeCellScript(cellId, adapter.extractLatestResponse());
+    return typeof result === 'string' && result.trim() ? result.trim() : null;
+  }
+
+  async isResponseComplete(cellId: string): Promise<boolean> {
+    if (this.isDestroyed()) {
+      return false;
+    }
+
+    const adapter = this.getReadableAdapter(cellId);
+    const result = await this.executeCellScript(cellId, adapter.isResponseComplete());
+    return result === true;
+  }
+
+  async waitForResponseComplete(cellId: string, timeoutMs = RESPONSE_WAIT_TIMEOUT_MS): Promise<void> {
+    const startedAt = Date.now();
+    let completeChecks = 0;
+
+    while (!this.isDestroyed()) {
+      if (Date.now() - startedAt > timeoutMs) {
+        throw new Error(`Timed out waiting for ${cellId} response completion.`);
+      }
+
+      if (await this.isResponseComplete(cellId)) {
+        completeChecks += 1;
+        if (completeChecks >= 2) {
+          return;
+        }
+      } else {
+        completeChecks = 0;
+      }
+
+      await delay(RESPONSE_POLL_INTERVAL_MS);
+    }
+  }
+
+  async waitForCellReady(cellId: string, timeoutMs = LOAD_TIMEOUT_MS): Promise<void> {
+    const startedAt = Date.now();
+
+    while (!this.isDestroyed()) {
+      if (Date.now() - startedAt > timeoutMs) {
+        throw new Error(`Timed out waiting for ${cellId} input readiness.`);
+      }
+
+      const url = this.cellUrls[cellId]?.trim();
+      const adapter = url ? getAdapterForUrl(url) : null;
+      if (adapter?.readyCheckScript) {
+        try {
+          const ready = await this.executeCellScript(cellId, adapter.readyCheckScript);
+          if (ready === true) {
+            return;
+          }
+        } catch {
+          // The page may still be navigating; keep polling until the timeout.
+        }
+      }
+
+      await delay(RESPONSE_POLL_INTERVAL_MS);
+    }
+
+    throw new Error(`Window closed while waiting for ${cellId} readiness.`);
+  }
+
+  async waitForNextResponse(
+    cellId: string,
+    previousResponse: string | null,
+    timeoutMs = RESPONSE_WAIT_TIMEOUT_MS,
+  ): Promise<string> {
+    const startedAt = Date.now();
+    let sawGeneration = false;
+    let latestResponse: string | null = null;
+    let stableChecks = 0;
+
+    while (!this.isDestroyed()) {
+      if (Date.now() - startedAt > timeoutMs) {
+        throw new Error(`Timed out waiting for next response in ${cellId}.`);
+      }
+
+      const complete = await this.isResponseComplete(cellId);
+      if (!complete) {
+        sawGeneration = true;
+        stableChecks = 0;
+      }
+
+      const response = await this.extractLatestResponse(cellId);
+      const hasNewResponse = Boolean(response && response !== previousResponse);
+      if (complete && hasNewResponse && (sawGeneration || Date.now() - startedAt > RESPONSE_POLL_INTERVAL_MS * 2)) {
+        if (response === latestResponse) {
+          stableChecks += 1;
+        } else {
+          latestResponse = response;
+          stableChecks = 1;
+        }
+
+        if (stableChecks >= 2 && latestResponse) {
+          return latestResponse;
+        }
+      }
+
+      await delay(RESPONSE_POLL_INTERVAL_MS);
+    }
+
+    throw new Error(`Window closed while waiting for next response in ${cellId}.`);
+  }
+
   async injectScript(cellId: string, script: string): Promise<unknown> {
     if (this.isDestroyed()) {
       return false;
@@ -441,6 +611,43 @@ export class WindowManager {
       this.showCellNotice(cellId, 'inject-failed');
       return false;
     }
+  }
+
+  private getReadableAdapter(cellId: string): {
+    extractLatestResponse: () => string;
+    isResponseComplete: () => string;
+  } {
+    if (!isKnownCellId(cellId)) {
+      throw new Error(`Unknown cell: ${cellId}.`);
+    }
+
+    const url = this.cellUrls[cellId]?.trim();
+    if (!url) {
+      throw new Error(`No URL configured for ${cellId}.`);
+    }
+
+    const adapter = getAdapterForUrl(url);
+    if (!adapter?.extractLatestResponse || !adapter.isResponseComplete) {
+      throw new Error(`No readable adapter for ${cellId}: ${url}.`);
+    }
+
+    return {
+      extractLatestResponse: adapter.extractLatestResponse,
+      isResponseComplete: adapter.isResponseComplete,
+    };
+  }
+
+  private async executeCellScript(cellId: string, script: string): Promise<unknown> {
+    if (this.isDestroyed()) {
+      return null;
+    }
+
+    const view = this.views.get(cellId);
+    if (!view || view.webContents.isDestroyed()) {
+      throw new Error(`No active view for ${cellId}.`);
+    }
+
+    return view.webContents.executeJavaScript(script);
   }
 
   getBrowserState(): BrowserState {
@@ -725,6 +932,14 @@ export class WindowManager {
       : null;
   }
 
+  private getPersistedUrlAfterLoad(cellId: string, loadedUrl: string): string {
+    if (isClaudeAiUrl(this.cellUrls[cellId]) && isClaudeComUrl(loadedUrl)) {
+      return 'https://claude.ai/';
+    }
+
+    return loadedUrl;
+  }
+
   private bindViewEvents(cellId: string, view: WebContentsView): void {
     this.bindShortcutEvents(view.webContents);
     view.webContents.on('focus', () => {
@@ -787,11 +1002,12 @@ export class WindowManager {
 
       this.clearLoadTimeout(cellId);
       const publicUrl = this.toPublicUrl(view.webContents.getURL());
-      this.cellUrls[cellId] = publicUrl;
-      this.store.set(`cells.${cellId}.url`, publicUrl);
+      const persistedUrl = this.getPersistedUrlAfterLoad(cellId, publicUrl);
+      this.cellUrls[cellId] = persistedUrl;
+      this.store.set(`cells.${cellId}.url`, persistedUrl);
       this.updateKnownSiteMetadata(cellId, publicUrl);
       this.updateActiveTab(cellId, {
-        url: publicUrl,
+        url: persistedUrl,
         title: publicUrl ? view.webContents.getTitle() || safeTabTitle(publicUrl) : 'New tab',
       });
       this.syncCellState(cellId);
@@ -1165,6 +1381,15 @@ function insetBounds(bounds: Electron.Rectangle, inset: number): Electron.Rectan
   };
 }
 
+function insetBoundsWithHeader(bounds: Electron.Rectangle, inset: number): Electron.Rectangle {
+  const contentBounds = insetBounds(bounds, inset);
+  return {
+    ...contentBounds,
+    y: contentBounds.y + CELL_HEADER_HEIGHT,
+    height: Math.max(0, contentBounds.height - CELL_HEADER_HEIGHT),
+  };
+}
+
 function isKnownCellId(cellId: string): boolean {
   return CELL_IDS.includes(cellId as (typeof CELL_IDS)[number]);
 }
@@ -1317,6 +1542,20 @@ a{display:block;border:1px solid rgba(15,23,42,.12);border-radius:8px;padding:12
 
 function normalizeHost(hostname: string): string {
   return hostname.toLowerCase().replace(/^www\./, '');
+}
+
+function isClaudeAiUrl(rawUrl: string): boolean {
+  const url = parseUrl(rawUrl);
+  return normalizeHost(url?.hostname ?? '') === 'claude.ai';
+}
+
+function isClaudeComUrl(rawUrl: string): boolean {
+  const url = parseUrl(rawUrl);
+  return normalizeHost(url?.hostname ?? '') === 'claude.com';
+}
+
+function createRecordId(): string {
+  return `forward-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function sanitizePartitionSegment(value: string): string {

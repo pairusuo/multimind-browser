@@ -30,6 +30,7 @@ export const LAYOUT_CELLS: Record<LayoutMode, string[]> = {
 export const IPC = {
   GET_BROWSER_STATE: 'get-browser-state',
   SEND_TO_ALL: 'send-to-all',
+  FORWARD_RESPONSE: 'forward-response',
   APPLY_TEMPLATE: 'apply-template',
   SET_LAYOUT: 'set-layout',
   SET_OVERLAY_OPEN: 'set-overlay-open',
@@ -46,6 +47,7 @@ export const IPC = {
   SWITCH_TAB: 'switch-tab',
   SET_THEME_MODE: 'set-theme-mode',
   CELL_FOCUSED: 'cell-focused',
+  FORWARD_COMPLETED: 'forward-completed',
 
   SHOW_CELL_NOTICE: 'show-cell-notice',
   LAYOUT_CHANGED: 'layout-changed',
@@ -77,6 +79,24 @@ export interface CellFocusedPayload {
 
 export interface SendToAllPayload {
   text: string;
+}
+
+export interface ForwardResponsePayload {
+  sourceCellId: string;
+  targetCellId: string;
+}
+
+export interface ForwardRecord {
+  id: string;
+  sourceCellId: string;
+  targetCellId: string;
+  sourceContent: string;
+  targetReply: string;
+  timestamp: number;
+}
+
+export interface ForwardCompletedPayload {
+  record: ForwardRecord;
 }
 
 export interface CellTab {
@@ -146,6 +166,7 @@ export interface ElectronAPI {
   getBrowserState: () => Promise<BrowserState>;
   applyTemplate: (payload: ApplyTemplatePayload) => Promise<BrowserState>;
   sendToAll: (payload: SendToAllPayload) => Promise<void>;
+  forwardResponse: (payload: ForwardResponsePayload) => Promise<ForwardRecord>;
   setLayout: (mode: LayoutMode) => Promise<void>;
   setThemeMode: (mode: ThemeMode) => Promise<BrowserState>;
   setOverlayOpen: (open: boolean) => Promise<void>;
@@ -164,6 +185,7 @@ export interface ElectronAPI {
   onCellFocused: (callback: (payload: CellFocusedPayload) => void) => () => void;
   onLayoutChanged: (callback: (payload: LayoutChangedPayload) => void) => () => void;
   onCellNotice: (callback: (payload: CellNoticePayload) => void) => () => void;
+  onForwardCompleted: (callback: (payload: ForwardCompletedPayload) => void) => () => void;
   onCellUrlChanged: (callback: (payload: CellUrlChangedPayload) => void) => () => void;
   onCellTitleChanged: (callback: (payload: CellTitleChangedPayload) => void) => () => void;
   onCellFaviconChanged: (callback: (payload: CellFaviconChangedPayload) => void) => () => void;

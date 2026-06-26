@@ -49,4 +49,44 @@ export const chatgptAdapter: SiteAdapter = {
     Boolean(document.querySelector('#prompt-textarea[contenteditable="true"]')
       || document.querySelector('textarea#prompt-textarea'));
   `,
+  extractLatestResponse: () => `
+    (() => {
+      const getText = (element) => (element?.innerText || element?.textContent || '').trim();
+      const isVisible = (element) => {
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+      };
+      const messages = [...document.querySelectorAll('[data-message-author-role="assistant"]')]
+        .filter((message) => isVisible(message));
+      const latest = messages.at(-1);
+      if (!latest) return null;
+
+      const content = latest.querySelector('.markdown')
+        || latest.querySelector('[data-message-id]')
+        || latest;
+      const text = getText(content);
+      if (!text || /^(正在思考|已停止思考)$/.test(text)) return null;
+      return text;
+    })();
+  `,
+  isResponseComplete: () => `
+    (() => {
+      const isVisible = (element) => {
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+      };
+      const stopButton = document.querySelector('button[data-testid="stop-button"]')
+        || [...document.querySelectorAll('button')].find((button) => {
+          const label = [
+            button.getAttribute('aria-label'),
+            button.getAttribute('title'),
+            button.getAttribute('data-testid')
+          ].filter(Boolean).join(' ').toLowerCase();
+          return isVisible(button) && /(stop-button|stop streaming|stop generating|停止生成|停止回答|停止响应|cancel response)/.test(label);
+        });
+      return !stopButton;
+    })();
+  `,
 };

@@ -425,11 +425,78 @@ textarea {
   right: 10px;
   z-index: 4;
   display: grid;
-  grid-template-columns: repeat(5, 32px);
+  grid-template-columns: repeat(6, 32px);
   gap: 4px;
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease;
+}
+
+.forward-target-picker {
+  position: absolute;
+  top: 46px;
+  right: 10px;
+  z-index: 6;
+  width: 188px;
+  padding: 6px;
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #111827;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.18);
+}
+
+.forward-target-options {
+  display: grid;
+  gap: 6px;
+}
+
+.forward-target-options button {
+  min-height: 34px;
+  width: 100%;
+  padding: 0 10px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #111827;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.forward-target-options button:hover {
+  background: #e0ebff;
+}
+
+.cell-forward-status {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(360px, calc(100% - 20px));
+  min-height: 28px;
+  padding: 5px 8px;
+  border: 1px solid rgba(37, 99, 235, 0.24);
+  border-radius: 6px;
+  background: rgba(239, 246, 255, 0.96);
+  color: #1e3a8a;
+  font-size: 12px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+}
+
+.cell-forward-status button {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
 }
 
 .cell-notice {
@@ -508,6 +575,7 @@ textarea {
 }
 
 .grid-cell:hover .cell-menu,
+.grid-cell.focused .cell-menu,
 .grid-cell:focus-within .cell-menu {
   opacity: 1;
   pointer-events: auto;
@@ -846,6 +914,13 @@ textarea {
     height: 34px;
   }
 
+  .forward-target-picker {
+    left: 10px;
+    right: 10px;
+    width: auto;
+    max-width: none;
+  }
+
   .template-grid {
     grid-template-columns: 1fr;
   }
@@ -917,6 +992,23 @@ textarea {
     border-color: #60a5fa;
     background: #173356;
     color: #bfdbfe;
+  }
+
+  .forward-target-picker,
+  .cell-forward-status {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(23, 28, 35, 0.96);
+    color: #f9fafb;
+  }
+
+  .forward-target-options button {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: #111827;
+    color: #f9fafb;
+  }
+
+  .forward-target-options button:hover {
+    background: #243042;
   }
 
   .browser-stage {

@@ -5,6 +5,8 @@ import {
   CellTabPayload,
   CellFaviconChangedPayload,
   CellFocusedPayload,
+  ForwardCompletedPayload,
+  ForwardResponsePayload,
   LayoutChangedPayload,
   CellNoticePayload,
   CellTitleChangedPayload,
@@ -23,6 +25,7 @@ const api: ElectronAPI = {
   getBrowserState: () => ipcRenderer.invoke(IPC.GET_BROWSER_STATE) as Promise<BrowserState>,
   applyTemplate: (payload: ApplyTemplatePayload) => ipcRenderer.invoke(IPC.APPLY_TEMPLATE, payload),
   sendToAll: (payload: SendToAllPayload) => ipcRenderer.invoke(IPC.SEND_TO_ALL, payload),
+  forwardResponse: (payload: ForwardResponsePayload) => ipcRenderer.invoke(IPC.FORWARD_RESPONSE, payload),
   setLayout: (mode) => ipcRenderer.invoke(IPC.SET_LAYOUT, mode),
   setThemeMode: (mode: ThemeMode) => ipcRenderer.invoke(IPC.SET_THEME_MODE, mode),
   setOverlayOpen: (open: boolean) => ipcRenderer.invoke(IPC.SET_OVERLAY_OPEN, open),
@@ -52,6 +55,11 @@ const api: ElectronAPI = {
     const listener = (_event: Electron.IpcRendererEvent, payload: CellNoticePayload) => callback(payload);
     ipcRenderer.on(IPC.SHOW_CELL_NOTICE, listener);
     return () => ipcRenderer.removeListener(IPC.SHOW_CELL_NOTICE, listener);
+  },
+  onForwardCompleted: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: ForwardCompletedPayload) => callback(payload);
+    ipcRenderer.on(IPC.FORWARD_COMPLETED, listener);
+    return () => ipcRenderer.removeListener(IPC.FORWARD_COMPLETED, listener);
   },
   onCellUrlChanged: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: CellUrlChangedPayload) => callback(payload);

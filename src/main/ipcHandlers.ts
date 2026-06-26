@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import {
   ApplyTemplatePayload,
   CellTabPayload,
+  ForwardResponsePayload,
   IPC,
   CellFocusedPayload,
   LayoutMode,
@@ -21,6 +22,10 @@ export function registerIpcHandlers(windowManager: WindowManager): void {
 
   registerHandler(IPC.SEND_TO_ALL, (_event, payload: SendToAllPayload) => {
     return windowManager.sendToAll(payload.text);
+  });
+
+  registerHandler(IPC.FORWARD_RESPONSE, (_event, payload: ForwardResponsePayload) => {
+    return windowManager.forwardResponse(payload);
   });
 
   registerHandler(IPC.SET_THEME_MODE, (_event, mode: ThemeMode) => {
