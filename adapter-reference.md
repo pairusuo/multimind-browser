@@ -88,22 +88,41 @@ async function inject(text) {
   document.execCommand('selectAll', false, null);
   document.execCommand('insertText', false, text);
 
-  // 3. 等待发送按钮变为可用
-  await new Promise(r => setTimeout(r, 300));
+  // 3. 轮询等待发送按钮真正变为可用，不要用固定延迟
+  //    （2026年6月实测：发送按钮可用的延迟不固定，曾观察到比 300ms
+  //    更久才可用的情况，固定延迟点击过早会导致"文本已填入但没有
+  //    发送"，进而让上层编排逻辑误以为已发送、陷入等待新回答超时）
+  const btn = await waitForEnabledButton(
+    () => document.querySelector('button[data-testid="send-button"]')
+      || document.querySelector('button[aria-label="Send message"]'),
+    2000  // 超时上限（毫秒）
+  );
 
-  // 4. 点击发送
-  const btn = document.querySelector('button[data-testid="send-button"]')
-    || document.querySelector('button[aria-label="Send message"]');
-  if (btn && !btn.disabled) {
+  // 4. 点击发送，并确认输入框已清空（确认真正触发了发送，不只是
+  //    "点击了按钮"——按钮被点击和发送真正生效不完全等价）
+  if (btn) {
     btn.click();
-    return true;
+    await new Promise(r => setTimeout(r, 200));
+    const cleared = input.textContent.trim() === '';
+    if (cleared) return true;
   }
 
-  // 5. 回退：模拟 Enter
+  // 5. 回退：模拟 Enter（即使上面未能确认清空，仍尝试一次兜底）
   input.dispatchEvent(new KeyboardEvent('keydown', {
     key: 'Enter', code: 'Enter', bubbles: true, cancelable: true
   }));
   return true;
+}
+
+// 轮询直到按钮出现且可用，而不是假设一个固定延迟后就一定可用
+async function waitForEnabledButton(getBtn, timeout) {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    const btn = getBtn();
+    if (btn && !btn.disabled) return btn;
+    await new Promise(r => setTimeout(r, 100));
+  }
+  return null;
 }
 ```
 
@@ -467,6 +486,21 @@ function extractLatestResponse() {
 | Claude (claude.ai) | 模式一，识别真实停止控件（`button[aria-label="Stop response"]`） | `[class*="standard-markdown"]` 优先，兼容 `font-claude-message` / `message-content` 等旧选择器 | **已验证通过**。验证条件：账号 dirkchou，窗口保持前台且未锁屏。发送按钮现场确认为 `button[aria-label="Send message"]`，点击后 3 秒内出现用户消息、`Claude is responding` 和 `Stop response`；生成中 `isResponseComplete()` 返回 `false`，约 6.8 秒后停止控件消失并返回 `true`；`extractLatestResponse()` 提取到正文 476 字，未混入界面文字 |
 | ChatGPT (chatgpt.com) | 模式一，识别真实 `stop` 控件（`button[data-testid="stop-button"]`） | `[data-message-author-role="assistant"]`，内容取 `.markdown` | **已验证通过**。修正记录：最初实现误把"已停止思考"按钮当成正在生成中的信号，导致 `isResponseComplete()` 一直返回 `false`，修正为只识别真实 stop 控件后才正确 |
 | DeepSeek (chat.deepseek.com) | **模式一不可靠，已改用模式三**（最新回答文本稳定 1.5 秒后判定完成） | `.ds-markdown.ds-assistant-message-main-content`（取整条，不只取最后一段） | **已验证通过**。重要教训：模式一（检测停止生成按钮）在 DeepSeek 上不可靠，生成过程中也会返回 `true`，原因待查（可能该站点的停止按钮状态和实际生成状态不同步）。改用模式三后验证通过。发送控件也非标准 `button`，实际是 `div[role="button"].ds-button--primary`，写入适配器已同步修正 |
+| 豆包 (www.doubao.com) | 模式三，最新回答文本稳定 1.5 秒后判定完成，兼容停止按钮检测 | message / markdown / answer / main 内容候选，过滤输入框和 UI 文案 | **已验证通过（初版）**。在四格子 6 链路验证中完成首轮回答提取和 3 次作为目标格子的交叉回复提取；选择器仍属于宽匹配策略，后续如果豆包 UI 改版，需要优先用现场 DOM 收窄选择器 |
+
+**重要教训（2026年6月，Claude 域名问题）**：Claude 适配器为兼容性
+新增了对 `claude.com` 域名的识别，但 `claude.ai` 和 `claude.com`
+在浏览器里**不是同一套登录 session**——已登录 `claude.ai` 的账号，
+访问 `claude.com` 会是全新的未登录状态。一次未登录的匿名访问触发了
+Anthropic 后端的 `app-unavailable-in-region` 拦截页，当时误判为
+真实的地区限制问题，排查后确认是域名切换导致的登录态丢失，不是
+网络环境的问题。**修复方式**：保留对 `claude.com` 的 `urlPattern`
+识别能力（不报错），但格子的默认 URL 和持久化逻辑仍以 `claude.ai`
+为准；已保存 `claude.ai` 的格子，即使加载过程中页面跳转到了
+`claude.com`，也不会把 `claude.com` 写回持久化存储，避免下次启动
+时丢失登录态。**适用范围提醒**：如果后续接入新站点时发现同一个
+产品有多个域名（常见于产品改版或新旧域名并存期），先确认这些域名
+是否共享登录 session，不要假设"看起来都能打开"就等同于"行为一致"。
 
 **关键经验**：不要假设所有站点都适用同一种"生成完毕"判断模式。Claude
 和 ChatGPT 上模式一可靠，但 DeepSeek 上模式一会误判，必须针对每个
@@ -491,3 +525,174 @@ function extractLatestResponse() {
 读取适配器应该返回明确的失败信号（如返回 `null` 而不是空字符串），
 调用方据此判断该格子在本轮交叉验证中跳过，不阻塞其他格子的流程，
 并通过统一提示系统告知用户"某个 AI 的回答未能读取，已跳过"。
+
+---
+
+## 交叉验证编排链路（第二阶段，首次验证记录）
+
+### 验证范围与结果（2026年6月）
+
+第二阶段开发指引第2步——"双向交叉验证编排"的最小验证，已在
+Claude（cell-0）→ ChatGPT（cell-1）这条单向链路上跑通：
+
+1. 同步发送一个短问题到 Claude 和 ChatGPT 两个格子
+2. 等待 Claude 生成完毕（用已验证的 `isResponseComplete`）
+3. 提取 Claude 回答（263 字）
+4. 构造转述 prompt（"这是另一个 AI 的观点：{内容}，你怎么看，有没有
+   需要补充或反驳的地方"，实际长度 295 字）
+5. 注入到 ChatGPT 输入框并触发发送
+6. 等待 ChatGPT 这一轮生成完毕
+7. 提取 ChatGPT 的交叉回复（500 字），内容确认是在针对 Claude 的
+   观点进行评价，不是答非所问
+
+**结论**：等待生成完毕 → 提取 → 转述注入 → 再等待 → 再提取，这条
+编排链路本身是可靠的。第二阶段最大的技术不确定性（"AI 之间能否
+真正进行有意义的交叉验证"）已经得到验证，可以继续推进到更多格子的
+完全交叉。
+
+### 已知排查经验，扩展到三/四格子交叉时要注意
+
+- 不要假设所有站点的域名都对应同一套登录 session（见上方 Claude 的
+  域名教训），每接入一个新的交叉方向前，先确认参与的格子都处于正确
+  的已登录状态
+- 排查过程中如果遇到看起来像"环境异常"（地区限制、IndexedDB 锁等）
+  的提示，先怀疑是不是登录态/并发实例问题，不要直接当作真实的外部
+  限制来处理，这类提示往往是更底层问题的伪装表现
+- 扩展到三/四格子完全交叉时，编排的复杂度会显著上升（需要管理多组
+  "谁的回答转述给谁"的组合），建议先验证三格子的部分交叉（比如
+  A→B、B→C 两条链路），确认编排逻辑能正确处理多个并行的等待/提取
+  状态后，再扩展到完全交叉
+
+### 三格子部分交叉验证（2026年6月）
+
+按 Claude（cell-0）、ChatGPT（cell-1）、DeepSeek（cell-2）三格子
+跑通一次部分交叉：
+
+1. 三个格子同步发送同一个短问题
+2. 并发等待三个首轮回答生成完毕并提取
+3. 并发触发两条交叉链路：Claude → DeepSeek、DeepSeek → ChatGPT
+4. 分别等待 DeepSeek 和 ChatGPT 的交叉回复生成完毕并提取
+
+验证结果：
+
+| 阶段 | 结果 |
+| --- | --- |
+| 首轮回答 | Claude 328 字、ChatGPT 182 字、DeepSeek 303 字 |
+| Claude → DeepSeek | 转述 prompt 362 字，DeepSeek 交叉回复 870 字 |
+| DeepSeek → ChatGPT | 转述 prompt 337 字，ChatGPT 交叉回复 791 字 |
+
+**结论**：三格子的部分交叉链路已跑通。两条交叉链路并发触发后，各自
+等待和提取的状态没有互相串扰；没有观察到 DeepSeek 仍在处理时错误触发
+ChatGPT、或某个格子读取到另一条链路回复的时序混乱。
+
+排查记录：前两次运行卡在首轮 Claude 新回答等待，原因是 Claude 输入框
+已写入但发送按钮尚未被成功触发。修正为等待发送按钮可用、点击后确认
+输入框清空，并补充键盘提交兜底后，第三次验证通过。
+
+### 三格子确认性复测（2026年6月）
+
+在 Claude 注入逻辑确认已改为轮询等待按钮可用后，重复跑同一条三格子
+部分交叉链路，并一次通过：
+
+| 阶段 | 结果 |
+| --- | --- |
+| 首轮回答 | Claude 393 字、ChatGPT 168 字、DeepSeek 226 字 |
+| Claude → DeepSeek | 转述 prompt 427 字，DeepSeek 交叉回复 640 字 |
+| DeepSeek → ChatGPT | 转述 prompt 260 字，ChatGPT 交叉回复 411 字 |
+
+**结论**：Claude 发送逻辑这次没有出现"文本停在输入框里但未发送"的问题；
+三格子部分交叉不需要重试即可跑通，可以进入四格子验证。
+
+### 四格子 6 链路验证（2026年6月）
+
+第四站点选择豆包（cell-3），原因是它已有专门写入适配器但尚未做读取
+适配器验证。本次先按 4 个格子的 6 个两两组合各跑一个方向，而不是
+12 条有向全排列；这和"每个格子的回答都转述给其他三个"在计数上不同，
+后者需要 12 条链路。
+
+验证流程：
+
+1. Claude（cell-0）、ChatGPT（cell-1）、DeepSeek（cell-2）、豆包（cell-3）
+   同步发送同一个短问题
+2. 并发等待四个首轮回答生成完毕并提取
+3. 顺序执行 6 条交叉链路，避免同一目标格子同时收到多条 prompt 后难以
+   判定回复归属
+
+验证结果：
+
+| 链路 | 结果 |
+| --- | --- |
+| 首轮回答 | Claude 323 字、ChatGPT 203 字、DeepSeek 291 字、豆包 218 字 |
+| Claude → ChatGPT | 转述 prompt 357 字，ChatGPT 交叉回复 604 字 |
+| Claude → DeepSeek | 转述 prompt 357 字，DeepSeek 交叉回复 705 字 |
+| Claude → 豆包 | 转述 prompt 357 字，豆包交叉回复 1215 字 |
+| ChatGPT → DeepSeek | 转述 prompt 237 字，DeepSeek 交叉回复 897 字 |
+| ChatGPT → 豆包 | 转述 prompt 237 字，豆包交叉回复 1280 字 |
+| DeepSeek → 豆包 | 转述 prompt 325 字，豆包交叉回复 229 字 |
+
+**结论**：四格子 6 链路验证已跑通。豆包读取适配器初版可用；连续多条
+链路执行时，没有观察到目标回复归属错乱、读取到上一条链路内容、或某个
+格子的等待状态影响其他格子的情况。
+
+**范围说明**：本次 6 条链路是顺序执行，验证的是多站点读取/写入覆盖和
+连续链路状态隔离；还没有验证同一目标格子的并发排队，也没有验证 12 条
+有向全排列。
+
+### 三格子同源并发排队验证（2026年6月）
+
+为单独验证并发本身，不增加链路数量，继续使用 Claude（cell-0）、
+ChatGPT（cell-1）、DeepSeek（cell-2）三格子。首轮三个回答全部生成
+并提取后，同时触发两条链路：
+
+1. Claude → DeepSeek
+2. Claude → ChatGPT
+
+验证结果：
+
+| 阶段 | 结果 |
+| --- | --- |
+| 首轮回答 | Claude 371 字、ChatGPT 247 字、DeepSeek 340 字 |
+| Claude → DeepSeek | 转述 prompt 405 字，DeepSeek 交叉回复 858 字 |
+| Claude → ChatGPT | 转述 prompt 405 字，ChatGPT 交叉回复 598 字 |
+
+**关键证据**：两条并发链路分别从 Claude 读取源回答，得到的
+`sourceLength` 都是 371，`sourcePreview` 完全一致：
+
+> 多 AI 交叉验证的一个实际价值在于:不同模型的训练数据、对齐方式和
+> "自信表达"的阈值并不相同...
+
+**结论**：同一个源格子在并发读取下没有读错；两个目标格子的等待和
+提取状态没有互相干扰；没有观察到 DeepSeek 和 ChatGPT 的交叉回复读串。
+
+### 四格子 12 条有向全排列验证（2026年6月）
+
+在同源并发读取验证通过后，使用 Claude（cell-0）、ChatGPT（cell-1）、
+DeepSeek（cell-2）、豆包（cell-3）跑完整 12 条有向链路。为先验证
+链路完整性和回复归属，本次 12 条按顺序执行，不做并发。
+
+验证结果：
+
+| 链路 | 结果 |
+| --- | --- |
+| 首轮回答 | Claude 410 字、ChatGPT 228 字、DeepSeek 291 字、豆包 233 字 |
+| Claude → ChatGPT | 转述 prompt 444 字，ChatGPT 交叉回复 790 字 |
+| Claude → DeepSeek | 转述 prompt 444 字，DeepSeek 交叉回复 534 字 |
+| Claude → 豆包 | 转述 prompt 444 字，豆包交叉回复 1540 字 |
+| ChatGPT → Claude | 转述 prompt 262 字，Claude 交叉回复 606 字 |
+| ChatGPT → DeepSeek | 转述 prompt 262 字，DeepSeek 交叉回复 730 字 |
+| ChatGPT → 豆包 | 转述 prompt 262 字，豆包交叉回复 1424 字 |
+| DeepSeek → Claude | 转述 prompt 325 字，Claude 交叉回复 862 字 |
+| DeepSeek → ChatGPT | 转述 prompt 325 字，ChatGPT 交叉回复 829 字 |
+| DeepSeek → 豆包 | 转述 prompt 325 字，豆包交叉回复 1933 字 |
+| 豆包 → Claude | 转述 prompt 267 字，Claude 交叉回复 744 字 |
+| 豆包 → ChatGPT | 转述 prompt 267 字，ChatGPT 交叉回复 915 字 |
+| 豆包 → DeepSeek | 转述 prompt 267 字，DeepSeek 交叉回复 847 字 |
+
+**结论**：12 条有向全排列全部跑通。每条目标回复从内容预览看都在评价
+对应的源回答，例如 DeepSeek → Claude / ChatGPT 都明确评价了 DeepSeek
+首轮回答里的医学影像场景，豆包 → Claude / ChatGPT / DeepSeek 都围绕
+豆包首轮回答里的"无需人工逐一核查"和金融风控场景展开；没有观察到目标
+回复归属错乱、读取上一条链路内容、或等待状态串扰。
+
+**范围说明**：本次 12 条全排列是顺序执行，确认的是完整有向链路成立和
+回复归属正确；同一目标格子的并发排队仍留给后续迭代验证。

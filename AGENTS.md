@@ -460,12 +460,38 @@ export const IPC = {
 
   SEND_TO_ALL: 'send-to-all',
 
+  // 第二阶段：用户手动转发交叉验证
+  FORWARD_RESPONSE: 'forward-response',       // 渲染进程 → 主进程，用户点击转发后触发
+  FORWARD_COMPLETED: 'forward-completed',      // 主进程 → 渲染进程，转发链路完成（含目标回复）
+
   CELL_URL_CHANGED: 'cell-url-changed',
   CELL_TITLE_CHANGED: 'cell-title-changed',
   CELL_FAVICON_CHANGED: 'cell-favicon-changed',
   SHOW_CELL_NOTICE: 'show-cell-notice',
 } as const;
 ```
+
+### 转发记录数据结构（第二阶段，供文档生成使用）
+
+```typescript
+interface ForwardRecord {
+  id: string;
+  sourceCellId: string;
+  targetCellId: string;
+  sourceContent: string;     // 提取自源格子的回答
+  targetReply: string;       // 目标格子收到转述后的回复
+  timestamp: number;
+}
+
+// 每次会话内维护一个转发记录列表，不持久化到 electron-store
+// （只在生成最终文档时使用，文档生成后这些记录本身不单独保存）
+private forwardRecords: ForwardRecord[] = [];
+```
+
+`FORWARD_RESPONSE` 的 payload 是 `{ sourceCellId, targetCellId }`，
+主进程收到后执行：提取源格子回答 → 拼接转述 prompt → 注入目标格子 →
+等待生成完毕 → 提取目标回复 → 写入 `forwardRecords` → 通过
+`FORWARD_COMPLETED` 通知渲染进程更新 UI。
 
 ### 统一提示系统
 
@@ -643,15 +669,45 @@ export const CHROME_USER_AGENT =
 
 按以下顺序推进，每步验证通过后才进入下一步：
 
-1. **读取适配器**：先为 Claude、ChatGPT、DeepSeek 三个最常用网站实现
-   `extractLatestResponse` 和 `isResponseComplete`，验证读取的可靠性
-   （参考 `adapter-reference.md`）
-2. **交叉验证编排**：实现"把 A 的回答转述注入 B"的流程，先支持双向
-   交叉，验证通过后再扩展到三/四格子的完全交叉
-3. **文档生成**：实现"用户指定一个 AI 汇总"的触发流程和 prompt 拼接逻辑
+1. **读取适配器**（✅ 已完成并验证）：Claude、ChatGPT、DeepSeek、豆包
+   四个站点的 `extractLatestResponse` 和 `isResponseComplete` 均已
+   实现并验证通过，详见 `adapter-reference.md`。同时已验证：多条
+   转述链路可以安全并发触发（互不串读），技术风险已排除
+
+2. **转发交互 UI**（当前任务，重要：交叉验证由用户手动触发，不是
+   系统自动遍历组合）：
+
+   > ⚠️ 设计修正：早期规划曾设想"系统自动把每个格子的回答转述给
+   > 其他所有格子"，已验证这条技术路径可行（四格子 12 条有向交叉
+   > 全部跑通），但产品决策上**放弃自动遍历**，改为用户手动驱动。
+   > 原因：自动全量交叉会让最终文档的素材塞满低价值内容，且 prompt
+   > 长度会膨胀到一万字以上，对网页版的输入长度也不友好。用户的
+   > "转发"动作本身是一次价值判断，比系统不加选择的全量交叉更精炼。
+
+   需要实现：
+   - 每个格子的回答区域旁新增"转发"按钮（图标即可）
+   - 点击后弹出目标格子选择器（列出当前布局中除源格子外的其他格子）
+   - 确认目标后，复用已验证的转述注入逻辑：提取源格子回答 → 拼接
+     "这是另一个 AI 的观点：{内容}，你怎么看，有没有需要补充或
+     反驳的地方" → 注入目标格子 → 等待生成完毕 → 提取目标回复
+   - 记录每一次转发的元数据（源格子、目标格子、源回答内容、目标
+     回复内容、时间），供第3步文档生成使用
+   - 转发次数不限，用户可以对同一回答转发给多个目标，也可以完全
+     跳过这一步
+
+3. **文档生成**：实现"用户指定一个 AI 汇总"的触发流程和 prompt
+   拼接逻辑。**材料范围限定**：只包含原始问题、各格子首轮回答、
+   用户实际触发过的转发记录（第2步产出的元数据）——不要默认拉入
+   未发生过的转发组合。Prompt 结构参考：开篇说明总结者的任务（提炼
+   价值、标注共识/分歧、不编造信息、不确定的标注"待核查"）；材料区
+   按"原始问题 → 各格子首轮回答 → 实际发生的转发及其回复"组织；
+   输出结构建议固定为：标题、摘要、主要共识、关键分歧与修正、最终
+   结论、待核查事项、可执行建议七段式
+
 4. **长期记忆存储**：引入 `better-sqlite3`，设计文档表结构（建议至少
-   包含：id、原始问题、参与 AI 列表、文档正文、生成时间、标签），
+   包含：id、原始问题、参与 AI 列表、最终文档正文、生成时间、标签），
    实现 FTS5 全文检索
+
 5. **记忆检索 UI**：提供一个简单的本地知识库浏览/搜索界面
 
 每一步都应该是可以独立演示和验证的，不要在没有验证前一步的情况下
