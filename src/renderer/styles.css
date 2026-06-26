@@ -374,9 +374,18 @@ textarea {
   cursor: row-resize;
 }
 
+.cell-header {
+  position: relative;
+  height: 42px;
+  background: #f8fafc;
+  border-bottom: 1px solid rgba(17, 24, 39, 0.1);
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .cell-overlay {
   position: absolute;
-  top: 10px;
+  top: 7px;
   left: 10px;
   z-index: 2;
   display: inline-grid;
@@ -385,13 +394,11 @@ textarea {
   gap: 6px;
   max-width: min(360px, calc(100vw - 32px));
   min-height: 28px;
-  padding: 5px 8px;
-  border: 1px solid rgba(17, 24, 39, 0.12);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.88);
-  color: #111827;
-  font-size: 12px;
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
+  padding: 0 4px;
+  background: transparent;
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 500;
   pointer-events: none;
 }
 
@@ -421,7 +428,7 @@ textarea {
 
 .cell-menu {
   position: absolute;
-  top: 10px;
+  top: 5px;
   right: 10px;
   z-index: 4;
   display: grid;
@@ -432,40 +439,81 @@ textarea {
   transition: opacity 120ms ease;
 }
 
-.forward-target-picker {
+.forward-picker-inline {
   position: absolute;
-  top: 46px;
-  right: 10px;
-  z-index: 6;
-  width: 188px;
-  padding: 6px;
-  border: 1px solid rgba(17, 24, 39, 0.14);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.96);
-  color: #111827;
-  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.18);
-}
-
-.forward-target-options {
-  display: grid;
-  gap: 6px;
-}
-
-.forward-target-options button {
-  min-height: 34px;
-  width: 100%;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 0 10px;
-  border: 1px solid rgba(17, 24, 39, 0.12);
-  border-radius: 6px;
-  background: #f8fafc;
-  color: #111827;
+  background: #eff6ff;
+  border-bottom: 1px solid rgba(37, 99, 235, 0.15);
+  color: #1e3a8a;
   font-size: 13px;
-  text-align: left;
-  cursor: pointer;
+  animation: fadeInHeader 150ms ease;
 }
 
-.forward-target-options button:hover {
+@keyframes fadeInHeader {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.forward-picker-label {
+  font-weight: 600;
+  color: #1e40af;
+  white-space: nowrap;
+}
+
+.forward-picker-targets {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  flex: 1;
+  scrollbar-width: none;
+}
+
+.forward-picker-targets::-webkit-scrollbar {
+  display: none;
+}
+
+.forward-picker-targets button {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 120ms ease;
+}
+
+.forward-picker-targets button:hover {
+  border-color: #2563eb;
   background: #e0ebff;
+  color: #1d4ed8;
+}
+
+.forward-picker-cancel {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #64748b;
+  font-size: 18px;
+  font-weight: 300;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.forward-picker-cancel:hover {
+  background: rgba(100, 116, 139, 0.1);
+  color: #0f172a;
 }
 
 .cell-forward-status {
@@ -914,12 +962,6 @@ textarea {
     height: 34px;
   }
 
-  .forward-target-picker {
-    left: 10px;
-    right: 10px;
-    width: auto;
-    max-width: none;
-  }
 
   .template-grid {
     grid-template-columns: 1fr;
@@ -994,21 +1036,50 @@ textarea {
     color: #bfdbfe;
   }
 
-  .forward-target-picker,
+  .cell-header {
+    background: #171c23;
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .cell-overlay {
+    color: #f9fafb;
+  }
+
+  .forward-picker-inline {
+    background: #1e293b;
+    border-bottom-color: rgba(59, 130, 246, 0.3);
+    color: #cbd5e1;
+  }
+
+  .forward-picker-label {
+    color: #93c5fd;
+  }
+
+  .forward-picker-targets button {
+    background: #111827;
+    color: #60a5fa;
+    border-color: rgba(96, 165, 250, 0.3);
+  }
+
+  .forward-picker-targets button:hover {
+    background: #243042;
+    color: #93c5fd;
+    border-color: #60a5fa;
+  }
+
+  .forward-picker-cancel {
+    color: #94a3b8;
+  }
+
+  .forward-picker-cancel:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f8fafc;
+  }
+
   .cell-forward-status {
     border-color: rgba(255, 255, 255, 0.14);
     background: rgba(23, 28, 35, 0.96);
     color: #f9fafb;
-  }
-
-  .forward-target-options button {
-    border-color: rgba(255, 255, 255, 0.14);
-    background: #111827;
-    color: #f9fafb;
-  }
-
-  .forward-target-options button:hover {
-    background: #243042;
   }
 
   .browser-stage {
