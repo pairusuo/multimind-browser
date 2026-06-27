@@ -8,6 +8,8 @@ import {
   CellTab,
   CellMode,
   DEFAULT_URLS,
+  ExtractedConversation,
+  ExtractedConversationEntry,
   ForwardRecord,
   ForwardResponsePayload,
   IPC,
@@ -30,6 +32,8 @@ const LOAD_TIMEOUT_MS = 10_000;
 const NOTICE_REPLAY_DELAY_MS = 500;
 const RESPONSE_POLL_INTERVAL_MS = 800;
 const RESPONSE_WAIT_TIMEOUT_MS = 120_000;
+const MAX_CONVERSATION_CHARS = 7000;
+const TIMELINE_NAVIGATION_CARRY_MS = 30_000;
 const BLANK_URL = 'about:blank';
 const EMPTY_STATE_URL = createEmptyStateUrl();
 
@@ -50,6 +54,24 @@ interface CellState {
   url: string;
   active: boolean;
   mode: CellMode;
+}
+
+type TimelineEntrySource = 'bottom-input' | 'forward-injection' | 'dom-detected';
+
+interface TimelineEntry {
+  role: 'user' | 'assistant';
+  content: string;
+  source: TimelineEntrySource;
+  timestamp: number;
+  domId?: string;
+  order?: number;
+}
+
+interface CellTimeline {
+  cellId: string;
+  key: string;
+  entries: TimelineEntry[];
+  lastDomSyncedEntryCount: number;
 }
 
 export class WindowManager {
@@ -78,6 +100,9 @@ export class WindowManager {
   private overlayOpen = false;
   private destroyed = false;
   private forwardRecords: ForwardRecord[] = [];
+  private cellTimelines: Map<string, CellTimeline> = new Map();
+  private assistantCaptureChains: Map<string, Promise<void>> = new Map();
+  private timelineNavigationCarryUntil: Map<string, number> = new Map();
 
   constructor(
     private readonly window: BrowserWindow,
@@ -206,6 +231,7 @@ export class WindowManager {
     }
 
     const url = normalizeUrl(rawUrl);
+    this.resetTimelineForUrlChange(cellId, this.cellUrls[cellId], url);
     this.rememberCurrentSitePartition(cellId);
     this.cellUrls[cellId] = url;
     this.store.set(`cells.${cellId}.url`, url);
@@ -238,12 +264,15 @@ export class WindowManager {
     }
   }
 
-  navigate(cellId: string, rawUrl: string): BrowserState {
+  navigate(cellId: string, rawUrl: string, resetTimeline = true): BrowserState {
     if (this.isDestroyed() || !isKnownCellId(cellId)) {
       return this.getBrowserState();
     }
 
     const url = normalizeUrl(rawUrl);
+    if (resetTimeline) {
+      this.resetTimelineForUrlChange(cellId, this.cellUrls[cellId], url);
+    }
     this.rememberCurrentSitePartition(cellId);
     this.cellUrls[cellId] = url;
     this.store.set(`cells.${cellId}.url`, url);
@@ -328,7 +357,7 @@ export class WindowManager {
     this.tabs[cellId] = [...(this.tabs[cellId] ?? []), tab];
     this.activeTabIds[cellId] = tab.id;
     this.storeTabs(cellId);
-    this.navigate(cellId, url);
+    this.navigate(cellId, url, false);
     return this.getBrowserState();
   }
 
@@ -353,7 +382,7 @@ export class WindowManager {
     if (this.activeTabIds[cellId] === targetTabId) {
       const nextTab = nextTabs[Math.max(0, targetIndex - 1)] ?? nextTabs[0];
       this.activeTabIds[cellId] = nextTab.id;
-      this.navigate(cellId, nextTab.url);
+      this.navigate(cellId, nextTab.url, false);
     }
     this.storeTabs(cellId);
     return this.getBrowserState();
@@ -371,7 +400,7 @@ export class WindowManager {
 
     this.activeTabIds[cellId] = tab.id;
     this.storeTabs(cellId);
-    this.navigate(cellId, tab.url);
+    this.navigate(cellId, tab.url, false);
     return this.getBrowserState();
   }
 
@@ -401,7 +430,20 @@ export class WindowManager {
           this.navigate(cellId, searchUrl);
         }
       } else {
-        await this.injectText(cellId, trimmedText);
+        const previousResponse = await this.extractLatestResponseIfSupported(cellId);
+        this.beginTimelineNavigationCarry(cellId);
+        const injected = await this.injectText(cellId, trimmedText);
+        if (injected) {
+          this.appendTimelineEntry(cellId, {
+            role: 'user',
+            content: trimmedText,
+            source: 'bottom-input',
+            timestamp: Date.now(),
+          });
+          this.scheduleAssistantCapture(cellId, previousResponse, 'bottom-input');
+        } else {
+          this.cancelTimelineNavigationCarry(cellId);
+        }
       }
       await delay(150);
     }
@@ -441,40 +483,82 @@ export class WindowManager {
     }
 
     await this.waitForResponseComplete(sourceCellId);
-    const sourceContent = await this.extractLatestResponse(sourceCellId);
-    if (!sourceContent) {
-      throw new Error(`No readable source response in ${sourceCellId}.`);
+    const source = await this.getCellFullContext(sourceCellId);
+    if (!source.content) {
+      throw new Error(`No readable source context in ${sourceCellId}.`);
     }
 
-    const targetReply = await this.crossValidateCells(sourceCellId, targetCellId, sourceContent);
     const record: ForwardRecord = {
       id: createRecordId(),
       sourceCellId,
       targetCellId,
-      sourceContent,
-      targetReply,
+      sourceContent: source.content,
+      sourceTruncated: source.truncated,
+      targetReply: '',
       timestamp: Date.now(),
     };
+
     this.forwardRecords.push(record);
+    try {
+      await this.crossValidateCells(sourceCellId, targetCellId, source.content, source.truncated, record.id);
+    } catch (error) {
+      this.forwardRecords = this.forwardRecords.filter((candidate) => candidate.id !== record.id);
+      throw error;
+    }
     this.sendToRenderer(IPC.FORWARD_COMPLETED, { record });
     return record;
   }
 
-  private async crossValidateCells(sourceCellId: string, targetCellId: string, sourceResponse: string): Promise<string> {
-    await Promise.all([
-      this.waitForResponseComplete(sourceCellId),
-      this.waitForResponseComplete(targetCellId),
-    ]);
+  private async crossValidateCells(
+    sourceCellId: string,
+    targetCellId: string,
+    sourceContent: string,
+    sourceTruncated: boolean,
+    recordId: string,
+  ): Promise<void> {
+    await Promise.all([this.waitForResponseComplete(sourceCellId), this.waitForTargetReadyForForward(targetCellId)]);
 
     const previousTargetResponse = await this.extractLatestResponse(targetCellId);
-    const targetPrompt = `这是另一个 AI 的观点：${sourceResponse}---你怎么看，有没有需要补充或反驳的地方`;
+    const targetPrompt = buildForwardPrompt(sourceContent, sourceTruncated);
+    this.beginTimelineNavigationCarry(targetCellId);
     const injected = await this.injectText(targetCellId, targetPrompt);
     if (!injected) {
+      this.cancelTimelineNavigationCarry(targetCellId);
       throw new Error(`Unable to inject cross-validation prompt into ${targetCellId}.`);
     }
 
-    const targetResponse = await this.waitForNextResponse(targetCellId, previousTargetResponse);
-    return targetResponse;
+    this.appendTimelineEntry(targetCellId, {
+      role: 'user',
+      content: sourceContent,
+      source: 'forward-injection',
+      timestamp: Date.now(),
+    });
+    this.scheduleForwardAssistantCapture(targetCellId, previousTargetResponse, recordId);
+  }
+
+  private async waitForTargetReadyForForward(cellId: string): Promise<void> {
+    await this.waitForCellReady(cellId);
+
+    const currentResponse = await this.extractLatestResponse(cellId);
+    if (!currentResponse) {
+      return;
+    }
+
+    await this.waitForResponseComplete(cellId);
+  }
+
+  async extractConversation(cellId: string): Promise<ExtractedConversation | null> {
+    if (this.isDestroyed()) {
+      return null;
+    }
+
+    const adapter = this.getAdapter(cellId);
+    if (!adapter.extractConversation) {
+      return null;
+    }
+
+    const result = await this.executeCellScript(cellId, adapter.extractConversation());
+    return normalizeExtractedConversation(result);
   }
 
   async extractLatestResponse(cellId: string): Promise<string | null> {
@@ -484,7 +568,262 @@ export class WindowManager {
 
     const adapter = this.getReadableAdapter(cellId);
     const result = await this.executeCellScript(cellId, adapter.extractLatestResponse());
-    return typeof result === 'string' && result.trim() ? result.trim() : null;
+    if (typeof result !== 'string') {
+      return null;
+    }
+
+    const cleaned = cleanExtractedText(result);
+    return cleaned ? cleaned : null;
+  }
+
+  private async extractLatestResponseIfSupported(cellId: string): Promise<string | null> {
+    try {
+      return await this.extractLatestResponse(cellId);
+    } catch {
+      return null;
+    }
+  }
+
+  private async getCellFullContext(cellId: string): Promise<{
+    content: string | null;
+    truncated: boolean;
+    partial: boolean;
+  }> {
+    const syncedFromDom = await this.syncTimelineFromDomIfSupported(cellId);
+    await this.ensureLatestAssistantInTimeline(cellId, 'dom-detected');
+
+    const timeline = this.getOrCreateTimeline(cellId);
+    const fullText = formatTimelineContext(timeline.entries);
+    if (!fullText) {
+      return {
+        content: null,
+        truncated: false,
+        partial: false,
+      };
+    }
+
+    const truncated = truncateConversation(fullText);
+    return {
+      content: truncated.text,
+      truncated: truncated.truncated,
+      partial: !syncedFromDom,
+    };
+  }
+
+  private async syncTimelineFromDomIfSupported(cellId: string): Promise<boolean> {
+    let conversation: ExtractedConversation | null = null;
+    try {
+      conversation = await this.extractConversation(cellId);
+    } catch {
+      return false;
+    }
+
+    if (!conversation?.entries.length) {
+      return false;
+    }
+
+    let timeline = this.getOrCreateTimeline(cellId);
+    const sortedEntries = [...conversation.entries].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    let appended = false;
+
+    sortedEntries.forEach((entry) => {
+      if (this.timelineHasEntry(timeline, entry)) {
+        return;
+      }
+
+      this.appendTimelineEntry(cellId, {
+        role: entry.role,
+        content: entry.content,
+        source: 'dom-detected',
+        timestamp: Date.now(),
+        domId: entry.domId,
+        order: entry.order,
+      });
+      appended = true;
+    });
+
+    timeline.lastDomSyncedEntryCount = Math.max(timeline.lastDomSyncedEntryCount, sortedEntries.length);
+    return true;
+  }
+
+  private async ensureLatestAssistantInTimeline(cellId: string, source: TimelineEntrySource): Promise<void> {
+    const latestResponse = await this.extractLatestResponseIfSupported(cellId);
+    if (!latestResponse) {
+      return;
+    }
+
+    const timeline = this.getOrCreateTimeline(cellId);
+    if (timeline.entries.some((entry) => entry.role === 'assistant' && isSameOrContainedContent(entry.content, latestResponse))) {
+      return;
+    }
+
+    this.appendTimelineEntry(cellId, {
+      role: 'assistant',
+      content: latestResponse,
+      source,
+      timestamp: Date.now(),
+    });
+  }
+
+  private scheduleAssistantCapture(cellId: string, previousResponse: string | null, source: TimelineEntrySource): void {
+    const previousChain = this.assistantCaptureChains.get(cellId) ?? Promise.resolve();
+    const nextChain = previousChain
+      .catch(() => undefined)
+      .then(async () => {
+        if (this.isDestroyed()) {
+          return;
+        }
+        const response = await this.waitForNextResponse(cellId, previousResponse);
+        if (await this.syncTimelineFromDomIfSupported(cellId)) {
+          return;
+        }
+        this.appendTimelineEntry(cellId, {
+          role: 'assistant',
+          content: response,
+          source,
+          timestamp: Date.now(),
+        });
+      })
+      .catch((error) => {
+        if (!this.isDestroyed()) {
+          console.warn(`Unable to capture assistant response for ${cellId}:`, error);
+        }
+      })
+      .finally(() => {
+        this.commitCurrentCellUrlFromView(cellId);
+        this.cancelTimelineNavigationCarry(cellId);
+      });
+
+    this.assistantCaptureChains.set(cellId, nextChain);
+  }
+
+  private scheduleForwardAssistantCapture(cellId: string, previousResponse: string | null, recordId: string): void {
+    const previousChain = this.assistantCaptureChains.get(cellId) ?? Promise.resolve();
+    const nextChain = previousChain
+      .catch(() => undefined)
+      .then(async () => {
+        if (this.isDestroyed()) {
+          return;
+        }
+
+        const response = await this.waitForNextResponse(cellId, previousResponse);
+        this.appendTimelineEntry(cellId, {
+          role: 'assistant',
+          content: response,
+          source: 'forward-injection',
+          timestamp: Date.now(),
+        });
+
+        const record = this.forwardRecords.find((candidate) => candidate.id === recordId);
+        if (record) {
+          record.targetReply = response;
+        }
+      })
+      .catch((error) => {
+        if (!this.isDestroyed()) {
+          console.warn(`Unable to capture forwarded assistant response for ${cellId}:`, error);
+        }
+      })
+      .finally(() => {
+        this.commitCurrentCellUrlFromView(cellId);
+        this.cancelTimelineNavigationCarry(cellId);
+      });
+
+    this.assistantCaptureChains.set(cellId, nextChain);
+  }
+
+  private getOrCreateTimeline(cellId: string): CellTimeline {
+    const key = this.getTimelineKey(cellId);
+    const existing = this.cellTimelines.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    const timeline: CellTimeline = {
+      cellId,
+      key,
+      entries: [],
+      lastDomSyncedEntryCount: 0,
+    };
+    this.cellTimelines.set(key, timeline);
+    return timeline;
+  }
+
+  private getTimelineKey(cellId: string): string {
+    const activeTabId = this.activeTabIds[cellId];
+    return activeTabId ? `${cellId}:${activeTabId}` : cellId;
+  }
+
+  private appendTimelineEntry(cellId: string, entry: TimelineEntry): void {
+    const timeline = this.getOrCreateTimeline(cellId);
+    const normalizedContent = normalizeTimelineContent(entry.content);
+    if (!normalizedContent) {
+      return;
+    }
+
+    if (entry.domId && timeline.entries.some((existing) => existing.domId === entry.domId)) {
+      return;
+    }
+
+    if (timeline.entries.some((existing) => (
+      existing.role === entry.role
+      && isSameOrContainedContent(existing.content, normalizedContent)
+    ))) {
+      return;
+    }
+
+    timeline.entries.push({
+      ...entry,
+      content: entry.content.trim(),
+    });
+  }
+
+  private timelineHasEntry(timeline: CellTimeline, entry: ExtractedConversationEntry): boolean {
+    if (entry.domId && timeline.entries.some((existing) => existing.domId === entry.domId)) {
+      return true;
+    }
+
+    const normalizedContent = normalizeTimelineContent(entry.content);
+    return timeline.entries.some((existing) => (
+      existing.role === entry.role
+      && isSameOrContainedContent(existing.content, normalizedContent)
+    ));
+  }
+
+  private resetTimeline(cellId: string): void {
+    const key = this.getTimelineKey(cellId);
+    this.cellTimelines.set(key, {
+      cellId,
+      key,
+      entries: [],
+      lastDomSyncedEntryCount: 0,
+    });
+  }
+
+  private beginTimelineNavigationCarry(cellId: string): void {
+    if (!isKnownCellId(cellId)) {
+      return;
+    }
+
+    this.timelineNavigationCarryUntil.set(cellId, Date.now() + TIMELINE_NAVIGATION_CARRY_MS);
+  }
+
+  private cancelTimelineNavigationCarry(cellId: string): void {
+    this.timelineNavigationCarryUntil.delete(cellId);
+  }
+
+  private shouldCarryTimelineAcrossNavigation(cellId: string, previousUrl: string, nextUrl: string): boolean {
+    const carryUntil = this.timelineNavigationCarryUntil.get(cellId);
+    if (!carryUntil || Date.now() > carryUntil) {
+      this.timelineNavigationCarryUntil.delete(cellId);
+      return false;
+    }
+
+    const shouldCarry = getSiteKey(previousUrl) !== '' && getSiteKey(previousUrl) === getSiteKey(nextUrl);
+    if (shouldCarry) {
+      this.timelineNavigationCarryUntil.delete(cellId);
+    }
+    return shouldCarry;
   }
 
   async isResponseComplete(cellId: string): Promise<boolean> {
@@ -617,6 +956,18 @@ export class WindowManager {
     extractLatestResponse: () => string;
     isResponseComplete: () => string;
   } {
+    const adapter = this.getAdapter(cellId);
+    if (!adapter?.extractLatestResponse || !adapter.isResponseComplete) {
+      throw new Error(`No readable adapter for ${cellId}: ${this.cellUrls[cellId]}.`);
+    }
+
+    return {
+      extractLatestResponse: adapter.extractLatestResponse,
+      isResponseComplete: adapter.isResponseComplete,
+    };
+  }
+
+  private getAdapter(cellId: string) {
     if (!isKnownCellId(cellId)) {
       throw new Error(`Unknown cell: ${cellId}.`);
     }
@@ -627,14 +978,11 @@ export class WindowManager {
     }
 
     const adapter = getAdapterForUrl(url);
-    if (!adapter?.extractLatestResponse || !adapter.isResponseComplete) {
-      throw new Error(`No readable adapter for ${cellId}: ${url}.`);
+    if (!adapter) {
+      throw new Error(`No adapter for ${cellId}: ${url}.`);
     }
 
-    return {
-      extractLatestResponse: adapter.extractLatestResponse,
-      isResponseComplete: adapter.isResponseComplete,
-    };
+    return adapter;
   }
 
   private async executeCellScript(cellId: string, script: string): Promise<unknown> {
@@ -964,6 +1312,7 @@ export class WindowManager {
       }
 
       const publicUrl = this.toPublicUrl(url);
+      this.commitCellUrlFromNavigation(cellId, publicUrl);
       this.sendUrl(cellId, publicUrl);
       this.checkNavigationNotice(cellId, publicUrl);
     });
@@ -973,6 +1322,7 @@ export class WindowManager {
       }
 
       const publicUrl = this.toPublicUrl(url);
+      this.commitCellUrlFromNavigation(cellId, publicUrl);
       this.sendUrl(cellId, publicUrl);
       this.checkNavigationNotice(cellId, publicUrl);
     });
@@ -1003,6 +1353,7 @@ export class WindowManager {
       this.clearLoadTimeout(cellId);
       const publicUrl = this.toPublicUrl(view.webContents.getURL());
       const persistedUrl = this.getPersistedUrlAfterLoad(cellId, publicUrl);
+      this.resetTimelineForUrlChange(cellId, this.cellUrls[cellId], persistedUrl, { allowCarry: true });
       this.cellUrls[cellId] = persistedUrl;
       this.store.set(`cells.${cellId}.url`, persistedUrl);
       this.updateKnownSiteMetadata(cellId, publicUrl);
@@ -1153,6 +1504,52 @@ export class WindowManager {
 
   private sendUrl(cellId: string, url: string): void {
     this.sendToRenderer(IPC.CELL_URL_CHANGED, { cellId, url });
+  }
+
+  private commitCellUrlFromNavigation(cellId: string, url: string): void {
+    if (!url || url === BLANK_URL || isEmptyStateUrl(url)) {
+      return;
+    }
+
+    const persistedUrl = this.getPersistedUrlAfterLoad(cellId, url);
+    this.resetTimelineForUrlChange(cellId, this.cellUrls[cellId], persistedUrl, { allowCarry: true });
+    this.cellUrls[cellId] = persistedUrl;
+    this.store.set(`cells.${cellId}.url`, persistedUrl);
+    this.updateKnownSiteMetadata(cellId, url);
+    this.updateActiveTab(cellId, { url: persistedUrl });
+    this.syncCellState(cellId);
+  }
+
+  private commitCurrentCellUrlFromView(cellId: string): void {
+    const view = this.views.get(cellId);
+    if (!view || view.webContents.isDestroyed()) {
+      return;
+    }
+
+    this.commitCellUrlFromNavigation(cellId, this.toPublicUrl(view.webContents.getURL()));
+  }
+
+  private resetTimelineForUrlChange(
+    cellId: string,
+    previousUrl: string,
+    nextUrl: string,
+    options: { allowCarry?: boolean } = {},
+  ): void {
+    if (!isKnownCellId(cellId)) {
+      return;
+    }
+
+    const previous = normalizeTimelineNavigationUrl(previousUrl);
+    const next = normalizeTimelineNavigationUrl(nextUrl);
+    if (!previous || !next || previous === next) {
+      return;
+    }
+
+    if (options.allowCarry && this.shouldCarryTimelineAcrossNavigation(cellId, previousUrl, nextUrl)) {
+      return;
+    }
+
+    this.resetTimeline(cellId);
   }
 
   private checkNavigationNotice(cellId: string, url: string): void {
@@ -1556,6 +1953,136 @@ function isClaudeComUrl(rawUrl: string): boolean {
 
 function createRecordId(): string {
   return `forward-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function truncateConversation(fullText: string): { text: string; truncated: boolean } {
+  if (fullText.length <= MAX_CONVERSATION_CHARS) {
+    return { text: fullText, truncated: false };
+  }
+
+  return {
+    text: fullText.slice(fullText.length - MAX_CONVERSATION_CHARS),
+    truncated: true,
+  };
+}
+
+function buildForwardPrompt(
+  sourceContent: string,
+  sourceTruncated: boolean,
+): string {
+  const header = sourceTruncated
+    ? '注意：原始对话较长，已省略最早的部分，以下是保留的最近对话内容。'
+    : '下面是一段用户与其它 AI 的完整对话上下文。';
+
+  return [
+    header,
+    '',
+    '# 对话上下文',
+    sourceContent,
+    '',
+    '# 请你评价',
+    '请先理解上面的完整讨论脉络，再评价一下该 AI 回答：有没有遗漏、错误、需要补充或反驳的地方？',
+  ].join('\n');
+}
+
+function normalizeExtractedConversation(value: unknown): ExtractedConversation | null {
+  if (!value || typeof value !== 'object' || !Array.isArray((value as ExtractedConversation).entries)) {
+    return null;
+  }
+
+  const entries = (value as ExtractedConversation).entries
+    .map((entry): ExtractedConversationEntry | null => {
+      if (!entry || typeof entry !== 'object') {
+        return null;
+      }
+
+      const role = (entry as ExtractedConversationEntry).role;
+      const content = (entry as ExtractedConversationEntry).content;
+      if ((role !== 'user' && role !== 'assistant') || typeof content !== 'string') {
+        return null;
+      }
+
+      const cleanedContent = cleanExtractedText(content);
+      if (!cleanedContent) {
+        return null;
+      }
+
+      const domId = (entry as ExtractedConversationEntry).domId;
+      const order = (entry as ExtractedConversationEntry).order;
+      return {
+        role,
+        content: cleanedContent,
+        ...(typeof domId === 'string' && domId.trim() ? { domId: domId.trim() } : {}),
+        ...(typeof order === 'number' && Number.isFinite(order) ? { order } : {}),
+      };
+    })
+    .filter((entry): entry is ExtractedConversationEntry => Boolean(entry));
+
+  return entries.length ? { entries } : null;
+}
+
+function formatTimelineContext(entries: TimelineEntry[]): string {
+  return entries
+    .map((entry) => {
+      const content = entry.content.trim();
+      if (entry.source === 'forward-injection' && startsWithRoleLabel(content)) {
+        return content;
+      }
+      return `${entry.role === 'user' ? '用户' : 'AI'}：${content}`;
+    })
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function normalizeTimelineContent(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+function normalizeTimelineNavigationUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim();
+  if (!trimmed || trimmed === BLANK_URL || isEmptyStateUrl(trimmed)) {
+    return '';
+  }
+
+  try {
+    const url = new URL(trimmed);
+    url.hash = '';
+    if (url.pathname.length > 1) {
+      url.pathname = url.pathname.replace(/\/+$/, '');
+    }
+    return url.toString();
+  } catch {
+    return trimmed.replace(/#.*$/, '').replace(/\/+$/, '');
+  }
+}
+
+function isSameOrContainedContent(left: string, right: string): boolean {
+  const normalizedLeft = normalizeTimelineContent(left);
+  const normalizedRight = normalizeTimelineContent(right);
+  if (!normalizedLeft || !normalizedRight) {
+    return false;
+  }
+  if (normalizedLeft === normalizedRight) {
+    return true;
+  }
+
+  const [shorter, longer] = normalizedLeft.length < normalizedRight.length
+    ? [normalizedLeft, normalizedRight]
+    : [normalizedRight, normalizedLeft];
+  return shorter.length >= 80 && longer.includes(shorter);
+}
+
+function cleanExtractedText(text: string): string {
+  return text
+    .replace(/[\u2460-\u2473\u24ea\u24f5-\u24fe\u2776-\u277f]/g, '')
+    .replace(/(?<=\S)[\u00b9\u00b2\u00b3\u2070-\u2079]+(?=\s|$|[，。,.、；;：:])/g, '')
+    .replace(/\[\s*\d{1,3}\s*\]/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function startsWithRoleLabel(text: string): boolean {
+  return /^(用户|AI)：/.test(text.trim());
 }
 
 function sanitizePartitionSegment(value: string): string {

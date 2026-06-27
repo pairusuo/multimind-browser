@@ -27,13 +27,36 @@ export const chatgptAdapter: SiteAdapter = {
         input.dispatchEvent(new Event('input', { bubbles: true }));
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 300));
-
-      const button = document.querySelector('button[data-testid="send-button"]')
+      const getInputText = () => input instanceof HTMLTextAreaElement
+        ? input.value.trim()
+        : (input.innerText || input.textContent || '').trim();
+      const isEnabledButton = (button) => button
+        && button.getAttribute('aria-disabled') !== 'true'
+        && !button.disabled;
+      const getSendButton = () => document.querySelector('button[data-testid="send-button"]')
         || document.querySelector('button[aria-label="Send prompt"]');
-      if (button && button.getAttribute('aria-disabled') !== 'true' && !button.disabled) {
+      const waitForEnabledButton = async (timeout = 3000) => {
+        const start = Date.now();
+        while (Date.now() - start < timeout) {
+          const button = getSendButton();
+          if (isEnabledButton(button)) return button;
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        return null;
+      };
+      const waitForInputToClear = async (timeout = 1200) => {
+        const start = Date.now();
+        while (Date.now() - start < timeout) {
+          if (!getInputText()) return true;
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        return false;
+      };
+
+      const button = await waitForEnabledButton();
+      if (button) {
         button.click();
-        return true;
+        if (await waitForInputToClear()) return true;
       }
 
       input.dispatchEvent(new KeyboardEvent('keydown', {
@@ -42,7 +65,7 @@ export const chatgptAdapter: SiteAdapter = {
         bubbles: true,
         cancelable: true
       }));
-      return true;
+      return waitForInputToClear();
     })();
   `,
   readyCheckScript: `

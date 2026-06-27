@@ -3,6 +3,7 @@ import type { CellMode, CellNoticePayload } from '../../shared/types';
 import CellNotice from './CellNotice';
 
 const shownNoticeKeys = new Set<string>();
+const repeatableNoticeTypes = new Set<CellNoticePayload['type']>(['conversation-truncated']);
 
 interface GridCellProps {
   cellId: string;
@@ -46,11 +47,13 @@ export default function GridCell({
       }
 
       const noticeKey = `${payload.cellId}-${payload.type}`;
-      if (shownNoticeKeys.has(noticeKey)) {
+      if (!repeatableNoticeTypes.has(payload.type) && shownNoticeKeys.has(noticeKey)) {
         return;
       }
 
-      shownNoticeKeys.add(noticeKey);
+      if (!repeatableNoticeTypes.has(payload.type)) {
+        shownNoticeKeys.add(noticeKey);
+      }
       setNotice(payload);
     });
   }, [cellId]);
@@ -67,14 +70,15 @@ export default function GridCell({
   async function forwardTo(targetCellId: string) {
     setTargetPickerOpen(false);
     setForwardingTargetId(targetCellId);
-    setForwardStatus(`Forwarding to ${getTargetLabel(targetCells, targetCellId)}...`);
+    const targetLabel = getTargetLabel(targetCells, targetCellId);
+    setForwardStatus(`正在转发到 ${targetLabel}...`);
 
     try {
-      await window.electronAPI.forwardResponse({ sourceCellId: cellId, targetCellId });
-      setForwardStatus(`Forwarded to ${getTargetLabel(targetCells, targetCellId)}`);
+      const record = await window.electronAPI.forwardResponse({ sourceCellId: cellId, targetCellId });
+      setForwardStatus(record.sourceTruncated ? `已转发到 ${targetLabel}（内容超长已裁剪）` : `已转发到 ${targetLabel}`);
     } catch (error) {
       console.error('Forward response failed:', error);
-      setForwardStatus('Forward could not be completed');
+      setForwardStatus(`转发到 ${targetLabel} 未完成`);
     } finally {
       setForwardingTargetId(null);
     }
@@ -87,9 +91,21 @@ export default function GridCell({
       onClick={() => onFocus(cellId, meta.url)}
     >
       <div className="cell-header">
-        {targetPickerOpen ? (
+        {forwardStatus ? (
+          <div className="forward-picker-inline forward-status-inline" role="status" onClick={(event) => event.stopPropagation()}>
+            <span>{forwardStatus}</span>
+            <button
+              type="button"
+              className="forward-picker-cancel"
+              aria-label="Dismiss forward status"
+              onClick={() => setForwardStatus(null)}
+            >
+              ×
+            </button>
+          </div>
+        ) : targetPickerOpen ? (
           <div className="forward-picker-inline" onClick={(event) => event.stopPropagation()}>
-            <span className="forward-picker-label">Forward to:</span>
+            <span className="forward-picker-label">转发到：</span>
             <div className="forward-picker-targets">
               {targetCells.map((target) => (
                 <button
@@ -165,14 +181,6 @@ export default function GridCell({
         )}
       </div>
       {notice && <CellNotice notice={notice} onClose={() => setNotice(null)} />}
-      {forwardStatus && (
-        <div className="cell-forward-status" role="status">
-          <span>{forwardStatus}</span>
-          <button type="button" aria-label="Dismiss forward status" onClick={() => setForwardStatus(null)}>
-            ×
-          </button>
-        </div>
-      )}
     </article>
   );
 }

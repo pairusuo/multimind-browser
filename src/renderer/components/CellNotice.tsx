@@ -10,6 +10,7 @@ const NOTICE_LABELS: Record<CellNoticePayload['type'], string> = {
   'inject-failed': '需要手动发送',
   'load-failed': '访问提示',
   'load-timeout': '加载较慢',
+  'conversation-truncated': '内容已裁剪',
 };
 
 const NOTICE_ICONS: Record<CellNoticePayload['type'], string> = {
@@ -17,6 +18,7 @@ const NOTICE_ICONS: Record<CellNoticePayload['type'], string> = {
   'inject-failed': '↵',
   'load-failed': '!',
   'load-timeout': '…',
+  'conversation-truncated': '…',
 };
 
 export default function CellNotice({ notice, onClose }: CellNoticeProps) {

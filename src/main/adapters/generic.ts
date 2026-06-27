@@ -54,23 +54,51 @@ export function createGenericChatAdapter({
           input.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
-        await new Promise((resolve) => setTimeout(resolve, 250));
-
-        const button = sendButtonSelectors
+        const getInputText = () => input instanceof HTMLTextAreaElement
+          ? input.value.trim()
+          : (input.innerText || input.textContent || '').trim();
+        const isVisible = (element) => {
+          const rect = element.getBoundingClientRect();
+          const style = window.getComputedStyle(element);
+          return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+        };
+        const isEnabledButton = (button) => button
+          && button.getAttribute('aria-disabled') !== 'true'
+          && !button.disabled
+          && !button.className?.toString().includes('disabled');
+        const findSendButton = () => sendButtonSelectors
           .map((selector) => document.querySelector(selector))
-          .find(Boolean)
+          .find((button) => isVisible(button) && isEnabledButton(button))
           || [...document.querySelectorAll('button')].reverse().find((candidate) => {
             const label = [
               candidate.getAttribute('aria-label'),
               candidate.getAttribute('title'),
               candidate.textContent,
             ].filter(Boolean).join(' ').toLowerCase();
-            return /send|发送|提交|arrow|paper/i.test(label);
+            return isVisible(candidate) && isEnabledButton(candidate) && /send|发送|提交|arrow|paper/i.test(label);
           });
+        const waitForEnabledButton = async (timeout = 3000) => {
+          const start = Date.now();
+          while (Date.now() - start < timeout) {
+            const button = findSendButton();
+            if (button) return button;
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+          return null;
+        };
+        const waitForInputToClear = async (timeout = 1200) => {
+          const start = Date.now();
+          while (Date.now() - start < timeout) {
+            if (!getInputText()) return true;
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+          return false;
+        };
 
-        if (button && button.getAttribute('aria-disabled') !== 'true' && !button.disabled) {
+        const button = await waitForEnabledButton();
+        if (button) {
           button.click();
-          return true;
+          if (await waitForInputToClear()) return true;
         }
 
         input.dispatchEvent(new KeyboardEvent('keydown', {
@@ -80,7 +108,7 @@ export function createGenericChatAdapter({
           cancelable: true,
           composed: true
         }));
-        return true;
+        return waitForInputToClear();
       })();
     `,
     readyCheckScript: `

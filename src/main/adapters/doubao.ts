@@ -11,6 +11,12 @@ const extractDoubaoLatestResponseScript = `
     const isChrome = (element) => element.closest(
       'button, a, nav, aside, header, footer, textarea, input, [contenteditable="true"], [role="textbox"]'
     );
+    const suggestionSelector = '[class*="suggest-message-list-wrapper"], [class~="suggest-list-item"]';
+    const getConversationText = (element) => {
+      const clone = element.cloneNode(true);
+      clone.querySelectorAll?.(suggestionSelector).forEach((node) => node.remove());
+      return getText(clone);
+    };
     const isUiText = (text) => /给豆包发送消息|内容由 AI 生成|内容由AI生成|深度思考|联网搜索|按 Enter|Shift\\+Enter|新建对话|历史记录/.test(text);
     const selectors = [
       '[data-testid*="message"]',
@@ -29,7 +35,8 @@ const extractDoubaoLatestResponseScript = `
         if (seen.has(element)) return false;
         seen.add(element);
         if (!isVisible(element) || isChrome(element)) return false;
-        const text = getText(element);
+        if (element.closest(suggestionSelector)) return false;
+        const text = getConversationText(element);
         if (text.length < 20 || text.length > 8000 || isUiText(text)) return false;
         return !element.querySelector('textarea, input, [contenteditable="true"], [role="textbox"]');
       })
@@ -39,8 +46,10 @@ const extractDoubaoLatestResponseScript = `
         for (let i = 0; i < 5 && current.parentElement; i += 1) {
           const parent = current.parentElement;
           if (parent === document.body || parent.tagName === 'MAIN') break;
-          const text = getText(parent);
-          if (text.length >= getText(best).length && text.length <= 8000 && !isUiText(text) && !isChrome(parent)) {
+          const text = getConversationText(parent);
+          const bestText = getConversationText(best);
+          const blockCount = parent.querySelectorAll('p, li, [dir="auto"], [class*="markdown"]').length;
+          if (text.length >= bestText.length && text.length <= 8000 && blockCount <= 30 && !isUiText(text) && !isChrome(parent)) {
             best = parent;
           }
           current = parent;
@@ -51,7 +60,7 @@ const extractDoubaoLatestResponseScript = `
     const unique = [];
     const uniqueTexts = new Set();
     for (const candidate of candidates) {
-      const text = getText(candidate);
+      const text = getConversationText(candidate);
       if (!uniqueTexts.has(text)) {
         uniqueTexts.add(text);
         unique.push({ element: candidate, text });
@@ -59,6 +68,196 @@ const extractDoubaoLatestResponseScript = `
     }
 
     return unique.at(-1)?.text || null;
+  })();
+`;
+
+const extractDoubaoConversationScript = `
+  (async () => {
+    const getText = (element) => (element?.innerText || element?.textContent || '').trim();
+    const isVisible = (element) => {
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+    };
+    const isChrome = (element) => element.closest(
+      'button, a, nav, aside, header, footer, textarea, input, [contenteditable="true"], [role="textbox"]'
+    );
+    const suggestionSelector = '[class*="suggest-message-list-wrapper"], [class~="suggest-list-item"]';
+    const getConversationText = (element) => {
+      const clone = element.cloneNode(true);
+      clone.querySelectorAll?.(suggestionSelector).forEach((node) => node.remove());
+      return getText(clone);
+    };
+    const isUiText = (text) => /给豆包发送消息|内容由 AI 生成|内容由AI生成|深度思考|联网搜索|按 Enter|Shift\\+Enter|新建对话|历史记录|搜索\\.\\.\\.|AI 创作|云盘|更多/.test(text);
+    const normalize = (text) => text.replace(/\\n{3,}/g, '\\n\\n').trim();
+    const isUserRow = (element) => {
+      const rowText = normalize(getConversationText(element));
+      const rightAlignedText = [...element.querySelectorAll('[class*="justify-end"]')]
+        .map((node) => ({ text: normalize(getConversationText(node)), rect: node.getBoundingClientRect() }))
+        .find(({ text, rect }) => text && rowText.includes(text) && text.length >= rowText.length * 0.8 && rect.left > window.innerWidth * 0.25);
+      if (rightAlignedText) return true;
+      const bubble = [...element.querySelectorAll('div')]
+        .map((node) => ({ text: normalize(getConversationText(node)), rect: node.getBoundingClientRect() }))
+        .filter(({ text, rect }) => text && rowText.includes(text) && text.length >= rowText.length * 0.8 && rect.width > 0 && rect.height > 0)
+        .sort((a, b) => b.rect.right - a.rect.right)[0];
+      return Boolean(bubble && bubble.rect.left > window.innerWidth * 0.35);
+    };
+    const classifyRole = (element, index) => {
+      if (element.className?.toString().includes('v_list_row')) {
+        return isUserRow(element) ? 'user' : 'assistant';
+      }
+      const descriptor = [
+        element.getAttribute('data-testid'),
+        element.getAttribute('data-role'),
+        element.getAttribute('role'),
+        element.className?.toString(),
+        element.getAttribute('aria-label')
+      ].filter(Boolean).join(' ').toLowerCase();
+      if (/user|human|question|query|bubble.*right|right.*bubble|mine|self/.test(descriptor)) return 'user';
+      if (/assistant|bot|answer|ai|doubao|message|markdown/.test(descriptor)) return 'assistant';
+      const rect = element.getBoundingClientRect();
+      if (rect.left > window.innerWidth * 0.45) return 'user';
+      return index % 2 === 0 ? 'user' : 'assistant';
+    };
+    const isConversationText = (text) => {
+      if (text.length < 2 || text.length > 12000 || isUiText(text)) return false;
+      if (/^快速\\s*编程\\s*图像生成\\s*帮我写作\\s*更多$/.test(text.replace(/\\n/g, ' '))) return false;
+      return true;
+    };
+    const findScroller = () => {
+      const explicit = document.querySelector('[class*="v_list_scroller"], .scroller');
+      if (explicit && explicit.scrollHeight > explicit.clientHeight) return explicit;
+      return [...document.querySelectorAll('main, div')]
+        .filter((element) => element.scrollHeight > element.clientHeight + 100 && element.clientHeight > 100)
+        .sort((a, b) => b.scrollHeight - a.scrollHeight)[0] || null;
+    };
+    const getRowPosition = (element, fallback) => {
+      const inline = element.getAttribute('style') || '';
+      const marker = '--vlist-row-transform-y:';
+      const start = inline.indexOf(marker);
+      if (start >= 0) {
+        const value = Number.parseFloat(inline.slice(start + marker.length));
+        if (Number.isFinite(value)) return value;
+      }
+      return fallback;
+    };
+    const collectRows = (messages) => {
+      const rows = [...document.querySelectorAll('.v_list_row')]
+        .filter((element) => isVisible(element) || element.getBoundingClientRect().height > 0)
+        .map((element, index) => {
+          const text = normalize(getConversationText(element));
+          if (!isConversationText(text)) return null;
+          if (element.querySelector('textarea, input, [contenteditable="true"], [role="textbox"]')) return null;
+          const domId = element.getAttribute('data-observe-row') || undefined;
+          return { element, role: classifyRole(element, messages.size), text, domId, position: getRowPosition(element, messages.size + index) };
+        })
+        .filter(Boolean);
+
+      for (const row of rows) {
+        const key = row.role + '|' + (row.domId || row.text);
+        const existing = messages.get(key);
+        if (!existing || row.text.length > existing.text.length) {
+          messages.set(key, existing ? { ...row, position: existing.position } : row);
+        }
+      }
+    };
+    const collectFallback = (messages) => {
+      const selectors = [
+      '[data-testid*="message"]',
+      '[data-testid*="chat"]',
+      '[class*="message"]',
+      '[class*="bubble"]',
+      '[class*="markdown"]',
+      '[class*="answer"]',
+      '[class*="content"]',
+      'main [dir="auto"]',
+      'main p',
+      'main li'
+      ];
+      const rawCandidates = selectors
+      .flatMap((selector) => [...document.querySelectorAll(selector)])
+      .filter((element) => {
+        if (!isVisible(element) || isChrome(element)) return false;
+        if (element.closest(suggestionSelector)) return false;
+        const text = normalize(getConversationText(element));
+        if (!isConversationText(text)) return false;
+        return !element.querySelector('textarea, input, [contenteditable="true"], [role="textbox"]');
+      })
+      .map((element) => {
+        let best = element;
+        let current = element;
+        for (let i = 0; i < 6 && current.parentElement; i += 1) {
+          const parent = current.parentElement;
+          if (parent === document.body || parent.tagName === 'MAIN') break;
+          if (isChrome(parent)) break;
+          const text = normalize(getConversationText(parent));
+          const currentText = normalize(getConversationText(best));
+          const blockCount = parent.querySelectorAll('p, li, [dir="auto"], [class*="markdown"]').length;
+          if (text.length >= currentText.length && text.length <= 12000 && blockCount <= 30 && !isUiText(text)) {
+            best = parent;
+          }
+          current = parent;
+        }
+        return best;
+      })
+      .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+
+      for (const element of rawCandidates) {
+        const text = normalize(getConversationText(element));
+        if (!text) continue;
+        const role = classifyRole(element, messages.size);
+        const key = role + '|' + text;
+        if (!messages.has(key)) {
+          messages.set(key, { role, text, position: messages.size });
+        }
+      }
+    };
+
+    const messages = new Map();
+    const scroller = findScroller();
+    const originalTop = scroller?.scrollTop || 0;
+
+    if (scroller) {
+      const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      const step = Math.max(120, Math.floor(scroller.clientHeight * 0.8));
+      for (let top = 0; top <= maxTop; top += step) {
+        scroller.scrollTop = top;
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        collectRows(messages);
+      }
+      scroller.scrollTop = maxTop;
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      collectRows(messages);
+      scroller.scrollTop = originalTop;
+    } else {
+      collectRows(messages);
+    }
+
+    if (!messages.size) {
+      collectFallback(messages);
+    }
+
+    const unique = [];
+    for (const message of [...messages.values()].sort((a, b) => a.position - b.position)) {
+      if (unique.some((item) => item.role === message.role && item.text === message.text)) continue;
+      if (unique.some((item) => item.text.includes(message.text) && item.text.length > message.text.length)) continue;
+      for (let i = unique.length - 1; i >= 0; i -= 1) {
+        if (message.text.includes(unique[i].text) && message.text.length > unique[i].text.length) {
+          unique.splice(i, 1);
+        }
+      }
+      unique.push(message);
+    }
+
+    if (!unique.length) return null;
+    return {
+      entries: unique.map((message) => ({
+        role: message.role,
+        content: message.text,
+        ...(message.domId ? { domId: message.domId } : {}),
+        order: message.position
+      }))
+    };
   })();
 `;
 
@@ -87,8 +286,6 @@ export const doubaoAdapter: SiteAdapter = {
         input.dispatchEvent(new Event('change', { bubbles: true }));
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 300));
-
       const visibleEnabledButtons = (root) => [...root.querySelectorAll('button')]
         .filter((button) => {
           const rect = button.getBoundingClientRect();
@@ -100,28 +297,53 @@ export const doubaoAdapter: SiteAdapter = {
             && !button.disabled
             && button.getAttribute('aria-disabled') !== 'true';
         });
+      const getInputText = () => input instanceof HTMLTextAreaElement
+        ? input.value.trim()
+        : (input.innerText || input.textContent || '').trim();
+      const waitForInputToClear = async (timeout = 1200) => {
+        const start = Date.now();
+        while (Date.now() - start < timeout) {
+          if (!getInputText()) return true;
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        return false;
+      };
+      const findSendButton = () => {
+        let root = input;
+        let buttons = [];
+        for (let depth = 0; root && depth < 8; depth += 1) {
+          buttons = visibleEnabledButtons(root);
+          if (buttons.length >= 2) break;
+          root = root.parentElement;
+        }
 
-      let root = input;
-      let buttons = [];
-      for (let depth = 0; root && depth < 8; depth += 1) {
-        buttons = visibleEnabledButtons(root);
-        if (buttons.length >= 2) break;
-        root = root.parentElement;
-      }
+        if (!buttons.length) {
+          buttons = visibleEnabledButtons(document);
+        }
 
-      if (!buttons.length) {
-        buttons = visibleEnabledButtons(document);
-      }
+        const inputRect = input.getBoundingClientRect();
+        return buttons
+          .map((candidate) => ({ candidate, rect: candidate.getBoundingClientRect() }))
+          .filter(({ rect }) => rect.bottom >= inputRect.top - 80)
+          .sort((a, b) => (b.rect.bottom - a.rect.bottom) || (b.rect.right - a.rect.right))[0]?.candidate || null;
+      };
+      const waitForEnabledButton = async (timeout = 3000) => {
+        const start = Date.now();
+        while (Date.now() - start < timeout) {
+          const button = findSendButton();
+          if (button) return button;
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        return null;
+      };
 
-      const inputRect = input.getBoundingClientRect();
-      const button = buttons
-        .map((candidate) => ({ candidate, rect: candidate.getBoundingClientRect() }))
-        .filter(({ rect }) => rect.bottom >= inputRect.top - 80)
-        .sort((a, b) => (b.rect.bottom - a.rect.bottom) || (b.rect.right - a.rect.right))[0]?.candidate;
-
+      const button = await waitForEnabledButton();
       if (button) {
+        button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse' }));
+        button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
         button.click();
-        return true;
+        button.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+        if (await waitForInputToClear()) return true;
       }
 
       input.dispatchEvent(new KeyboardEvent('keydown', {
@@ -131,7 +353,7 @@ export const doubaoAdapter: SiteAdapter = {
         cancelable: true,
         composed: true
       }));
-      return true;
+      return waitForInputToClear();
     })();
   `,
   readyCheckScript: `
@@ -140,6 +362,7 @@ export const doubaoAdapter: SiteAdapter = {
       || document.querySelector('[contenteditable="true"]'));
   `,
   extractLatestResponse: () => extractDoubaoLatestResponseScript,
+  extractConversation: () => extractDoubaoConversationScript,
   isResponseComplete: () => `
     (() => {
       const isVisible = (element) => {

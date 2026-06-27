@@ -16,6 +16,7 @@ export interface SiteAdapter {
   readyCheckScript: string;
   extractLatestResponse?: () => string;
   isResponseComplete?: () => string;
+  extractConversation?: () => string;
 }
 
 export const adapters: SiteAdapter[] = [

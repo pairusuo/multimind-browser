@@ -86,11 +86,23 @@ export interface ForwardResponsePayload {
   targetCellId: string;
 }
 
+export interface ExtractedConversationEntry {
+  role: 'user' | 'assistant';
+  content: string;
+  domId?: string;
+  order?: number;
+}
+
+export interface ExtractedConversation {
+  entries: ExtractedConversationEntry[];
+}
+
 export interface ForwardRecord {
   id: string;
   sourceCellId: string;
   targetCellId: string;
   sourceContent: string;
+  sourceTruncated: boolean;
   targetReply: string;
   timestamp: number;
 }
@@ -112,7 +124,12 @@ export interface CellTabPayload {
   url?: string;
 }
 
-export type NoticeType = 'google-login-blocked' | 'inject-failed' | 'load-failed' | 'load-timeout';
+export type NoticeType =
+  | 'google-login-blocked'
+  | 'inject-failed'
+  | 'load-failed'
+  | 'load-timeout'
+  | 'conversation-truncated';
 
 export interface CellNoticePayload {
   cellId: string;
