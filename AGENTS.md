@@ -655,19 +655,52 @@ async function getCellFullContext(
 组装最终发给目标格子的 prompt 时，任务说明文案只在最外层包裹一次：
 
 ```typescript
+// 任务说明文案跟随对话内容的语言，与界面语言（UI 国际化）无关
+// 见下方「国际化」章节的说明
+const FORWARD_PROMPT_TEXT = {
+  zh: {
+    intro: "下面是一段用户与另一个 AI 的完整对话上下文。",
+    contextHeader: "# 对话上下文",
+    evaluateHeader: "# 请你评价",
+    evaluateInstruction:
+      "请先理解上面的完整讨论脉络，再评价最后一条 AI 回答：有没有遗漏、错误、需要补充或反驳的地方？",
+    truncateNotice:
+      "注意：原始对话较长，已省略最早的部分，以下是保留的最近对话内容。\n\n",
+  },
+  en: {
+    intro:
+      "Below is the full conversation context between the user and another AI.",
+    contextHeader: "# Conversation Context",
+    evaluateHeader: "# Your Evaluation",
+    evaluateInstruction:
+      "Please understand the full discussion above before evaluating the last AI response: any omissions, errors, or points needing elaboration or rebuttal?",
+    truncateNotice:
+      "Note: the original conversation was long; earliest portions have been omitted. Below is the retained recent content.\n\n",
+  },
+};
+
+function detectContentLanguage(text: string): "zh" | "en" {
+  // 简单的字符占比判断即可，不需要引入完整的语言检测库，
+  // 当前只需要区分中英文两种
+  const chineseCharCount = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
+  return chineseCharCount / Math.max(text.length, 1) > 0.15 ? "zh" : "en";
+}
+
 function buildForwardPrompt(fullContext: string, truncated: boolean): string {
-  const truncateNotice = truncated
-    ? "注意：原始对话较长，已省略最早的部分，以下是保留的最近对话内容。\n\n"
-    : "";
+  // 任务说明文案的语言，跟随这段对话内容本身使用的语言，
+  // 不跟随当前界面语言设置
+  const lang = detectContentLanguage(fullContext);
+  const t = FORWARD_PROMPT_TEXT[lang];
+  const truncateNotice = truncated ? t.truncateNotice : "";
 
   return [
-    "下面是一段用户与其它 AI 的完整对话上下文。",
+    t.intro,
     "",
-    truncateNotice + "# 对话上下文",
+    truncateNotice + t.contextHeader,
     fullContext,
     "",
-    "# 请你评价",
-    "请先理解上面的完整讨论脉络，再评价一下该 AI 回答：有没有遗漏、错误、需要补充或反驳的地方？",
+    t.evaluateHeader,
+    t.evaluateInstruction,
   ].join("\n");
 }
 ```
@@ -931,6 +964,79 @@ export const CHROME_USER_AGENT =
 
 ---
 
+## 国际化（i18n，新增需求，2026年6月）
+
+### 范围说明：两套独立的语言决策，不要混淆
+
+MultiMind 目前只有中文界面，需要新增英文支持。这个需求拆成两套
+**完全独立**的语言决策，开发时不要把两者混在一起处理：
+
+1. **UI 界面文案**：跟随用户在设置中选择的界面语言（中文/英文），
+   标准的国际化范畴，本章节主要内容
+2. **转发任务说明文案**（即 `buildForwardPrompt` 里的固定文案）：
+   跟随**对话内容本身使用的语言**，与界面语言无关，已在上方
+   「最终 prompt 组装」章节实现（`detectContentLanguage` +
+   `FORWARD_PROMPT_TEXT`）。用户即使把界面切成英文，只要这次对话
+   是用中文进行的，转发文案依然用中文，不能因为界面是英文就跟着
+   切换，否则会让目标 AI 在阅读体验上出现语言混杂的割裂感
+
+### 技术方案
+
+使用 `i18next` + `react-i18next`（渲染进程）做 UI 文案国际化：
+
+```
+i18next            ^23.0.0
+react-i18next      ^14.0.0
+```
+
+目录新增：
+
+```
+src/renderer/locales/
+├── zh.json    # 中文文案（从现有硬编码字符串迁移）
+└── en.json    # 英文翻译
+```
+
+### 迁移范围（需要逐一排查并替换为 i18n key 的硬编码中文字符串）
+
+- `Toolbar.tsx`、`GridCell.tsx`、`BottomInput.tsx`、`CellConfigPanel.tsx`
+  等组件里的所有界面文案（按钮文字、占位提示、标题等）
+- `shared/notices.ts` 中 `NOTICE_MESSAGES` 的所有提示文案——这些是
+  给用户看的统一提示系统文案，属于 UI 文案范畴，需要做成 i18n key，
+  **不要和 `FORWARD_PROMPT_TEXT`（转发任务说明文案）混淆**，两者
+  使用不同的语言判断逻辑，存放位置也保持分开
+- `shared/riskySites.ts` 中的风险提示文案
+- 主进程里通过 IPC 发送给渲染进程展示的任何文案，需要改为只传
+  i18n key 和参数，由渲染进程负责按当前界面语言渲染最终文案（不要
+  在主进程里就拼好中文/英文字符串再发过去，否则切换语言时刷新不了）
+
+### 语言切换设置
+
+新增一个语言设置项，存入 `electron-store`（命名空间化，遵循现有
+规则）：
+
+```typescript
+interface StoreSchema {
+  // ...现有字段...
+  "app.language": "zh" | "en";
+}
+```
+
+设置面板新增语言切换选项，默认值跟随系统语言（`app.getLocale()`
+判断系统是否为中文环境，是则默认 `zh`，否则默认 `en`），用户可
+手动覆盖。
+
+### 不在这次范围内（明确排除，避免任务边界扩散）
+
+- 不做除中英文外的其他语言支持
+- 不做"AI 网站内容"的翻译——各格子加载的是 Claude/ChatGPT 等
+  官网原始页面，页面本身的语言由对应网站决定，MultiMind 不干预，
+  这次国际化只覆盖 MultiMind 自己的界面和提示系统
+- 第一阶段、第二阶段已经验证通过的功能逻辑不需要重新设计，这次
+  只是给现有文案套上 i18n 机制，不改动任何业务逻辑
+
+---
+
 ## 禁止事项（任何情况下都不能违反）
 
 - 禁止使用 `BrowserView`（已废弃）
@@ -946,6 +1052,11 @@ export const CHROME_USER_AGENT =
   结构，两者必须保持独立（见「内置终端模块」章节）
 - 禁止应用退出时遗漏 `terminalManager.destroyAll()`，避免 PTY 子进程
   成为孤儿进程残留在用户系统
+- 禁止让转发任务说明文案（`buildForwardPrompt` 里的固定文案）跟随
+  界面语言切换——它必须跟随对话内容本身的语言，这是两套独立的
+  语言决策，不能用同一个语言状态变量驱动
+- 禁止在主进程里直接拼好中文/英文字符串再通过 IPC 发给渲染进程
+  展示，UI 文案必须只传 i18n key，由渲染进程按当前界面语言渲染
 
 ---
 

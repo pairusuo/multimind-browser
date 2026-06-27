@@ -3,6 +3,7 @@ import type { LayoutTemplate } from './presetTemplates';
 export type LayoutMode = 'single' | 'horizontal' | 'vertical' | 'triple' | 'quad';
 export type CellMode = 'chat' | 'search';
 export type ThemeMode = 'system' | 'light' | 'dark';
+export type AppLanguage = 'zh' | 'en';
 
 export interface CellConfig {
   id: string;
@@ -46,6 +47,7 @@ export const IPC = {
   CLOSE_TAB: 'close-tab',
   SWITCH_TAB: 'switch-tab',
   SET_THEME_MODE: 'set-theme-mode',
+  SET_LANGUAGE: 'set-language',
   CELL_FOCUSED: 'cell-focused',
   FORWARD_COMPLETED: 'forward-completed',
 
@@ -152,6 +154,7 @@ export interface BrowserState {
   tabs: Record<string, CellTab[]>;
   activeTabIds: Record<string, string>;
   themeMode: ThemeMode;
+  language: AppLanguage;
   focusedCellId: string;
   hasCompletedOnboarding: boolean;
 }
@@ -186,6 +189,7 @@ export interface ElectronAPI {
   forwardResponse: (payload: ForwardResponsePayload) => Promise<ForwardRecord>;
   setLayout: (mode: LayoutMode) => Promise<void>;
   setThemeMode: (mode: ThemeMode) => Promise<BrowserState>;
+  setLanguage: (language: AppLanguage) => Promise<BrowserState>;
   setOverlayOpen: (open: boolean) => Promise<void>;
   setSplitRatios: (payload: SplitRatiosPayload) => Promise<void>;
   navigate: (payload: NavigatePayload) => Promise<BrowserState>;

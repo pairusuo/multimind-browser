@@ -1,14 +1,16 @@
 import { FormEvent, useState } from 'react';
 import { findPresetSiteByUrl, inferModeFromUrl, PRESET_SITES } from '../../shared/presetSites';
 import { getRiskySiteReason } from '../../shared/riskySites';
-import { CellMode, LAYOUT_CELLS, LayoutMode } from '../../shared/types';
+import { AppLanguage, CellMode, LAYOUT_CELLS, LayoutMode } from '../../shared/types';
 
 interface CellConfigPanelProps {
   cellUrls: Record<string, string>;
   cellModes: Record<string, CellMode>;
   searchUrlTemplates: Record<string, string>;
+  language: AppLanguage;
   layoutMode: LayoutMode;
   onClose: () => void;
+  onLanguageChange: (language: AppLanguage) => void;
   onSave: (
     nextUrls: Record<string, string>,
     nextModes: Record<string, CellMode>,

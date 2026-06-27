@@ -1,0 +1,11 @@
+{
+  "settings": {
+    "language": {
+      "label": "Interface language",
+      "options": {
+        "zh": "中文",
+        "en": "English"
+      }
+    }
+  }
+}

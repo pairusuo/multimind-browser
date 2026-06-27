@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import {
   ApplyTemplatePayload,
+  AppLanguage,
   CellTabPayload,
   ForwardResponsePayload,
   IPC,
@@ -30,6 +31,10 @@ export function registerIpcHandlers(windowManager: WindowManager): void {
 
   registerHandler(IPC.SET_THEME_MODE, (_event, mode: ThemeMode) => {
     return windowManager.setThemeMode(mode);
+  });
+
+  registerHandler(IPC.SET_LANGUAGE, (_event, language: AppLanguage) => {
+    return windowManager.setLanguage(language);
   });
 
   registerHandler(IPC.NEW_TAB, (_event, payload: CellTabPayload) => {

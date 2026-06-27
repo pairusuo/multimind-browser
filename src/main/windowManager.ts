@@ -1,8 +1,9 @@
-import { BrowserWindow, WebContents, WebContentsView, nativeTheme } from 'electron';
+import { app, BrowserWindow, WebContents, WebContentsView, nativeTheme } from 'electron';
 import { NOTICE_MESSAGES } from '../shared/notices';
 import { findPresetSiteByUrl, inferModeFromUrl, PRESET_SITES } from '../shared/presetSites';
 import {
   ApplyTemplatePayload,
+  AppLanguage,
   BrowserState,
   CELL_IDS,
   CellTab,
@@ -88,6 +89,7 @@ export class WindowManager {
   private tabs: Record<string, CellTab[]>;
   private activeTabIds: Record<string, string>;
   private themeMode: ThemeMode;
+  private language: AppLanguage;
   private activeCells: Record<string, boolean> = {
     'cell-0': true,
     'cell-1': true,
@@ -117,6 +119,7 @@ export class WindowManager {
     this.tabs = this.getStoredTabs();
     this.activeTabIds = this.getStoredActiveTabIds();
     this.themeMode = this.getStoredThemeMode();
+    this.language = this.getStoredLanguage();
     nativeTheme.themeSource = this.themeMode;
     this.cellStates = this.createCellStates();
     this.focusedCellId = this.getStoredFocusedCellId();
@@ -329,6 +332,20 @@ export class WindowManager {
     this.themeMode = mode;
     this.store.set('browser.themeMode', mode);
     nativeTheme.themeSource = mode;
+    return this.getBrowserState();
+  }
+
+  setLanguage(language: AppLanguage): BrowserState {
+    if (this.isDestroyed()) {
+      return this.getBrowserState();
+    }
+
+    if (!isAppLanguage(language)) {
+      return this.getBrowserState();
+    }
+
+    this.language = language;
+    this.store.set('app.language', language);
     return this.getBrowserState();
   }
 
@@ -1009,6 +1026,7 @@ export class WindowManager {
       tabs: cloneTabs(this.tabs),
       activeTabIds: { ...this.activeTabIds },
       themeMode: this.themeMode,
+      language: this.language,
       focusedCellId: this.focusedCellId,
       hasCompletedOnboarding: Boolean(this.store.get('browser.hasCompletedOnboarding', false)),
     };
@@ -1653,6 +1671,11 @@ export class WindowManager {
     return isThemeMode(storedThemeMode) ? storedThemeMode : 'system';
   }
 
+  private getStoredLanguage(): AppLanguage {
+    const storedLanguage = this.store.get('app.language');
+    return isAppLanguage(storedLanguage) ? storedLanguage : getSystemLanguage();
+  }
+
   private bindShortcutEvents(webContents: WebContents): void {
     webContents.on('before-input-event', (event, input) => {
       const nextLayout = getLayoutShortcut(input);
@@ -1797,6 +1820,14 @@ function isLayoutMode(value: unknown): value is LayoutMode {
 
 function isThemeMode(value: unknown): value is ThemeMode {
   return value === 'system' || value === 'light' || value === 'dark';
+}
+
+function isAppLanguage(value: unknown): value is AppLanguage {
+  return value === 'zh' || value === 'en';
+}
+
+function getSystemLanguage(): AppLanguage {
+  return app.getLocale().toLowerCase().startsWith('zh') ? 'zh' : 'en';
 }
 
 function isCellTabList(value: unknown): value is CellTab[] {

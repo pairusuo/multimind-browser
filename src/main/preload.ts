@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import {
   ApplyTemplatePayload,
+  AppLanguage,
   BrowserState,
   CellTabPayload,
   CellFaviconChangedPayload,
@@ -28,6 +29,7 @@ const api: ElectronAPI = {
   forwardResponse: (payload: ForwardResponsePayload) => ipcRenderer.invoke(IPC.FORWARD_RESPONSE, payload),
   setLayout: (mode) => ipcRenderer.invoke(IPC.SET_LAYOUT, mode),
   setThemeMode: (mode: ThemeMode) => ipcRenderer.invoke(IPC.SET_THEME_MODE, mode),
+  setLanguage: (language: AppLanguage) => ipcRenderer.invoke(IPC.SET_LANGUAGE, language),
   setOverlayOpen: (open: boolean) => ipcRenderer.invoke(IPC.SET_OVERLAY_OPEN, open),
   setSplitRatios: (payload: SplitRatiosPayload) => ipcRenderer.invoke(IPC.SET_SPLIT_RATIOS, payload),
   navigate: (payload: NavigatePayload) => ipcRenderer.invoke(IPC.NAVIGATE, payload),

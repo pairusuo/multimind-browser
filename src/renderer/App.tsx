@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import i18n from './i18n';
 import CellConfigPanel from './components/CellConfigPanel';
 import Toolbar from './components/Toolbar';
 import SplitView from './components/SplitView';
@@ -7,6 +8,7 @@ import TemplateChooser from './components/TemplateChooser';
 import {
   BrowserState,
   CELL_IDS,
+  AppLanguage,
   CellMode,
   CellTab,
   DEFAULT_URLS,
@@ -63,6 +65,7 @@ export default function App() {
   const [activeTabIds, setActiveTabIds] = useState<Record<string, string>>(INITIAL_ACTIVE_TAB_IDS);
   const activeTabIdsRef = useRef<Record<string, string>>(INITIAL_ACTIVE_TAB_IDS);
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
+  const [language, setLanguage] = useState<AppLanguage>('zh');
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [showConfigPanel, setShowConfigPanel] = useState(false);
   const [focusedCellId, setFocusedCellId] = useState('cell-0');
@@ -208,6 +211,11 @@ export default function App() {
     applyBrowserState(state);
   }
 
+  async function handleLanguageChange(nextLanguage: AppLanguage) {
+    const state = await window.electronAPI.setLanguage(nextLanguage);
+    applyBrowserState(state);
+  }
+
   async function handleNewTab(cellId: string, url?: string) {
     const state = await window.electronAPI.newTab({ cellId, url });
     applyBrowserState(state);
@@ -263,6 +271,10 @@ export default function App() {
       ...state.activeTabIds,
     };
     setThemeMode(state.themeMode);
+    setLanguage(state.language);
+    if (i18n.language !== state.language) {
+      void i18n.changeLanguage(state.language);
+    }
     setFocusedCellId(state.focusedCellId);
     setHasCompletedOnboarding(state.hasCompletedOnboarding);
   }
@@ -284,6 +296,10 @@ export default function App() {
     setTabs(INITIAL_TABS);
     setActiveTabIds(INITIAL_ACTIVE_TAB_IDS);
     setThemeMode('system');
+    setLanguage('zh');
+    if (i18n.language !== 'zh') {
+      void i18n.changeLanguage('zh');
+    }
     setFocusedCellId('cell-0');
     setHasCompletedOnboarding(true);
     setShowConfigPanel(mode === 'config' || mode === 'risk');
@@ -341,8 +357,10 @@ export default function App() {
           cellUrls={cellUrls}
           cellModes={cellModes}
           searchUrlTemplates={searchUrlTemplates}
+          language={language}
           layoutMode={layoutMode}
           onClose={() => setShowConfigPanel(false)}
+          onLanguageChange={(nextLanguage) => void handleLanguageChange(nextLanguage)}
           onSave={(nextUrls, nextModes, nextSearchTemplates) =>
             void handleSaveCellConfig(nextUrls, nextModes, nextSearchTemplates)
           }
