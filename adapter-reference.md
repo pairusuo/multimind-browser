@@ -486,7 +486,35 @@ function extractLatestResponse() {
 | Claude (claude.ai) | 模式一，识别真实停止控件（`button[aria-label="Stop response"]`） | `[class*="standard-markdown"]` 优先，兼容 `font-claude-message` / `message-content` 等旧选择器 | **已验证通过**。验证条件：账号 dirkchou，窗口保持前台且未锁屏。发送按钮现场确认为 `button[aria-label="Send message"]`，点击后 3 秒内出现用户消息、`Claude is responding` 和 `Stop response`；生成中 `isResponseComplete()` 返回 `false`，约 6.8 秒后停止控件消失并返回 `true`；`extractLatestResponse()` 提取到正文 476 字，未混入界面文字 |
 | ChatGPT (chatgpt.com) | 模式一，识别真实 `stop` 控件（`button[data-testid="stop-button"]`） | `[data-message-author-role="assistant"]`，内容取 `.markdown` | **已验证通过**。修正记录：最初实现误把"已停止思考"按钮当成正在生成中的信号，导致 `isResponseComplete()` 一直返回 `false`，修正为只识别真实 stop 控件后才正确 |
 | DeepSeek (chat.deepseek.com) | **模式一不可靠，已改用模式三**（最新回答文本稳定 1.5 秒后判定完成） | `.ds-markdown.ds-assistant-message-main-content`（取整条，不只取最后一段） | **已验证通过**。重要教训：模式一（检测停止生成按钮）在 DeepSeek 上不可靠，生成过程中也会返回 `true`，原因待查（可能该站点的停止按钮状态和实际生成状态不同步）。改用模式三后验证通过。发送控件也非标准 `button`，实际是 `div[role="button"].ds-button--primary`，写入适配器已同步修正 |
-| 豆包 (www.doubao.com) | 模式三，最新回答文本稳定 1.5 秒后判定完成，兼容停止按钮检测 | message / markdown / answer / main 内容候选，过滤输入框和 UI 文案 | **已验证通过（初版）**。在四格子 6 链路验证中完成首轮回答提取和 3 次作为目标格子的交叉回复提取；选择器仍属于宽匹配策略，后续如果豆包 UI 改版，需要优先用现场 DOM 收窄选择器 |
+| 豆包 (www.doubao.com) | 模式三，最新回答文本稳定 1.5 秒后判定完成，兼容停止按钮检测 | 完整对话提取优先使用虚拟列表行 `.v_list_row`，按 `--vlist-row-transform-y` 排序，用 `data-observe-row` 去重，并从克隆节点中移除 `suggest-*` 推荐容器 | **已验证通过（完整对话提取）**。已验证单轮问题转发给 DeepSeek 时同时包含原始问题和豆包回答；多轮对话转发时能保留真实用户提问和豆包回答，并排除"猜你想问"推荐问题 |
+
+### 豆包完整对话提取经验
+
+豆包对话区使用虚拟列表（virtual scroll）渲染历史消息。虚拟列表站点不能
+依赖 `document.querySelectorAll()` 返回的 DOM 顺序来判断真实对话顺序，
+因为节点可能随着滚动、复用和异步渲染改变出现顺序。豆包消息行可以通过
+`.v_list_row` 定位，真实展示位置记录在行内样式变量
+`--vlist-row-transform-y` 中，提取完整对话时应读取这个 y 坐标排序，而不是
+按查询结果的数组顺序拼接。
+
+滚动采样过程中，同一条消息可能因为图片、卡片或推荐区域异步加载而被重复
+采集。豆包消息行带有 `data-observe-row` 这类稳定标识，应该用它作为去重
+key；如果同一个 key 多次出现，保留文本更完整的一条，同时沿用该消息原始
+位置参与排序。这个处理方式适用于后续接入其他虚拟列表站点：先找稳定的
+行级唯一标识和实际定位信息，再做排序和去重，不要假设 DOM 查询顺序天然
+可靠。
+
+豆包回答后的"猜你想问"推荐问题不是用户真实提问，也不是豆包对当前问题的
+正文回答。现场 DOM 确认这类内容挂在独立的 `suggest-*` 容器中，例如
+`suggest-message-list-wrapper-*`、`suggest-list-item` 和
+`suggest-list-item-title`，而不是正文 markdown 或用户消息容器。提取时
+应该先克隆消息节点，再从克隆节点中精确移除这些推荐容器，最后读取正文
+文本；不要用文字长度、出现位置、固定文案等宽泛启发式规则过滤，避免误删
+真实对话内容。
+
+处理广告、推荐问题、装饰性卡片等非对话内容混入时，标准排查顺序是：先在
+现场 DOM 确认它是否有独立且可识别的容器或 class，再用选择器精确移除；
+只有确认没有稳定结构时，才考虑更弱的降级策略。
 
 **重要教训（2026年6月，Claude 域名问题）**：Claude 适配器为兼容性
 新增了对 `claude.com` 域名的识别，但 `claude.ai` 和 `claude.com`
