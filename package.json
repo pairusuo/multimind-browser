@@ -1,9 +1,9 @@
 {
   "name": "multimind-browser",
-  "productName": "MultiMind Browser",
+  "productName": "MultiMind",
   "version": "0.1.1",
   "private": true,
-  "description": "MultiMind Browser desktop shell",
+  "description": "MultiMind desktop workspace",
   "main": "dist/main/index.js",
   "scripts": {
     "predev": "node scripts/patch-electron-dev-name.mjs && npm run build:main",

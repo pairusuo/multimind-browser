@@ -16,7 +16,8 @@ async function createWindow(): Promise<void> {
     height: 860,
     minWidth: 900,
     minHeight: 640,
-    title: 'MultiMind Browser',
+    title: 'MultiMind',
+    icon: getWindowIconPath(),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -70,7 +71,8 @@ app.on('window-all-closed', () => {
 });
 
 function configureAppIdentity(): void {
-  app.setName('MultiMind Browser');
+  preserveLegacyUserDataPath();
+  app.setName('MultiMind');
 
   if (process.platform !== 'darwin' || app.isPackaged) {
     return;
@@ -81,6 +83,21 @@ function configureAppIdentity(): void {
   if (!dockIcon.isEmpty()) {
     app.dock.setIcon(dockIcon);
   }
+}
+
+function getWindowIconPath(): string | undefined {
+  if (process.platform === 'darwin') {
+    return undefined;
+  }
+
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'icon.ico')
+    : path.join(__dirname, '../../build/icon.ico');
+}
+
+function preserveLegacyUserDataPath(): void {
+  const legacyUserDataPath = path.join(app.getPath('appData'), 'MultiMind Browser');
+  app.setPath('userData', legacyUserDataPath);
 }
 
 async function loadDevRenderer(window: BrowserWindow): Promise<void> {

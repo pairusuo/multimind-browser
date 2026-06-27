@@ -1,10 +1,13 @@
 appId: com.multimind.browser
-productName: MultiMind Browser
+productName: MultiMind
 directories:
   output: release
 files:
   - dist/**
   - package.json
+extraResources:
+  - from: build/icon.ico
+    to: icon.ico
 
 mac:
   icon: build/icon.icns
@@ -26,3 +29,5 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico

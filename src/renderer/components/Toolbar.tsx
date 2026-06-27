@@ -79,7 +79,7 @@ export default function Toolbar({
 
   return (
     <header className={`toolbar${showTabs ? ' toolbar-single' : ''}`}>
-      <div className="toolbar-brand" title="MultiMind Browser" aria-label="MultiMind Browser">
+      <div className="toolbar-brand" title="MultiMind" aria-label="MultiMind">
         <MultiMindLogo />
       </div>
       {showTabs && (
