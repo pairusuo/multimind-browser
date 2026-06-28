@@ -16,7 +16,7 @@ async function createWindow(): Promise<void> {
     height: 860,
     minWidth: 900,
     minHeight: 640,
-    title: 'MultiMind',
+    title: 'MultiMind Flow',
     icon: getWindowIconPath(),
     webPreferences: {
       nodeIntegration: false,
@@ -72,7 +72,7 @@ app.on('window-all-closed', () => {
 
 function configureAppIdentity(): void {
   preserveLegacyUserDataPath();
-  app.setName('MultiMind');
+  app.setName('MultiMind Flow');
 
   if (process.platform !== 'darwin' || app.isPackaged) {
     return;

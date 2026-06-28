@@ -339,7 +339,7 @@ view.webContents.setUserAgent(
 
 当某个 AI 网站更新后注入失效，按以下步骤排查：
 
-1. 在 MultiMind Browser 中打开该 AI 网站，按 F12 打开该格子的 DevTools
+1. 在 MultiMind Flow 中打开该 AI 网站，按 F12 打开该格子的 DevTools
    （主进程代码：`view.webContents.openDevTools({ mode: 'detach' })`）
 
 2. 在 DevTools Console 里手动测试选择器：

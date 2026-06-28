@@ -1,5 +1,5 @@
 appId: com.multimind.browser
-productName: MultiMind
+productName: MultiMind Flow
 directories:
   output: release
 files:

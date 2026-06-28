@@ -1,9 +1,9 @@
 {
   "name": "multimind-browser",
-  "productName": "MultiMind",
+  "productName": "MultiMind Flow",
   "version": "0.1.1",
   "private": true,
-  "description": "MultiMind desktop workspace",
+  "description": "MultiMind Flow desktop workspace",
   "main": "dist/main/index.js",
   "scripts": {
     "predev": "node scripts/patch-electron-dev-name.mjs && npm run build:main",

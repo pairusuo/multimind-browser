@@ -96,15 +96,21 @@ export default function CellConfigPanel({
           </button>
         </header>
         <section className="settings-section" aria-label={t('settings.title')}>
-          <label htmlFor="language-select">{t('settings.language.label')}</label>
-          <select
-            id="language-select"
-            value={language}
-            onChange={(event) => onLanguageChange(event.target.value as AppLanguage)}
-          >
-            <option value="zh">{t('settings.language.options.zh')}</option>
-            <option value="en">{t('settings.language.options.en')}</option>
-          </select>
+          <span className="settings-section-label">{t('settings.language.label')}</span>
+          <div className="language-radio-group" role="radiogroup" aria-label={t('settings.language.label')}>
+            {(['zh', 'en'] as const).map((option) => (
+              <label key={option} className={language === option ? 'active' : ''}>
+                <input
+                  type="radio"
+                  name="app-language"
+                  value={option}
+                  checked={language === option}
+                  onChange={() => onLanguageChange(option)}
+                />
+                <span>{t(`settings.language.options.${option}`)}</span>
+              </label>
+            ))}
+          </div>
         </section>
         <div className="cell-config-list">
           {visibleCells.map((cellId, index) => (

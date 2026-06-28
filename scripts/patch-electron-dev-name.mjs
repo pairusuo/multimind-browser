@@ -12,7 +12,7 @@ if (!fs.existsSync(plistPath)) {
 }
 
 const plistBuddy = '/usr/libexec/PlistBuddy';
-const displayName = 'MultiMind';
+const displayName = 'MultiMind Flow';
 
 setPlistValue('CFBundleName', displayName);
 setPlistValue('CFBundleDisplayName', displayName);

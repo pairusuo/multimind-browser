@@ -772,20 +772,47 @@ textarea {
   padding: 14px 18px 0;
 }
 
-.settings-section label {
+.settings-section-label {
   font-size: 13px;
   font-weight: 700;
 }
 
-.settings-section select {
-  width: 100%;
+.language-radio-group {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: min(240px, 100%);
   height: 34px;
-  min-width: 0;
+  overflow: hidden;
   border: 1px solid rgba(17, 24, 39, 0.14);
   border-radius: 7px;
-  padding: 0 10px;
   background: #ffffff;
+}
+
+.language-radio-group label {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  padding: 0 10px;
   color: #111827;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.language-radio-group label + label {
+  border-left: 1px solid rgba(17, 24, 39, 0.1);
+}
+
+.language-radio-group label.active {
+  background: #e0ebff;
+  color: #1a56db;
+}
+
+.language-radio-group input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .cell-config-row {
@@ -1101,12 +1128,21 @@ textarea {
 
   .panel-header button,
   .panel-actions button,
-  .settings-section select,
+  .language-radio-group,
   .cell-config-row select,
   .cell-config-row input {
     border-color: rgba(255, 255, 255, 0.14);
     background: #111827;
     color: #f9fafb;
+  }
+
+  .language-radio-group label + label {
+    border-left-color: rgba(255, 255, 255, 0.12);
+  }
+
+  .language-radio-group label.active {
+    background: #1e3a8a;
+    color: #bfdbfe;
   }
 
   .grid-cell {
