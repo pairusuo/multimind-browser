@@ -1,5 +1,5 @@
 import { app, BrowserWindow, WebContents, WebContentsView, nativeTheme } from 'electron';
-import { NOTICE_MESSAGES } from '../shared/notices';
+import { NOTICE_MESSAGE_KEYS } from '../shared/notices';
 import { findPresetSiteByUrl, inferModeFromUrl, PRESET_SITES } from '../shared/presetSites';
 import {
   ApplyTemplatePayload,
@@ -36,7 +36,6 @@ const RESPONSE_WAIT_TIMEOUT_MS = 120_000;
 const MAX_CONVERSATION_CHARS = 7000;
 const TIMELINE_NAVIGATION_CARRY_MS = 30_000;
 const BLANK_URL = 'about:blank';
-const EMPTY_STATE_URL = createEmptyStateUrl();
 
 export interface BrowserStore {
   get: (key: string, defaultValue?: unknown) => unknown;
@@ -346,6 +345,7 @@ export class WindowManager {
 
     this.language = language;
     this.store.set('app.language', language);
+    this.reloadEmptyStateViews();
     return this.getBrowserState();
   }
 
@@ -370,7 +370,7 @@ export class WindowManager {
     }
 
     const url = normalizeUrl(rawUrl ?? '');
-    const tab = createTab(url, 'New tab');
+    const tab = createTab(url, getNewTabTitle(this.language));
     this.tabs[cellId] = [...(this.tabs[cellId] ?? []), tab];
     this.activeTabIds[cellId] = tab.id;
     this.storeTabs(cellId);
@@ -392,7 +392,7 @@ export class WindowManager {
 
     const nextTabs = tabs.filter((tab) => tab.id !== targetTabId);
     if (!nextTabs.length) {
-      nextTabs.push(createTab('', 'New tab'));
+      nextTabs.push(createTab('', getNewTabTitle(this.language)));
     }
 
     this.tabs[cellId] = nextTabs;
@@ -640,7 +640,7 @@ export class WindowManager {
     }
 
     let timeline = this.getOrCreateTimeline(cellId);
-    const sortedEntries = [...conversation.entries].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const sortedEntries = normalizeDomTimelineEntries(conversation.entries);
     let appended = false;
 
     sortedEntries.forEach((entry) => {
@@ -649,9 +649,7 @@ export class WindowManager {
       }
 
       this.appendTimelineEntry(cellId, {
-        role: entry.role,
-        content: entry.content,
-        source: 'dom-detected',
+        ...entry,
         timestamp: Date.now(),
         domId: entry.domId,
         order: entry.order,
@@ -670,7 +668,10 @@ export class WindowManager {
     }
 
     const timeline = this.getOrCreateTimeline(cellId);
-    if (timeline.entries.some((entry) => entry.role === 'assistant' && isSameOrContainedContent(entry.content, latestResponse))) {
+    if (timeline.entries.some((entry) => (
+      entry.role === 'assistant'
+      && existingContentCoversNewContent(entry.content, latestResponse)
+    ))) {
       return;
     }
 
@@ -773,29 +774,70 @@ export class WindowManager {
 
   private appendTimelineEntry(cellId: string, entry: TimelineEntry): void {
     const timeline = this.getOrCreateTimeline(cellId);
-    const normalizedContent = normalizeTimelineContent(entry.content);
+    if (entry.role === 'assistant' && isForwardPromptText(entry.content)) {
+      return;
+    }
+
+    const nextEntry = {
+      ...entry,
+      content: entry.content.trim(),
+    };
+
+    if (nextEntry.source === 'forward-injection') {
+      nextEntry.content = stripExistingRoleBlocksFromForwardContent(timeline, nextEntry.content);
+    }
+
+    if (nextEntry.role === 'user') {
+      timeline.entries
+        .filter((existing) => existing.role === 'assistant')
+        .forEach((assistantEntry) => {
+          nextEntry.content = stripContainedTrailingContent(nextEntry.content, assistantEntry.content);
+        });
+    } else {
+      stripExistingUserEntriesContainingAssistant(timeline, nextEntry.content);
+    }
+
+    const normalizedContent = normalizeTimelineContent(nextEntry.content);
     if (!normalizedContent) {
       return;
     }
 
-    if (entry.domId && timeline.entries.some((existing) => existing.domId === entry.domId)) {
+    if (nextEntry.domId) {
+      const existingByDomId = timeline.entries.find((existing) => existing.domId === nextEntry.domId);
+      if (existingByDomId) {
+        if (newContentCoversExistingContent(normalizedContent, existingByDomId.content)) {
+          existingByDomId.content = nextEntry.content;
+          existingByDomId.timestamp = nextEntry.timestamp;
+          existingByDomId.order = nextEntry.order;
+        }
+        return;
+      }
+    }
+
+    const coveredByExisting = timeline.entries.some((existing) => (
+      existing.role === entry.role
+      && existingContentCoversNewContent(existing.content, normalizedContent)
+    ));
+    if (coveredByExisting) {
       return;
     }
 
-    if (timeline.entries.some((existing) => (
-      existing.role === entry.role
-      && isSameOrContainedContent(existing.content, normalizedContent)
-    ))) {
-      return;
+    for (let index = timeline.entries.length - 1; index >= 0; index -= 1) {
+      const existing = timeline.entries[index];
+      if (
+        existing.role === entry.role
+        && newContentCoversExistingContent(normalizedContent, existing.content)
+      ) {
+        timeline.entries.splice(index, 1);
+      }
     }
 
     timeline.entries.push({
-      ...entry,
-      content: entry.content.trim(),
+      ...nextEntry,
     });
   }
 
-  private timelineHasEntry(timeline: CellTimeline, entry: ExtractedConversationEntry): boolean {
+  private timelineHasEntry(timeline: CellTimeline, entry: Omit<TimelineEntry, 'timestamp'>): boolean {
     if (entry.domId && timeline.entries.some((existing) => existing.domId === entry.domId)) {
       return true;
     }
@@ -803,7 +845,7 @@ export class WindowManager {
     const normalizedContent = normalizeTimelineContent(entry.content);
     return timeline.entries.some((existing) => (
       existing.role === entry.role
-      && isSameOrContainedContent(existing.content, normalizedContent)
+      && existingContentCoversNewContent(existing.content, normalizedContent)
     ));
   }
 
@@ -1377,14 +1419,14 @@ export class WindowManager {
       this.updateKnownSiteMetadata(cellId, publicUrl);
       this.updateActiveTab(cellId, {
         url: persistedUrl,
-        title: publicUrl ? view.webContents.getTitle() || safeTabTitle(publicUrl) : 'New tab',
+        title: publicUrl ? view.webContents.getTitle() || safeTabTitle(publicUrl) : getNewTabTitle(this.language),
       });
       this.syncCellState(cellId);
       this.sendUrl(cellId, publicUrl);
       this.checkNavigationNotice(cellId, publicUrl);
       this.sendToRenderer(IPC.CELL_TITLE_CHANGED, {
         cellId,
-        title: publicUrl ? view.webContents.getTitle() : 'New tab',
+        title: publicUrl ? view.webContents.getTitle() : getNewTabTitle(this.language),
       });
     });
     view.webContents.on('did-fail-load', (_event, errorCode, _errorDescription, validatedURL, isMainFrame) => {
@@ -1588,7 +1630,7 @@ export class WindowManager {
     const payload = {
       cellId,
       type,
-      message: NOTICE_MESSAGES[type],
+      messageKey: NOTICE_MESSAGE_KEYS[type],
     };
 
     this.sendToRenderer(IPC.SHOW_CELL_NOTICE, payload);
@@ -1661,7 +1703,7 @@ export class WindowManager {
       const storedTabId = this.store.get(`cells.${cellId}.activeTabId`);
       const tabs = this.tabs[cellId] ?? [];
       const activeTab = tabs.find((tab) => tab.id === storedTabId) ?? tabs[0];
-      activeTabIds[cellId] = activeTab?.id ?? createTab('', 'New tab').id;
+      activeTabIds[cellId] = activeTab?.id ?? createTab('', getNewTabTitle(this.language)).id;
       return activeTabIds;
     }, {});
   }
@@ -1768,11 +1810,32 @@ export class WindowManager {
   }
 
   private getLoadUrl(url: string): string {
-    return url || EMPTY_STATE_URL;
+    return url || createEmptyStateUrl(this.language);
   }
 
   private toPublicUrl(url: string): string {
     return isEmptyStateUrl(url) || url === BLANK_URL ? '' : url;
+  }
+
+  private reloadEmptyStateViews(): void {
+    if (this.isDestroyed()) {
+      return;
+    }
+
+    CELL_IDS.forEach((cellId) => {
+      if (this.cellUrls[cellId]) {
+        return;
+      }
+
+      const view = this.views.get(cellId);
+      if (!view || view.webContents.isDestroyed()) {
+        return;
+      }
+
+      this.loadViewUrl(view, createEmptyStateUrl(this.language));
+      this.updateActiveTab(cellId, { title: getNewTabTitle(this.language) });
+      this.sendToRenderer(IPC.CELL_TITLE_CHANGED, { cellId, title: getNewTabTitle(this.language) });
+    });
   }
 }
 
@@ -1950,11 +2013,14 @@ function parseUrl(rawUrl: string): URL | null {
 }
 
 function isEmptyStateUrl(url: string): boolean {
-  return url === EMPTY_STATE_URL || url.startsWith('data:text/html;charset=utf-8,%3C!doctype%20html%3E%3Chtml%20lang%3D%22zh-CN%22%3E');
+  return url.startsWith('data:text/html;charset=utf-8,%3C!doctype%20html%3E%3Chtml%20lang%3D%22zh-CN%22%3E')
+    || url.startsWith('data:text/html;charset=utf-8,%3C!doctype%20html%3E%3Chtml%20lang%3D%22en%22%3E')
+    || url.includes('multimind-empty-state');
 }
 
-function createEmptyStateUrl(): string {
-  const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="color-scheme" content="light dark"><title>New tab</title><style>
+function createEmptyStateUrl(language: AppLanguage): string {
+  const text = EMPTY_STATE_TEXT[language];
+  const html = `<!doctype html><html lang="${text.htmlLang}"><head><meta charset="utf-8"><meta name="color-scheme" content="light dark"><meta name="multimind-empty-state" content="true"><title>${text.title}</title><style>
 body{margin:0;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f8fafc;color:#111827;display:grid;place-items:center;height:100vh}
 main{width:min(560px,calc(100vw - 48px));text-align:center}
 h1{margin:0 0 10px;font-size:24px}
@@ -1962,10 +2028,34 @@ p{margin:0 0 22px;color:#64748b}
 .links{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
 a{display:block;border:1px solid rgba(15,23,42,.12);border-radius:8px;padding:12px;background:#fff;color:#1d4ed8;text-decoration:none;font-weight:600}
 @media (prefers-color-scheme:dark){body{background:#0f172a;color:#f8fafc}p{color:#94a3b8}a{background:#111827;border-color:rgba(255,255,255,.14);color:#93c5fd}}
-</style></head><body><main><h1>新标签页</h1><p>在地址栏输入网址或搜索内容，或选择常用站点开始。</p><div class="links">
+</style></head><body><main><h1>${text.heading}</h1><p>${text.description}</p><div class="links">
 <a href="https://claude.ai">Claude</a><a href="https://chatgpt.com">ChatGPT</a><a href="https://chat.deepseek.com">DeepSeek</a><a href="https://www.doubao.com">豆包</a>
 </div></main></body></html>`;
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+}
+
+const EMPTY_STATE_TEXT: Record<AppLanguage, {
+  htmlLang: string;
+  title: string;
+  heading: string;
+  description: string;
+}> = {
+  zh: {
+    htmlLang: 'zh-CN',
+    title: '新标签页',
+    heading: '新标签页',
+    description: '在地址栏输入网址或搜索内容，或选择常用站点开始。',
+  },
+  en: {
+    htmlLang: 'en',
+    title: 'New tab',
+    heading: 'New tab',
+    description: 'Enter a URL or search in the address bar, or choose a common site to start.',
+  },
+};
+
+function getNewTabTitle(language: AppLanguage): string {
+  return EMPTY_STATE_TEXT[language].title;
 }
 
 function normalizeHost(hostname: string): string {
@@ -2016,6 +2106,209 @@ function buildForwardPrompt(
   ].join('\n');
 }
 
+function normalizeDomTimelineEntries(entries: ExtractedConversationEntry[]): Array<Omit<TimelineEntry, 'timestamp'>> {
+  const normalized = entries
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map(toTimelineEntryFromDom)
+    .filter((entry): entry is Omit<TimelineEntry, 'timestamp'> => Boolean(entry));
+
+  const reordered = moveFirstUserBeforeLeadingAssistants(normalized);
+  const stripped = stripAssistantContentFromUserEntries(reordered);
+  return dedupeTimelineEntriesAcrossRoles(stripped);
+}
+
+function toTimelineEntryFromDom(entry: ExtractedConversationEntry): Omit<TimelineEntry, 'timestamp'> | null {
+  const forwardedContext = extractForwardPromptContext(entry.content);
+  if (forwardedContext && entry.role === 'assistant') {
+    return null;
+  }
+
+  const content = forwardedContext ?? entry.content;
+  const cleanedContent = cleanExtractedText(content);
+  if (!cleanedContent) {
+    return null;
+  }
+
+  return {
+    role: forwardedContext ? 'user' : entry.role,
+    content: cleanedContent,
+    source: forwardedContext ? 'forward-injection' : 'dom-detected',
+    domId: entry.domId,
+    order: entry.order,
+  };
+}
+
+function stripAssistantContentFromUserEntries(
+  entries: Array<Omit<TimelineEntry, 'timestamp'>>,
+): Array<Omit<TimelineEntry, 'timestamp'>> {
+  return entries
+    .map((entry, index) => {
+      if (entry.role !== 'user') {
+        return entry;
+      }
+
+      const nextAssistant = entries.slice(index + 1).find((candidate) => candidate.role === 'assistant');
+      if (!nextAssistant) {
+        return entry;
+      }
+
+      const strippedContent = stripContainedTrailingContent(entry.content, nextAssistant.content);
+      return strippedContent === entry.content ? entry : { ...entry, content: strippedContent };
+    })
+    .filter((entry) => Boolean(entry.content.trim()));
+}
+
+function moveFirstUserBeforeLeadingAssistants(
+  entries: Array<Omit<TimelineEntry, 'timestamp'>>,
+): Array<Omit<TimelineEntry, 'timestamp'>> {
+  const firstUserIndex = entries.findIndex((entry) => entry.role === 'user');
+  if (firstUserIndex <= 0) {
+    return entries;
+  }
+
+  const leadingEntries = entries.slice(0, firstUserIndex);
+  if (!leadingEntries.every((entry) => entry.role === 'assistant')) {
+    return entries;
+  }
+
+  return [
+    entries[firstUserIndex],
+    ...leadingEntries,
+    ...entries.slice(firstUserIndex + 1),
+  ];
+}
+
+function stripContainedTrailingContent(content: string, trailingContent: string): string {
+  const index = content.indexOf(trailingContent);
+  if (index < 0) {
+    return content;
+  }
+
+  const stripped = content.slice(0, index).trim();
+  return stripped.length >= 2 ? stripped : content;
+}
+
+function stripExistingUserEntriesContainingAssistant(timeline: CellTimeline, assistantContent: string): void {
+  timeline.entries
+    .filter((entry) => entry.role === 'user')
+    .forEach((entry) => {
+      entry.content = stripContainedTrailingContent(entry.content, assistantContent);
+    });
+}
+
+function stripExistingRoleBlocksFromForwardContent(timeline: CellTimeline, content: string): string {
+  const blocks = parseRoleBlocks(content);
+  if (!blocks) {
+    return content;
+  }
+
+  const keptBlocks = blocks.filter((block) => {
+    if (!block.content.trim()) {
+      return false;
+    }
+
+    return !timeline.entries.some((entry) => (
+      entry.role === block.role
+      && existingContentCoversNewContent(entry.content, block.content)
+    ));
+  });
+
+  return formatRoleBlocks(keptBlocks);
+}
+
+function parseRoleBlocks(content: string): Array<{ role: 'user' | 'assistant'; content: string }> | null {
+  const lines = content.trim().split('\n');
+  if (!lines.some((line) => /^(用户|AI)：/.test(line.trim()))) {
+    return null;
+  }
+
+  const blocks: Array<{ role: 'user' | 'assistant'; content: string[] }> = [];
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    const match = /^(用户|AI)：(.*)$/.exec(trimmed);
+    if (match) {
+      blocks.push({
+        role: match[1] === '用户' ? 'user' : 'assistant',
+        content: [match[2].trim()],
+      });
+      return;
+    }
+
+    const current = blocks.at(-1);
+    if (current) {
+      current.content.push(line);
+    }
+  });
+
+  return blocks.map((block) => ({
+    role: block.role,
+    content: block.content.join('\n').trim(),
+  }));
+}
+
+function formatRoleBlocks(blocks: Array<{ role: 'user' | 'assistant'; content: string }>): string {
+  return blocks
+    .filter((block) => block.content.trim())
+    .map((block) => `${block.role === 'user' ? '用户' : 'AI'}：${block.content.trim()}`)
+    .join('\n\n');
+}
+
+function dedupeTimelineEntriesAcrossRoles(
+  entries: Array<Omit<TimelineEntry, 'timestamp'>>,
+): Array<Omit<TimelineEntry, 'timestamp'>> {
+  const deduped: Array<Omit<TimelineEntry, 'timestamp'>> = [];
+  entries.forEach((entry) => {
+    const normalizedContent = normalizeTimelineContent(entry.content);
+    if (!normalizedContent) {
+      return;
+    }
+
+    if (deduped.some((existing) => existingContentCoversNewContent(existing.content, normalizedContent))) {
+      return;
+    }
+
+    for (let index = deduped.length - 1; index >= 0; index -= 1) {
+      if (newContentCoversExistingContent(normalizedContent, deduped[index].content)) {
+        deduped.splice(index, 1);
+      }
+    }
+
+    deduped.push(entry);
+  });
+  return deduped;
+}
+
+function extractForwardPromptContext(text: string): string | null {
+  const normalized = text.trim();
+  const contextHeader = findHeaderIndex(normalized, ['# 对话上下文', '# Conversation Context']);
+  const evaluateHeader = findHeaderIndex(normalized, ['# 请你评价', '# Your Evaluation']);
+  if (contextHeader < 0 || evaluateHeader <= contextHeader) {
+    return null;
+  }
+
+  const headerEnd = normalized.indexOf('\n', contextHeader);
+  if (headerEnd < 0 || headerEnd >= evaluateHeader) {
+    return null;
+  }
+
+  const content = normalized.slice(headerEnd + 1, evaluateHeader).trim();
+  return content ? content : null;
+}
+
+function isForwardPromptText(text: string): boolean {
+  return extractForwardPromptContext(text) !== null;
+}
+
+function findHeaderIndex(text: string, headers: string[]): number {
+  return headers.reduce((foundIndex, header) => {
+    const index = text.indexOf(header);
+    if (index < 0) {
+      return foundIndex;
+    }
+    return foundIndex < 0 ? index : Math.min(foundIndex, index);
+  }, -1);
+}
+
 function normalizeExtractedConversation(value: unknown): ExtractedConversation | null {
   if (!value || typeof value !== 'object' || !Array.isArray((value as ExtractedConversation).entries)) {
     return null;
@@ -2053,7 +2346,8 @@ function normalizeExtractedConversation(value: unknown): ExtractedConversation |
 }
 
 function formatTimelineContext(entries: TimelineEntry[]): string {
-  return entries
+  return getTimelineEntriesInDisplayOrder(entries)
+    .filter((entry) => !(entry.role === 'assistant' && isForwardPromptText(entry.content)))
     .map((entry) => {
       const content = entry.content.trim();
       if (entry.source === 'forward-injection' && startsWithRoleLabel(content)) {
@@ -2065,8 +2359,28 @@ function formatTimelineContext(entries: TimelineEntry[]): string {
     .join('\n\n');
 }
 
+function getTimelineEntriesInDisplayOrder(entries: TimelineEntry[]): TimelineEntry[] {
+  return [...entries].sort((left, right) => {
+    if (left.source !== 'dom-detected' || right.source !== 'dom-detected') {
+      return left.timestamp - right.timestamp;
+    }
+
+    if (typeof left.order === 'number' && typeof right.order === 'number' && left.order !== right.order) {
+      return left.order - right.order;
+    }
+    return left.timestamp - right.timestamp;
+  });
+}
+
 function normalizeTimelineContent(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
+}
+
+function normalizeComparableTimelineContent(text: string): string {
+  return normalizeTimelineContent(text)
+    .replace(/[*_~`#>-]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function normalizeTimelineNavigationUrl(rawUrl: string): string {
@@ -2087,20 +2401,27 @@ function normalizeTimelineNavigationUrl(rawUrl: string): string {
   }
 }
 
-function isSameOrContainedContent(left: string, right: string): boolean {
-  const normalizedLeft = normalizeTimelineContent(left);
-  const normalizedRight = normalizeTimelineContent(right);
-  if (!normalizedLeft || !normalizedRight) {
+function existingContentCoversNewContent(existing: string, next: string): boolean {
+  const normalizedExisting = normalizeComparableTimelineContent(existing);
+  const normalizedNext = normalizeComparableTimelineContent(next);
+  if (!normalizedExisting || !normalizedNext) {
     return false;
   }
-  if (normalizedLeft === normalizedRight) {
+  if (normalizedExisting === normalizedNext) {
     return true;
   }
 
-  const [shorter, longer] = normalizedLeft.length < normalizedRight.length
-    ? [normalizedLeft, normalizedRight]
-    : [normalizedRight, normalizedLeft];
-  return shorter.length >= 80 && longer.includes(shorter);
+  return normalizedNext.length >= 80 && normalizedExisting.includes(normalizedNext);
+}
+
+function newContentCoversExistingContent(next: string, existing: string): boolean {
+  const normalizedNext = normalizeComparableTimelineContent(next);
+  const normalizedExisting = normalizeComparableTimelineContent(existing);
+  if (!normalizedNext || !normalizedExisting || normalizedNext === normalizedExisting) {
+    return false;
+  }
+
+  return normalizedExisting.length >= 80 && normalizedNext.includes(normalizedExisting);
 }
 
 function cleanExtractedText(text: string): string {

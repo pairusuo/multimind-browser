@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { getRiskySiteReason } from '../../shared/riskySites';
+import { useTranslation } from 'react-i18next';
+import { getRiskySiteReasonKey } from '../../shared/riskySites';
 import { CellTab, LayoutMode, ThemeMode } from '../../shared/types';
 
 interface ToolbarProps {
@@ -18,12 +19,12 @@ interface ToolbarProps {
   onNavigate: (url: string) => void;
 }
 
-const LAYOUT_OPTIONS: Array<{ mode: LayoutMode; label: string; title: string }> = [
-  { mode: 'single', label: '1', title: 'Single view' },
-  { mode: 'horizontal', label: '2H', title: 'Side by side' },
-  { mode: 'vertical', label: '2V', title: 'Stacked' },
-  { mode: 'triple', label: '3', title: 'Triple view' },
-  { mode: 'quad', label: '4', title: 'Quad view' },
+const LAYOUT_OPTIONS: Array<{ mode: LayoutMode; label: string; titleKey: string }> = [
+  { mode: 'single', label: '1', titleKey: 'toolbar.layout.single' },
+  { mode: 'horizontal', label: '2H', titleKey: 'toolbar.layout.horizontal' },
+  { mode: 'vertical', label: '2V', titleKey: 'toolbar.layout.vertical' },
+  { mode: 'triple', label: '3', titleKey: 'toolbar.layout.triple' },
+  { mode: 'quad', label: '4', titleKey: 'toolbar.layout.quad' },
 ];
 
 export default function Toolbar({
@@ -41,9 +42,11 @@ export default function Toolbar({
   onThemeModeChange,
   onNavigate,
 }: ToolbarProps) {
+  const { t } = useTranslation();
   const [draftUrl, setDraftUrl] = useState(currentUrl);
   const tabRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const addressRiskReason = layoutMode === 'single' ? getRiskySiteReason(draftUrl) : null;
+  const addressRiskReasonKey = layoutMode === 'single' ? getRiskySiteReasonKey(draftUrl) : null;
+  const addressRiskReason = addressRiskReasonKey ? t(addressRiskReasonKey) : null;
   const showTabs = layoutMode === 'single';
 
   useEffect(() => {
@@ -83,10 +86,11 @@ export default function Toolbar({
         <MultiMindLogo />
       </div>
       {showTabs && (
-        <div className="tab-controls" aria-label="Tabs">
-          <div className="browser-tabs" role="tablist" aria-label="Open tabs">
+        <div className="tab-controls" aria-label={t('toolbar.tabs.controls')}>
+          <div className="browser-tabs" role="tablist" aria-label={t('toolbar.tabs.openTabs')}>
             {tabs.map((tab) => {
               const active = tab.id === activeTabId;
+              const fallbackTitle = t('toolbar.tabs.newTab');
               return (
                 <div
                   key={tab.id}
@@ -96,16 +100,16 @@ export default function Toolbar({
                   role="tab"
                   className={`browser-tab${active ? ' active' : ''}`}
                   aria-selected={active}
-                  title={tab.title || tab.url || 'New tab'}
+                  title={tab.title || tab.url || fallbackTitle}
                 >
                   <button type="button" className="browser-tab-title" onClick={() => onSwitchTab(tab.id)}>
                     {tab.favicon ? <img className="browser-tab-favicon" src={tab.favicon} alt="" /> : null}
-                    <span>{tab.title || tab.url || 'New tab'}</span>
+                    <span>{tab.title || tab.url || fallbackTitle}</span>
                   </button>
                   <button
                     type="button"
                     className="browser-tab-close"
-                    aria-label="Close tab"
+                    aria-label={t('toolbar.tabs.closeTab')}
                     disabled={!activeTabId}
                     onClick={() => onCloseTab(tab.id)}
                   >
@@ -115,57 +119,57 @@ export default function Toolbar({
               );
             })}
           </div>
-        <button type="button" title="New tab" aria-label="New tab" onClick={onNewTab}>
+        <button type="button" title={t('toolbar.tabs.newTab')} aria-label={t('toolbar.tabs.newTab')} onClick={onNewTab}>
           +
         </button>
         </div>
       )}
-      <nav className="navigation-controls" aria-label="Browser navigation">
-        <button type="button" aria-label="Go back" onClick={() => window.electronAPI.navigateBack(focusedCellId)}>
+      <nav className="navigation-controls" aria-label={t('toolbar.navigation.label')}>
+        <button type="button" aria-label={t('toolbar.navigation.back')} onClick={() => window.electronAPI.navigateBack(focusedCellId)}>
           ←
         </button>
-        <button type="button" aria-label="Go forward" onClick={() => window.electronAPI.navigateForward(focusedCellId)}>
+        <button type="button" aria-label={t('toolbar.navigation.forward')} onClick={() => window.electronAPI.navigateForward(focusedCellId)}>
           →
         </button>
-        <button type="button" aria-label="Reload page" onClick={() => window.electronAPI.reload(focusedCellId)}>
+        <button type="button" aria-label={t('toolbar.navigation.reload')} onClick={() => window.electronAPI.reload(focusedCellId)}>
           ↻
         </button>
       </nav>
       <form className={`address-form${addressRiskReason ? ' has-risk' : ''}`} onSubmit={handleSubmit}>
         <label className="sr-only" htmlFor="address-input">
-          Address
+          {t('toolbar.address.label')}
         </label>
         <input
           id="address-input"
           value={draftUrl}
           onChange={(event) => setDraftUrl(event.target.value)}
-          placeholder="输入网址或搜索"
+          placeholder={t('toolbar.address.placeholder')}
           autoComplete="off"
           spellCheck={false}
         />
         {addressRiskReason && (
           <p className="address-risk-warning" title={addressRiskReason}>
-            Gemini 登录受限
+            {t('toolbar.address.geminiRestricted')}
           </p>
         )}
       </form>
-      <div className="layout-controls" role="group" aria-label="Layout">
+      <div className="layout-controls" role="group" aria-label={t('toolbar.layout.label')}>
         {LAYOUT_OPTIONS.map((option) => (
           <button
             key={option.mode}
             type="button"
             className={layoutMode === option.mode ? 'active' : ''}
-            title={option.title}
+            title={t(option.titleKey)}
             aria-pressed={layoutMode === option.mode}
             onClick={() => void handleLayoutChange(option.mode)}
           >
             {option.label}
           </button>
         ))}
-        <button type="button" className="toolbar-icon-button toolbar-settings-button" title="Edit cells" aria-label="Edit cells" onClick={onOpenConfig}>
+        <button type="button" className="toolbar-icon-button toolbar-settings-button" title={t('toolbar.actions.editCells')} aria-label={t('toolbar.actions.editCells')} onClick={onOpenConfig}>
           <SettingsIcon />
         </button>
-        <button type="button" className="toolbar-icon-button" title={`Theme: ${themeMode}`} aria-label="Toggle theme" onClick={cycleThemeMode}>
+        <button type="button" className="toolbar-icon-button" title={t('toolbar.theme.current', { mode: t(`toolbar.theme.modes.${themeMode}`) })} aria-label={t('toolbar.theme.toggle')} onClick={cycleThemeMode}>
           <ThemeIcon mode={themeMode} />
         </button>
       </div>

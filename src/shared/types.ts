@@ -136,7 +136,7 @@ export type NoticeType =
 export interface CellNoticePayload {
   cellId: string;
   type: NoticeType;
-  message: string;
+  messageKey: string;
 }
 
 export interface SplitRatiosPayload {

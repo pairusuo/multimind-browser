@@ -1,7 +1,138 @@
 {
+  "toolbar": {
+    "tabs": {
+      "controls": "标签页控制",
+      "openTabs": "已打开标签页",
+      "newTab": "新建标签页",
+      "closeTab": "关闭标签页"
+    },
+    "navigation": {
+      "label": "浏览器导航",
+      "back": "后退",
+      "forward": "前进",
+      "reload": "重新加载页面"
+    },
+    "address": {
+      "label": "地址",
+      "placeholder": "输入网址或搜索",
+      "geminiRestricted": "Gemini 登录受限"
+    },
+    "layout": {
+      "label": "布局",
+      "single": "单格视图",
+      "horizontal": "左右分屏",
+      "vertical": "上下分屏",
+      "triple": "三格视图",
+      "quad": "四格视图"
+    },
+    "actions": {
+      "editCells": "编辑格子"
+    },
+    "theme": {
+      "toggle": "切换主题",
+      "current": "主题：{{mode}}",
+      "modes": {
+        "system": "跟随系统",
+        "light": "浅色",
+        "dark": "深色"
+      }
+    }
+  },
+  "gridCell": {
+    "empty": "空格子",
+    "aria": {
+      "browserCell": "{{host}} 浏览器格子",
+      "controls": "{{host}} 格子控制"
+    },
+    "mode": {
+      "search": "搜索格子"
+    },
+    "address": {
+      "prompt": "设置格子地址"
+    },
+    "actions": {
+      "forwardTo": "转发到",
+      "reload": "重新加载",
+      "reloadCell": "重新加载格子",
+      "setAddress": "设置格子地址",
+      "openInNewTab": "在新标签页打开",
+      "toggleMute": "切换静音",
+      "toggleSync": "切换同步"
+    },
+    "forward": {
+      "label": "转发到：",
+      "cancel": "取消转发",
+      "dismissStatus": "关闭转发状态",
+      "status": {
+        "forwarding": "正在转发到 {{target}}...",
+        "completed": "已转发到 {{target}}",
+        "completedTruncated": "已转发到 {{target}}（内容超长已裁剪）",
+        "failed": "转发到 {{target}} 未完成"
+      }
+    }
+  },
+  "bottomInput": {
+    "label": "统一输入",
+    "syncCells": "同步格子",
+    "placeholder": "输入后按 Enter 同步发送，Shift+Enter 换行",
+    "send": "发送",
+    "sending": "发送中",
+    "cellToggle": {
+      "title": "切换格子 {{index}}",
+      "aria": "切换格子 {{index}}",
+      "noUrl": "格子 {{index}} 没有 URL"
+    }
+  },
+  "cellConfig": {
+    "title": "编辑格子",
+    "aria": {
+      "panel": "编辑格子"
+    },
+    "cell": {
+      "label": "格子 {{index}}"
+    },
+    "groups": {
+      "chat": "AI 助手",
+      "search": "搜索引擎"
+    },
+    "customUrl": "自定义 URL",
+    "searchModeToggle": "这是搜索引擎",
+    "actions": {
+      "close": "关闭面板",
+      "cancel": "取消",
+      "confirm": "确认"
+    }
+  },
+  "notices": {
+    "close": "关闭提示",
+    "googleLoginBlocked": {
+      "label": "登录受限",
+      "message": "Google 账号登录在内嵌浏览器中受限，建议改用邮箱/密码方式登录此网站（如该网站支持）"
+    },
+    "injectFailed": {
+      "label": "需要手动操作",
+      "message": "该 URL 不支持统一发送"
+    },
+    "loadFailed": {
+      "label": "访问提示",
+      "message": "该网站当前无法访问，请检查 URL 或者稍后重试"
+    },
+    "loadTimeout": {
+      "label": "加载较慢",
+      "message": "该网站加载时间较长，可能存在网络问题"
+    },
+    "conversationTruncated": {
+      "label": "内容已裁剪",
+      "message": "转发内容较长，已自动保留最近部分对话；较早内容未包含"
+    }
+  },
+  "riskySites": {
+    "geminiGoogleLogin": "该网站仅支持 Google 账号登录，Google 已限制嵌入式浏览器登录，可能无法正常使用"
+  },
   "settings": {
+    "title": "设置",
     "language": {
-      "label": "界面语言",
+      "label": "语言",
       "options": {
         "zh": "中文",
         "en": "English"

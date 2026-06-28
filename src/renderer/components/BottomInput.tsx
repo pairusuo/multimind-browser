@@ -1,4 +1,5 @@
 import { KeyboardEvent, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { LAYOUT_CELLS, LayoutMode } from '../../shared/types';
 
 interface BottomInputProps {
@@ -9,6 +10,7 @@ interface BottomInputProps {
 }
 
 export default function BottomInput({ activeCells, cellUrls, layoutMode, onToggleCell }: BottomInputProps) {
+  const { t } = useTranslation();
   const [text, setText] = useState('');
   const [lastSentText, setLastSentText] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -48,8 +50,8 @@ export default function BottomInput({ activeCells, cellUrls, layoutMode, onToggl
   }
 
   return (
-    <aside className="bottom-input-shell" aria-label="Unified input">
-      <div className="sync-cell-toggles" aria-label="Synchronized cells">
+    <aside className="bottom-input-shell" aria-label={t('bottomInput.label')}>
+      <div className="sync-cell-toggles" aria-label={t('bottomInput.syncCells')}>
         {visibleCells.map((cellId, index) => {
           const hasUrl = Boolean(cellUrls[cellId]?.trim());
           const active = Boolean(activeCells[cellId] && hasUrl);
@@ -59,8 +61,10 @@ export default function BottomInput({ activeCells, cellUrls, layoutMode, onToggl
               type="button"
               className={active ? 'active' : ''}
               disabled={!hasUrl || isSending}
-              title={hasUrl ? `Toggle cell ${index + 1}` : `Cell ${index + 1} has no URL`}
-              aria-label={`Toggle cell ${index + 1}`}
+              title={hasUrl
+                ? t('bottomInput.cellToggle.title', { index: index + 1 })
+                : t('bottomInput.cellToggle.noUrl', { index: index + 1 })}
+              aria-label={t('bottomInput.cellToggle.aria', { index: index + 1 })}
               aria-pressed={active}
               onClick={() => onToggleCell(cellId, !active)}
             >
@@ -72,7 +76,7 @@ export default function BottomInput({ activeCells, cellUrls, layoutMode, onToggl
       <textarea
         value={text}
         disabled={isSending}
-        placeholder="输入后按 Enter 同步发送，Shift+Enter 换行"
+        placeholder={t('bottomInput.placeholder')}
         rows={2}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={handleKeyDown}
@@ -83,7 +87,7 @@ export default function BottomInput({ activeCells, cellUrls, layoutMode, onToggl
         disabled={isSending || !text.trim()}
         onClick={() => void send()}
       >
-        {isSending ? '发送中' : '发送'}
+        {isSending ? t('bottomInput.sending') : t('bottomInput.send')}
       </button>
     </aside>
   );

@@ -1,7 +1,138 @@
 {
+  "toolbar": {
+    "tabs": {
+      "controls": "Tab controls",
+      "openTabs": "Open tabs",
+      "newTab": "New tab",
+      "closeTab": "Close tab"
+    },
+    "navigation": {
+      "label": "Browser navigation",
+      "back": "Go back",
+      "forward": "Go forward",
+      "reload": "Reload page"
+    },
+    "address": {
+      "label": "Address",
+      "placeholder": "Enter a URL or search",
+      "geminiRestricted": "Gemini login restricted"
+    },
+    "layout": {
+      "label": "Layout",
+      "single": "Single view",
+      "horizontal": "Side by side",
+      "vertical": "Stacked",
+      "triple": "Triple view",
+      "quad": "Quad view"
+    },
+    "actions": {
+      "editCells": "Edit cells"
+    },
+    "theme": {
+      "toggle": "Toggle theme",
+      "current": "Theme: {{mode}}",
+      "modes": {
+        "system": "System",
+        "light": "Light",
+        "dark": "Dark"
+      }
+    }
+  },
+  "gridCell": {
+    "empty": "Empty cell",
+    "aria": {
+      "browserCell": "{{host}} browser cell",
+      "controls": "{{host}} cell controls"
+    },
+    "mode": {
+      "search": "Search cell"
+    },
+    "address": {
+      "prompt": "Set cell address"
+    },
+    "actions": {
+      "forwardTo": "Forward to",
+      "reload": "Reload",
+      "reloadCell": "Reload cell",
+      "setAddress": "Set cell address",
+      "openInNewTab": "Open in new tab",
+      "toggleMute": "Toggle mute",
+      "toggleSync": "Toggle sync"
+    },
+    "forward": {
+      "label": "Forward to:",
+      "cancel": "Cancel forward",
+      "dismissStatus": "Dismiss forward status",
+      "status": {
+        "forwarding": "Forwarding to {{target}}...",
+        "completed": "Forwarded to {{target}}",
+        "completedTruncated": "Forwarded to {{target}} (long content truncated)",
+        "failed": "Forward to {{target}} did not complete"
+      }
+    }
+  },
+  "bottomInput": {
+    "label": "Unified input",
+    "syncCells": "Synchronized cells",
+    "placeholder": "Press Enter to send to all, Shift+Enter for a new line",
+    "send": "Send",
+    "sending": "Sending",
+    "cellToggle": {
+      "title": "Toggle cell {{index}}",
+      "aria": "Toggle cell {{index}}",
+      "noUrl": "Cell {{index}} has no URL"
+    }
+  },
+  "cellConfig": {
+    "title": "Edit cells",
+    "aria": {
+      "panel": "Edit cells"
+    },
+    "cell": {
+      "label": "Cell {{index}}"
+    },
+    "groups": {
+      "chat": "AI assistants",
+      "search": "Search engines"
+    },
+    "customUrl": "Custom URL",
+    "searchModeToggle": "This is a search engine",
+    "actions": {
+      "close": "Close panel",
+      "cancel": "Cancel",
+      "confirm": "Confirm"
+    }
+  },
+  "notices": {
+    "close": "Close notice",
+    "googleLoginBlocked": {
+      "label": "Login restricted",
+      "message": "Google account login is restricted in embedded browsers. Use email/password login for this site if it supports that option."
+    },
+    "injectFailed": {
+      "label": "Manual send needed",
+      "message": "This URL does not support batch sending."
+    },
+    "loadFailed": {
+      "label": "Access notice",
+      "message": "This site is currently unavailable. Please check URL or try again later."
+    },
+    "loadTimeout": {
+      "label": "Loading slowly",
+      "message": "This site is taking a long time to load and may have network issues."
+    },
+    "conversationTruncated": {
+      "label": "Content truncated",
+      "message": "The forwarded content was long, so only the most recent conversation was kept. Earlier content was not included."
+    }
+  },
+  "riskySites": {
+    "geminiGoogleLogin": "This site only supports Google account login. Google restricts login in embedded browsers, so it may not work properly."
+  },
   "settings": {
+    "title": "Settings",
     "language": {
-      "label": "Interface language",
+      "label": "Language",
       "options": {
         "zh": "中文",
         "en": "English"

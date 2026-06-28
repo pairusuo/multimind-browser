@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { findPresetSiteByUrl, inferModeFromUrl, PRESET_SITES } from '../../shared/presetSites';
-import { getRiskySiteReason } from '../../shared/riskySites';
+import { getRiskySiteReasonKey } from '../../shared/riskySites';
 import { AppLanguage, CellMode, LAYOUT_CELLS, LayoutMode } from '../../shared/types';
 
 interface CellConfigPanelProps {
@@ -22,10 +23,13 @@ export default function CellConfigPanel({
   cellUrls,
   cellModes,
   searchUrlTemplates,
+  language,
   layoutMode,
   onClose,
+  onLanguageChange,
   onSave,
 }: CellConfigPanelProps) {
+  const { t } = useTranslation();
   const visibleCells = LAYOUT_CELLS[layoutMode];
   const [draftUrls, setDraftUrls] = useState<Record<string, string>>(() => ({ ...cellUrls }));
   const [draftModes, setDraftModes] = useState<Record<string, CellMode>>(() => ({ ...cellModes }));
@@ -84,100 +88,149 @@ export default function CellConfigPanel({
 
   return (
     <div className="modal-backdrop">
-      <form className="cell-config-panel" aria-label="Edit cells" onSubmit={handleSubmit}>
+      <form className="cell-config-panel" aria-label={t('cellConfig.aria.panel')} onSubmit={handleSubmit}>
         <header className="panel-header">
-          <h1>编辑格子</h1>
-          <button type="button" aria-label="Close panel" onClick={onClose}>
+          <h1>{t('cellConfig.title')}</h1>
+          <button type="button" aria-label={t('cellConfig.actions.close')} onClick={onClose}>
             ×
           </button>
         </header>
+        <section className="settings-section" aria-label={t('settings.title')}>
+          <label htmlFor="language-select">{t('settings.language.label')}</label>
+          <select
+            id="language-select"
+            value={language}
+            onChange={(event) => onLanguageChange(event.target.value as AppLanguage)}
+          >
+            <option value="zh">{t('settings.language.options.zh')}</option>
+            <option value="en">{t('settings.language.options.en')}</option>
+          </select>
+        </section>
         <div className="cell-config-list">
           {visibleCells.map((cellId, index) => (
-            <section key={cellId} className="cell-config-row">
-              <label htmlFor={`${cellId}-preset`}>格子 {index + 1}</label>
-              <select
-                id={`${cellId}-preset`}
-                value={getSelectedPresetId(cellId)}
-                onChange={(event) => {
-                  const preset = PRESET_SITES.find((site) => site.id === event.target.value);
-                  if (preset) {
-                    updateDraftUrl(cellId, preset.url);
-                  } else {
-                    updateDraftUrl(cellId, '');
-                  }
-                }}
-              >
-                <optgroup label="AI 助手">
-                  {PRESET_SITES.filter((site) => site.mode === 'chat').map((site) => (
-                    <option key={site.id} value={site.id}>
-                      {site.name}
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="搜索引擎">
-                  {PRESET_SITES.filter((site) => site.mode === 'search').map((site) => (
-                    <option key={site.id} value={site.id}>
-                      {site.name}
-                    </option>
-                  ))}
-                </optgroup>
-                <option value="custom">自定义 URL</option>
-              </select>
-              <input
-                value={draftUrls[cellId] ?? ''}
-                onChange={(event) => updateDraftUrl(cellId, event.target.value)}
-                placeholder="https://example.com"
-                spellCheck={false}
-              />
-              {shouldShowSearchModeToggle(cellId) && (
-                <label className="search-mode-toggle">
-                  <input
-                    type="checkbox"
-                    checked={draftModes[cellId] === 'search'}
-                    onChange={(event) => {
-                      const nextMode: CellMode = event.target.checked ? 'search' : 'chat';
-                      setDraftModes((current) => ({
-                        ...current,
-                        [cellId]: nextMode,
-                      }));
-                      if (nextMode === 'search' && !draftSearchTemplates[cellId]) {
-                        setDraftSearchTemplates((current) => ({
-                          ...current,
-                          [cellId]: 'https://www.google.com/search?q={query}',
-                        }));
-                      }
-                    }}
-                  />
-                  这是搜索引擎
-                </label>
-              )}
-              {shouldShowSearchModeToggle(cellId) && draftModes[cellId] === 'search' && (
-                <input
-                  className="search-template-input"
-                  value={draftSearchTemplates[cellId] ?? ''}
-                  onChange={(event) =>
-                    setDraftSearchTemplates((current) => ({
-                      ...current,
-                      [cellId]: event.target.value,
-                    }))
-                  }
-                  placeholder="https://example.com/search?q={query}"
-                  spellCheck={false}
-                />
-              )}
-              {getRiskySiteReason(draftUrls[cellId]) && (
-                <p className="risk-warning">{getRiskySiteReason(draftUrls[cellId])}</p>
-              )}
-            </section>
+            <CellConfigRow
+              key={cellId}
+              cellId={cellId}
+              index={index}
+              draftUrl={draftUrls[cellId] ?? ''}
+              draftMode={draftModes[cellId] ?? 'chat'}
+              draftSearchTemplate={draftSearchTemplates[cellId] ?? ''}
+              selectedPresetId={getSelectedPresetId(cellId)}
+              showSearchModeToggle={shouldShowSearchModeToggle(cellId)}
+              onDraftUrlChange={updateDraftUrl}
+              onDraftModeChange={(nextMode) => {
+                setDraftModes((current) => ({
+                  ...current,
+                  [cellId]: nextMode,
+                }));
+                if (nextMode === 'search' && !draftSearchTemplates[cellId]) {
+                  setDraftSearchTemplates((current) => ({
+                    ...current,
+                    [cellId]: 'https://www.google.com/search?q={query}',
+                  }));
+                }
+              }}
+              onSearchTemplateChange={(nextTemplate) =>
+                setDraftSearchTemplates((current) => ({
+                  ...current,
+                  [cellId]: nextTemplate,
+                }))
+              }
+            />
           ))}
         </div>
         <footer className="panel-actions">
           <button type="button" onClick={onClose}>
-            取消
+            {t('cellConfig.actions.cancel')}
           </button>
-          <button type="submit">确认</button>
+          <button type="submit">{t('cellConfig.actions.confirm')}</button>
         </footer>
       </form>
     </div>
+  );
+}
+
+interface CellConfigRowProps {
+  cellId: string;
+  index: number;
+  draftUrl: string;
+  draftMode: CellMode;
+  draftSearchTemplate: string;
+  selectedPresetId: string;
+  showSearchModeToggle: boolean;
+  onDraftUrlChange: (cellId: string, nextUrl: string) => void;
+  onDraftModeChange: (nextMode: CellMode) => void;
+  onSearchTemplateChange: (nextTemplate: string) => void;
+}
+
+function CellConfigRow({
+  cellId,
+  index,
+  draftUrl,
+  draftMode,
+  draftSearchTemplate,
+  selectedPresetId,
+  showSearchModeToggle,
+  onDraftUrlChange,
+  onDraftModeChange,
+  onSearchTemplateChange,
+}: CellConfigRowProps) {
+  const { t } = useTranslation();
+  const riskReasonKey = getRiskySiteReasonKey(draftUrl);
+
+  return (
+    <section className="cell-config-row">
+      <label htmlFor={`${cellId}-preset`}>{t('cellConfig.cell.label', { index: index + 1 })}</label>
+      <select
+        id={`${cellId}-preset`}
+        value={selectedPresetId}
+        onChange={(event) => {
+          const preset = PRESET_SITES.find((site) => site.id === event.target.value);
+          onDraftUrlChange(cellId, preset ? preset.url : '');
+        }}
+      >
+        <optgroup label={t('cellConfig.groups.chat')}>
+          {PRESET_SITES.filter((site) => site.mode === 'chat').map((site) => (
+            <option key={site.id} value={site.id}>
+              {site.name}
+            </option>
+          ))}
+        </optgroup>
+        <optgroup label={t('cellConfig.groups.search')}>
+          {PRESET_SITES.filter((site) => site.mode === 'search').map((site) => (
+            <option key={site.id} value={site.id}>
+              {site.name}
+            </option>
+          ))}
+        </optgroup>
+        <option value="custom">{t('cellConfig.customUrl')}</option>
+      </select>
+      <input
+        value={draftUrl}
+        onChange={(event) => onDraftUrlChange(cellId, event.target.value)}
+        placeholder="https://example.com"
+        spellCheck={false}
+      />
+      {showSearchModeToggle && (
+        <label className="search-mode-toggle">
+          <input
+            type="checkbox"
+            checked={draftMode === 'search'}
+            onChange={(event) => onDraftModeChange(event.target.checked ? 'search' : 'chat')}
+          />
+          {t('cellConfig.searchModeToggle')}
+        </label>
+      )}
+      {showSearchModeToggle && draftMode === 'search' && (
+        <input
+          className="search-template-input"
+          value={draftSearchTemplate}
+          onChange={(event) => onSearchTemplateChange(event.target.value)}
+          placeholder="https://example.com/search?q={query}"
+          spellCheck={false}
+        />
+      )}
+      {riskReasonKey && <p className="risk-warning">{t(riskReasonKey)}</p>}
+    </section>
   );
 }

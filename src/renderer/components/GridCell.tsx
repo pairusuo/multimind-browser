@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { CellMode, CellNoticePayload } from '../../shared/types';
 import CellNotice from './CellNotice';
 
@@ -34,7 +35,8 @@ export default function GridCell({
   onToggle,
   targetCells,
 }: GridCellProps) {
-  const host = safeHost(meta.url);
+  const { t } = useTranslation();
+  const host = safeHost(meta.url, t('gridCell.empty'));
   const [notice, setNotice] = useState<CellNoticePayload | null>(null);
   const [targetPickerOpen, setTargetPickerOpen] = useState(false);
   const [forwardingTargetId, setForwardingTargetId] = useState<string | null>(null);
@@ -59,7 +61,7 @@ export default function GridCell({
   }, [cellId]);
 
   async function changeUrl() {
-    const nextUrl = window.prompt('Set cell address', meta.url);
+    const nextUrl = window.prompt(t('gridCell.address.prompt'), meta.url);
     if (!nextUrl?.trim()) {
       return;
     }
@@ -71,14 +73,16 @@ export default function GridCell({
     setTargetPickerOpen(false);
     setForwardingTargetId(targetCellId);
     const targetLabel = getTargetLabel(targetCells, targetCellId);
-    setForwardStatus(`正在转发到 ${targetLabel}...`);
+    setForwardStatus(t('gridCell.forward.status.forwarding', { target: targetLabel }));
 
     try {
       const record = await window.electronAPI.forwardResponse({ sourceCellId: cellId, targetCellId });
-      setForwardStatus(record.sourceTruncated ? `已转发到 ${targetLabel}（内容超长已裁剪）` : `已转发到 ${targetLabel}`);
+      setForwardStatus(record.sourceTruncated
+        ? t('gridCell.forward.status.completedTruncated', { target: targetLabel })
+        : t('gridCell.forward.status.completed', { target: targetLabel }));
     } catch (error) {
       console.error('Forward response failed:', error);
-      setForwardStatus(`转发到 ${targetLabel} 未完成`);
+      setForwardStatus(t('gridCell.forward.status.failed', { target: targetLabel }));
     } finally {
       setForwardingTargetId(null);
     }
@@ -87,7 +91,7 @@ export default function GridCell({
   return (
     <article
       className={`grid-cell ${className}${focused ? ' focused' : ''}`}
-      aria-label={`${host} browser cell`}
+      aria-label={t('gridCell.aria.browserCell', { host })}
       onClick={() => onFocus(cellId, meta.url)}
     >
       <div className="cell-header">
@@ -97,7 +101,7 @@ export default function GridCell({
             <button
               type="button"
               className="forward-picker-cancel"
-              aria-label="Dismiss forward status"
+              aria-label={t('gridCell.forward.dismissStatus')}
               onClick={() => setForwardStatus(null)}
             >
               ×
@@ -105,7 +109,7 @@ export default function GridCell({
           </div>
         ) : targetPickerOpen ? (
           <div className="forward-picker-inline" onClick={(event) => event.stopPropagation()}>
-            <span className="forward-picker-label">转发到：</span>
+            <span className="forward-picker-label">{t('gridCell.forward.label')}</span>
             <div className="forward-picker-targets">
               {targetCells.map((target) => (
                 <button
@@ -121,7 +125,7 @@ export default function GridCell({
             <button
               type="button"
               className="forward-picker-cancel"
-              aria-label="Cancel forward"
+              aria-label={t('gridCell.forward.cancel')}
               onClick={() => setTargetPickerOpen(false)}
             >
               ×
@@ -131,14 +135,14 @@ export default function GridCell({
           <>
             <div className="cell-overlay" aria-live="polite">
               {meta.favicon ? <img src={meta.favicon} alt="" /> : <span className="favicon-placeholder" />}
-              {meta.mode === 'search' && <span className="cell-mode-badge" title="Search cell">⌕</span>}
+              {meta.mode === 'search' && <span className="cell-mode-badge" title={t('gridCell.mode.search')}>⌕</span>}
               <span>{host}</span>
             </div>
-            <div className="cell-menu" aria-label={`${host} cell controls`}>
+            <div className="cell-menu" aria-label={t('gridCell.aria.controls', { host })}>
               <button
                 type="button"
-                title="Forward To"
-                aria-label="Forward To"
+                title={t('gridCell.actions.forwardTo')}
+                aria-label={t('gridCell.actions.forwardTo')}
                 aria-expanded={targetPickerOpen}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -147,20 +151,20 @@ export default function GridCell({
               >
                 ⇥
               </button>
-              <button type="button" title="Reload" aria-label="Reload cell" onClick={() => window.electronAPI.reload(cellId)}>
+              <button type="button" title={t('gridCell.actions.reload')} aria-label={t('gridCell.actions.reloadCell')} onClick={() => window.electronAPI.reload(cellId)}>
                 ↻
               </button>
-              <button type="button" title="Set address" aria-label="Set cell address" onClick={() => void changeUrl()}>
+              <button type="button" title={t('gridCell.actions.setAddress')} aria-label={t('gridCell.actions.setAddress')} onClick={() => void changeUrl()}>
                 ⌘
               </button>
-              <button type="button" title="Open in new tab" aria-label="Open in new tab" onClick={() => onNewTab(cellId, meta.url)}>
+              <button type="button" title={t('gridCell.actions.openInNewTab')} aria-label={t('gridCell.actions.openInNewTab')} onClick={() => onNewTab(cellId, meta.url)}>
                 +
               </button>
               <button
                 type="button"
                 className={meta.muted ? 'active' : ''}
-                title="Toggle mute"
-                aria-label="Toggle mute"
+                title={t('gridCell.actions.toggleMute')}
+                aria-label={t('gridCell.actions.toggleMute')}
                 aria-pressed={meta.muted}
                 onClick={() => onToggleMute(cellId)}
               >
@@ -169,8 +173,8 @@ export default function GridCell({
               <button
                 type="button"
                 className={meta.active ? 'active' : ''}
-                title="Toggle sync"
-                aria-label="Toggle sync"
+                title={t('gridCell.actions.toggleSync')}
+                aria-label={t('gridCell.actions.toggleSync')}
                 aria-pressed={meta.active}
                 onClick={() => onToggle(cellId, !meta.active)}
               >
@@ -185,11 +189,11 @@ export default function GridCell({
   );
 }
 
-function safeHost(url: string): string {
+function safeHost(url: string, emptyLabel: string): string {
   try {
-    return url ? new URL(url).host : 'Empty cell';
+    return url ? new URL(url).host : emptyLabel;
   } catch {
-    return url || 'Empty cell';
+    return url || emptyLabel;
   }
 }
 

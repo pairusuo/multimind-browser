@@ -764,6 +764,30 @@ textarea {
   padding: 16px 18px;
 }
 
+.settings-section {
+  display: grid;
+  grid-template-columns: 120px minmax(160px, 240px);
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px 0;
+}
+
+.settings-section label {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-section select {
+  width: 100%;
+  height: 34px;
+  min-width: 0;
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  border-radius: 7px;
+  padding: 0 10px;
+  background: #ffffff;
+  color: #111827;
+}
+
 .cell-config-row {
   display: grid;
   grid-template-columns: 72px minmax(140px, 180px) minmax(180px, 1fr);
@@ -941,6 +965,10 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .settings-section {
+    grid-template-columns: 1fr;
+  }
+
   .cell-config-row {
     grid-template-columns: 1fr;
   }
@@ -1073,6 +1101,7 @@ textarea {
 
   .panel-header button,
   .panel-actions button,
+  .settings-section select,
   .cell-config-row select,
   .cell-config-row input {
     border-color: rgba(255, 255, 255, 0.14);
