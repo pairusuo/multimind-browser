@@ -31,10 +31,12 @@ export const LAYOUT_CELLS: Record<LayoutMode, string[]> = {
 export const IPC = {
   GET_BROWSER_STATE: 'get-browser-state',
   SEND_TO_ALL: 'send-to-all',
+  START_NEW_DISCUSSION: 'start-new-discussion',
   FORWARD_RESPONSE: 'forward-response',
   APPLY_TEMPLATE: 'apply-template',
   SET_LAYOUT: 'set-layout',
   SET_OVERLAY_OPEN: 'set-overlay-open',
+  SET_MAXIMIZED_CELL: 'set-maximized-cell',
   SET_SPLIT_RATIOS: 'set-split-ratios',
   NAVIGATE: 'navigate',
   NAVIGATE_BACK: 'navigate-back',
@@ -144,6 +146,10 @@ export interface SplitRatiosPayload {
   verticalRatio?: number;
 }
 
+export interface SetMaximizedCellPayload {
+  cellId: string | null;
+}
+
 export interface BrowserState {
   layoutMode: LayoutMode;
   cellUrls: Record<string, string>;
@@ -156,6 +162,7 @@ export interface BrowserState {
   themeMode: ThemeMode;
   language: AppLanguage;
   focusedCellId: string;
+  maximizedCellId: string | null;
   hasCompletedOnboarding: boolean;
 }
 
@@ -186,11 +193,13 @@ export interface ElectronAPI {
   getBrowserState: () => Promise<BrowserState>;
   applyTemplate: (payload: ApplyTemplatePayload) => Promise<BrowserState>;
   sendToAll: (payload: SendToAllPayload) => Promise<void>;
+  startNewDiscussion: () => Promise<BrowserState>;
   forwardResponse: (payload: ForwardResponsePayload) => Promise<ForwardRecord>;
   setLayout: (mode: LayoutMode) => Promise<void>;
   setThemeMode: (mode: ThemeMode) => Promise<BrowserState>;
   setLanguage: (language: AppLanguage) => Promise<BrowserState>;
   setOverlayOpen: (open: boolean) => Promise<void>;
+  setMaximizedCell: (payload: SetMaximizedCellPayload) => Promise<void>;
   setSplitRatios: (payload: SplitRatiosPayload) => Promise<void>;
   navigate: (payload: NavigatePayload) => Promise<BrowserState>;
   navigateBack: (cellId: string) => Promise<void>;

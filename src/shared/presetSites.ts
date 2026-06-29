@@ -4,13 +4,14 @@ export interface PresetSite {
   id: string;
   name: string;
   url: string;
+  newConversationUrl?: string;
   region: 'international' | 'china';
   mode: CellMode;
   searchUrlTemplate?: string;
 }
 
 export const PRESET_SITES: PresetSite[] = [
-  { id: 'claude', name: 'Claude', url: 'https://claude.ai', region: 'international', mode: 'chat' },
+  { id: 'claude', name: 'Claude', url: 'https://claude.ai', newConversationUrl: 'https://claude.ai/new', region: 'international', mode: 'chat' },
   { id: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com', region: 'international', mode: 'chat' },
   { id: 'grok', name: 'Grok', url: 'https://grok.com', region: 'international', mode: 'chat' },
   { id: 'perplexity', name: 'Perplexity', url: 'https://perplexity.ai', region: 'international', mode: 'chat' },

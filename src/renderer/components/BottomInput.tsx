@@ -2,14 +2,23 @@ import { KeyboardEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LAYOUT_CELLS, LayoutMode } from '../../shared/types';
 
+const newConversationIconUrl = new URL('../assets/new-conversation.svg', import.meta.url).href;
+
 interface BottomInputProps {
   activeCells: Record<string, boolean>;
   cellUrls: Record<string, string>;
   layoutMode: LayoutMode;
+  onStartNewDiscussion: () => void;
   onToggleCell: (cellId: string, active: boolean) => void;
 }
 
-export default function BottomInput({ activeCells, cellUrls, layoutMode, onToggleCell }: BottomInputProps) {
+export default function BottomInput({
+  activeCells,
+  cellUrls,
+  layoutMode,
+  onStartNewDiscussion,
+  onToggleCell,
+}: BottomInputProps) {
   const { t } = useTranslation();
   const [text, setText] = useState('');
   const [lastSentText, setLastSentText] = useState('');
@@ -73,6 +82,15 @@ export default function BottomInput({ activeCells, cellUrls, layoutMode, onToggl
           );
         })}
       </div>
+      <button
+        type="button"
+        className="new-discussion-button"
+        title={t('bottomInput.newDiscussion')}
+        aria-label={t('bottomInput.newDiscussion')}
+        onClick={onStartNewDiscussion}
+      >
+        <img src={newConversationIconUrl} alt="" />
+      </button>
       <textarea
         value={text}
         disabled={isSending}

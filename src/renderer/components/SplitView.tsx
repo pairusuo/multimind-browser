@@ -10,7 +10,9 @@ interface SplitViewProps {
   mutedCells: Record<string, boolean>;
   focusedCellId: string;
   layoutMode: LayoutMode;
+  maximizedCellId: string | null;
   onFocusCell: (cellId: string, url: string) => void;
+  onToggleMaximized: (cellId: string) => void;
   onNewTab: (cellId: string, url?: string) => void;
   onToggleMute: (cellId: string) => void;
   onToggleCell: (cellId: string, active: boolean) => void;
@@ -30,7 +32,9 @@ export default function SplitView({
   mutedCells,
   focusedCellId,
   layoutMode,
+  maximizedCellId,
   onFocusCell,
+  onToggleMaximized,
   onNewTab,
   onToggleMute,
   onToggleCell,
@@ -38,7 +42,9 @@ export default function SplitView({
   const [cellFavicons, setCellFavicons] = useState<CellFavicons>(INITIAL_FAVICONS);
   const [horizontalRatio, setHorizontalRatio] = useState(0.5);
   const [verticalRatio, setVerticalRatio] = useState(0.5);
-  const visibleCells = LAYOUT_CELLS[layoutMode];
+  const layoutCells = LAYOUT_CELLS[layoutMode];
+  const visibleCells = maximizedCellId && layoutCells.includes(maximizedCellId) ? [maximizedCellId] : layoutCells;
+  const showSplitters = !maximizedCellId;
 
   useEffect(() => {
     const removeFaviconListener = window.electronAPI.onCellFaviconChanged((payload) => {
@@ -56,15 +62,19 @@ export default function SplitView({
   const gridStyle = useMemo(
     () => ({
       gridTemplateColumns:
-        layoutMode === 'horizontal' || layoutMode === 'triple' || layoutMode === 'quad'
+        maximizedCellId
+          ? '1fr'
+          : layoutMode === 'horizontal' || layoutMode === 'triple' || layoutMode === 'quad'
           ? `${horizontalRatio}fr 4px ${1 - horizontalRatio}fr`
           : '1fr',
       gridTemplateRows:
-        layoutMode === 'vertical' || layoutMode === 'triple' || layoutMode === 'quad'
+        maximizedCellId
+          ? '1fr'
+          : layoutMode === 'vertical' || layoutMode === 'triple' || layoutMode === 'quad'
           ? `${verticalRatio}fr 4px ${1 - verticalRatio}fr`
           : '1fr',
     }),
-    [horizontalRatio, layoutMode, verticalRatio],
+    [horizontalRatio, layoutMode, maximizedCellId, verticalRatio],
   );
 
   function handleHorizontalDrag(event: PointerEvent<HTMLDivElement>) {
@@ -100,21 +110,27 @@ export default function SplitView({
   }
 
   return (
-    <section className={`split-view split-view-${layoutMode}`} style={gridStyle} aria-label="Split browser cells">
+    <section
+      className={`split-view split-view-${layoutMode}${maximizedCellId ? ' split-view-maximized' : ''}`}
+      style={gridStyle}
+      aria-label="Split browser cells"
+    >
       {visibleCells.includes('cell-0') && (
         <GridCell
           cellId="cell-0"
           className="cell-a"
           focused={focusedCellId === 'cell-0'}
-          targetCells={getTargetCells('cell-0', visibleCells, cellUrls)}
+          maximized={maximizedCellId === 'cell-0'}
+          targetCells={getTargetCells('cell-0', layoutCells, cellUrls)}
           meta={getCellMeta('cell-0', cellUrls, cellModes, activeCells, mutedCells, cellFavicons)}
           onFocus={onFocusCell}
+          onToggleMaximized={onToggleMaximized}
           onNewTab={onNewTab}
           onToggleMute={onToggleMute}
           onToggle={onToggleCell}
         />
       )}
-      {(layoutMode === 'horizontal' || layoutMode === 'triple' || layoutMode === 'quad') && (
+      {showSplitters && (layoutMode === 'horizontal' || layoutMode === 'triple' || layoutMode === 'quad') && (
         <div
           className="splitter splitter-vertical"
           role="separator"
@@ -132,15 +148,17 @@ export default function SplitView({
           cellId="cell-1"
           className="cell-b"
           focused={focusedCellId === 'cell-1'}
-          targetCells={getTargetCells('cell-1', visibleCells, cellUrls)}
+          maximized={maximizedCellId === 'cell-1'}
+          targetCells={getTargetCells('cell-1', layoutCells, cellUrls)}
           meta={getCellMeta('cell-1', cellUrls, cellModes, activeCells, mutedCells, cellFavicons)}
           onFocus={onFocusCell}
+          onToggleMaximized={onToggleMaximized}
           onNewTab={onNewTab}
           onToggleMute={onToggleMute}
           onToggle={onToggleCell}
         />
       )}
-      {(layoutMode === 'vertical' || layoutMode === 'triple' || layoutMode === 'quad') && (
+      {showSplitters && (layoutMode === 'vertical' || layoutMode === 'triple' || layoutMode === 'quad') && (
         <div
           className="splitter splitter-horizontal"
           role="separator"
@@ -158,9 +176,11 @@ export default function SplitView({
           cellId="cell-2"
           className="cell-c"
           focused={focusedCellId === 'cell-2'}
-          targetCells={getTargetCells('cell-2', visibleCells, cellUrls)}
+          maximized={maximizedCellId === 'cell-2'}
+          targetCells={getTargetCells('cell-2', layoutCells, cellUrls)}
           meta={getCellMeta('cell-2', cellUrls, cellModes, activeCells, mutedCells, cellFavicons)}
           onFocus={onFocusCell}
+          onToggleMaximized={onToggleMaximized}
           onNewTab={onNewTab}
           onToggleMute={onToggleMute}
           onToggle={onToggleCell}
@@ -171,9 +191,11 @@ export default function SplitView({
           cellId="cell-3"
           className="cell-d"
           focused={focusedCellId === 'cell-3'}
-          targetCells={getTargetCells('cell-3', visibleCells, cellUrls)}
+          maximized={maximizedCellId === 'cell-3'}
+          targetCells={getTargetCells('cell-3', layoutCells, cellUrls)}
           meta={getCellMeta('cell-3', cellUrls, cellModes, activeCells, mutedCells, cellFavicons)}
           onFocus={onFocusCell}
+          onToggleMaximized={onToggleMaximized}
           onNewTab={onNewTab}
           onToggleMute={onToggleMute}
           onToggle={onToggleCell}

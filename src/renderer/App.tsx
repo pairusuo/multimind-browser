@@ -69,6 +69,7 @@ export default function App() {
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [showConfigPanel, setShowConfigPanel] = useState(false);
   const [focusedCellId, setFocusedCellId] = useState('cell-0');
+  const [maximizedCellId, setMaximizedCellId] = useState<string | null>(null);
   const url = cellUrls[focusedCellId] ?? '';
 
   useEffect(() => {
@@ -147,6 +148,8 @@ export default function App() {
 
   async function handleLayoutChange(mode: LayoutMode) {
     setLayoutMode(mode);
+    setMaximizedCellId(null);
+    await window.electronAPI.setMaximizedCell({ cellId: null });
     setCellUrls((current) => fillDefaultUrlsForLayout(current, mode));
     const firstCell = 'cell-0';
     setFocusedCellId(firstCell);
@@ -236,6 +239,20 @@ export default function App() {
     applyBrowserState(state);
   }
 
+  async function handleStartNewDiscussion() {
+    const state = await window.electronAPI.startNewDiscussion();
+    applyBrowserState(state);
+  }
+
+  function handleToggleMaximizedCell(cellId: string) {
+    const nextCellId = maximizedCellId === cellId ? null : cellId;
+    setMaximizedCellId(nextCellId);
+    if (nextCellId) {
+      setFocusedCellId(nextCellId);
+    }
+    void window.electronAPI.setMaximizedCell({ cellId: nextCellId });
+  }
+
   function applyBrowserState(state: BrowserState) {
     setLayoutMode(state.layoutMode);
     setCellUrls({
@@ -276,6 +293,7 @@ export default function App() {
       void i18n.changeLanguage(state.language);
     }
     setFocusedCellId(state.focusedCellId);
+    setMaximizedCellId(state.maximizedCellId);
     setHasCompletedOnboarding(state.hasCompletedOnboarding);
   }
 
@@ -331,7 +349,10 @@ export default function App() {
         onThemeModeChange={(mode) => void handleThemeModeChange(mode)}
         onNavigate={(url) => void handleNavigate(url)}
       />
-      <main className={`browser-stage browser-stage-${layoutMode}`} aria-label="Browser content">
+      <main
+        className={`browser-stage browser-stage-${layoutMode}${maximizedCellId ? ' browser-stage-maximized' : ''}`}
+        aria-label="Browser content"
+      >
         <SplitView
           activeCells={activeCells}
           cellModes={cellModes}
@@ -339,18 +360,23 @@ export default function App() {
           mutedCells={mutedCells}
           focusedCellId={focusedCellId}
           layoutMode={layoutMode}
+          maximizedCellId={maximizedCellId}
           onFocusCell={handleFocusCell}
+          onToggleMaximized={handleToggleMaximizedCell}
           onNewTab={(cellId, url) => void handleNewTab(cellId, url)}
           onToggleMute={(cellId) => void handleToggleMute(cellId)}
           onToggleCell={handleToggleCell}
         />
       </main>
-      <BottomInput
-        activeCells={activeCells}
-        cellUrls={cellUrls}
-        layoutMode={layoutMode}
-        onToggleCell={handleToggleCell}
-      />
+      {!maximizedCellId && (
+        <BottomInput
+          activeCells={activeCells}
+          cellUrls={cellUrls}
+          layoutMode={layoutMode}
+          onStartNewDiscussion={() => void handleStartNewDiscussion()}
+          onToggleCell={handleToggleCell}
+        />
+      )}
       {!hasCompletedOnboarding && <TemplateChooser onApplyTemplate={(template) => void handleApplyTemplate(template)} />}
       {showConfigPanel && (
         <CellConfigPanel

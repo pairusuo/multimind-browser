@@ -1,4 +1,5 @@
 import { app, BrowserWindow, nativeImage } from 'electron';
+import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { registerIpcHandlers } from './ipcHandlers';
@@ -71,8 +72,8 @@ app.on('window-all-closed', () => {
 });
 
 function configureAppIdentity(): void {
-  preserveLegacyUserDataPath();
   app.setName('MultiMind Flow');
+  configureUserDataPath();
 
   if (process.platform !== 'darwin' || app.isPackaged) {
     return;
@@ -95,9 +96,24 @@ function getWindowIconPath(): string | undefined {
     : path.join(__dirname, '../../build/icon.ico');
 }
 
-function preserveLegacyUserDataPath(): void {
+function configureUserDataPath(): void {
+  const userDataPath = path.join(app.getPath('appData'), 'MultiMind Flow');
   const legacyUserDataPath = path.join(app.getPath('appData'), 'MultiMind Browser');
-  app.setPath('userData', legacyUserDataPath);
+
+  migrateLegacyUserDataPath(legacyUserDataPath, userDataPath);
+  app.setPath('userData', userDataPath);
+}
+
+function migrateLegacyUserDataPath(legacyUserDataPath: string, userDataPath: string): void {
+  if (!fsSync.existsSync(legacyUserDataPath) || fsSync.existsSync(userDataPath)) {
+    return;
+  }
+
+  try {
+    fsSync.renameSync(legacyUserDataPath, userDataPath);
+  } catch (error) {
+    console.error('Failed to migrate legacy user data path:', error);
+  }
 }
 
 async function loadDevRenderer(window: BrowserWindow): Promise<void> {

@@ -10,6 +10,7 @@ interface GridCellProps {
   cellId: string;
   className: string;
   focused: boolean;
+  maximized: boolean;
   targetCells: Array<{ cellId: string; label: string }>;
   meta: {
     url: string;
@@ -19,6 +20,7 @@ interface GridCellProps {
     muted: boolean;
   };
   onFocus: (cellId: string, url: string) => void;
+  onToggleMaximized: (cellId: string) => void;
   onNewTab: (cellId: string, url?: string) => void;
   onToggleMute: (cellId: string) => void;
   onToggle: (cellId: string, active: boolean) => void;
@@ -28,8 +30,10 @@ export default function GridCell({
   cellId,
   className,
   focused,
+  maximized,
   meta,
   onFocus,
+  onToggleMaximized,
   onNewTab,
   onToggleMute,
   onToggle,
@@ -90,7 +94,7 @@ export default function GridCell({
 
   return (
     <article
-      className={`grid-cell ${className}${focused ? ' focused' : ''}`}
+      className={`grid-cell ${className}${focused ? ' focused' : ''}${maximized ? ' maximized' : ''}`}
       aria-label={t('gridCell.aria.browserCell', { host })}
       onClick={() => onFocus(cellId, meta.url)}
     >
@@ -150,6 +154,19 @@ export default function GridCell({
                 }}
               >
                 ⇥
+              </button>
+              <button
+                type="button"
+                className={maximized ? 'active' : ''}
+                title={maximized ? t('gridCell.actions.restoreCell') : t('gridCell.actions.maximizeCell')}
+                aria-label={maximized ? t('gridCell.actions.restoreCell') : t('gridCell.actions.maximizeCell')}
+                aria-pressed={maximized}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToggleMaximized(cellId);
+                }}
+              >
+                {maximized ? '▣' : '□'}
               </button>
               <button type="button" title={t('gridCell.actions.reload')} aria-label={t('gridCell.actions.reloadCell')} onClick={() => window.electronAPI.reload(cellId)}>
                 ↻

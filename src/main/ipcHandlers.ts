@@ -9,6 +9,7 @@ import {
   LayoutMode,
   NavigatePayload,
   SendToAllPayload,
+  SetMaximizedCellPayload,
   SetCellUrlPayload,
   SplitRatiosPayload,
   ThemeMode,
@@ -23,6 +24,10 @@ export function registerIpcHandlers(windowManager: WindowManager): void {
 
   registerHandler(IPC.SEND_TO_ALL, (_event, payload: SendToAllPayload) => {
     return windowManager.sendToAll(payload.text);
+  });
+
+  registerHandler(IPC.START_NEW_DISCUSSION, () => {
+    return windowManager.startNewDiscussion();
   });
 
   registerHandler(IPC.FORWARD_RESPONSE, (_event, payload: ForwardResponsePayload) => {
@@ -75,6 +80,10 @@ export function registerIpcHandlers(windowManager: WindowManager): void {
 
   registerHandler(IPC.SET_OVERLAY_OPEN, (_event, open: boolean) => {
     windowManager.setOverlayOpen(open);
+  });
+
+  registerHandler(IPC.SET_MAXIMIZED_CELL, (_event, payload: SetMaximizedCellPayload) => {
+    windowManager.setMaximizedCell(payload.cellId);
   });
 
   registerHandler(IPC.SET_SPLIT_RATIOS, (_event, payload: SplitRatiosPayload) => {

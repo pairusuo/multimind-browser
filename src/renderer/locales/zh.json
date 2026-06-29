@@ -52,6 +52,8 @@
     },
     "actions": {
       "forwardTo": "转发到",
+      "maximizeCell": "最大化格子",
+      "restoreCell": "还原格子",
       "reload": "重新加载",
       "reloadCell": "重新加载格子",
       "setAddress": "设置格子地址",
@@ -74,6 +76,7 @@
   "bottomInput": {
     "label": "统一输入",
     "syncCells": "同步格子",
+    "newDiscussion": "所有格子开启新会话",
     "placeholder": "输入后按 Enter 同步发送，Shift+Enter 换行",
     "send": "发送",
     "sending": "发送中",

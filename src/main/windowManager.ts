@@ -98,6 +98,7 @@ export class WindowManager {
   private horizontalRatio = 0.5;
   private verticalRatio = 0.5;
   private focusedCellId: string;
+  private maximizedCellId: string | null = null;
   private overlayOpen = false;
   private destroyed = false;
   private forwardRecords: ForwardRecord[] = [];
@@ -143,9 +144,11 @@ export class WindowManager {
     const cells = LAYOUT_CELLS[this.layoutMode];
     const contentHeight = Math.max(
       0,
-      height - TOOLBAR_HEIGHT - (this.layoutMode === 'single' ? 0 : BOTTOM_INPUT_HEIGHT),
+      height - TOOLBAR_HEIGHT - (this.layoutMode === 'single' || this.maximizedCellId ? 0 : BOTTOM_INPUT_HEIGHT),
     );
-    const boundsByCell = this.getBoundsByCell(width, contentHeight);
+    const boundsByCell = this.maximizedCellId
+      ? { [this.maximizedCellId]: { x: 0, y: TOOLBAR_HEIGHT, width, height: contentHeight } }
+      : this.getBoundsByCell(width, contentHeight);
 
     CELL_IDS.forEach((cellId) => {
       const view = this.views.get(cellId);
@@ -157,7 +160,7 @@ export class WindowManager {
         return;
       }
 
-      if (this.overlayOpen || !cells.includes(cellId)) {
+      if (this.overlayOpen || (this.maximizedCellId ? cellId !== this.maximizedCellId : !cells.includes(cellId))) {
         safeSetBounds(view, { x: -10000, y: -10000, width: 0, height: 0 });
         return;
       }
@@ -175,6 +178,7 @@ export class WindowManager {
     }
 
     this.layoutMode = mode;
+    this.maximizedCellId = null;
     this.store.set('browser.layout', mode);
     this.sendToRenderer(IPC.LAYOUT_CHANGED, { layoutMode: mode });
     const visibleCells = LAYOUT_CELLS[mode];
@@ -224,6 +228,19 @@ export class WindowManager {
     }
 
     this.overlayOpen = open;
+    this.layout();
+  }
+
+  setMaximizedCell(cellId: string | null): void {
+    if (this.isDestroyed()) {
+      return;
+    }
+
+    this.maximizedCellId = cellId && isKnownCellId(cellId) ? cellId : null;
+    if (this.maximizedCellId) {
+      this.focusCell(this.maximizedCellId);
+      this.ensureView(this.maximizedCellId);
+    }
     this.layout();
   }
 
@@ -361,6 +378,27 @@ export class WindowManager {
     if (view && !view.webContents.isDestroyed()) {
       view.webContents.setAudioMuted(muted);
     }
+    return this.getBrowserState();
+  }
+
+  startNewDiscussion(): BrowserState {
+    if (this.isDestroyed()) {
+      return this.getBrowserState();
+    }
+
+    LAYOUT_CELLS[this.layoutMode].forEach((cellId) => {
+      const currentUrl = this.cellUrls[cellId];
+      if (!currentUrl?.trim()) {
+        this.resetTimeline(cellId);
+        return;
+      }
+
+      const nextUrl = normalizeUrl(getNewDiscussionUrl(currentUrl));
+      this.resetTimeline(cellId);
+      this.cancelTimelineNavigationCarry(cellId);
+      this.navigate(cellId, nextUrl, false);
+    });
+
     return this.getBrowserState();
   }
 
@@ -1070,6 +1108,7 @@ export class WindowManager {
       themeMode: this.themeMode,
       language: this.language,
       focusedCellId: this.focusedCellId,
+      maximizedCellId: this.maximizedCellId,
       hasCompletedOnboarding: Boolean(this.store.get('browser.hasCompletedOnboarding', false)),
     };
   }
@@ -1887,6 +1926,20 @@ function isThemeMode(value: unknown): value is ThemeMode {
 
 function isAppLanguage(value: unknown): value is AppLanguage {
   return value === 'zh' || value === 'en';
+}
+
+function getNewDiscussionUrl(rawUrl: string): string {
+  const preset = findPresetSiteByUrl(rawUrl);
+  if (preset) {
+    return preset.newConversationUrl ?? preset.url;
+  }
+
+  try {
+    const url = new URL(normalizeUrl(rawUrl));
+    return url.origin;
+  } catch {
+    return rawUrl;
+  }
 }
 
 function getSystemLanguage(): AppLanguage {

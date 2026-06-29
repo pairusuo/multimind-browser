@@ -52,6 +52,8 @@
     },
     "actions": {
       "forwardTo": "Forward to",
+      "maximizeCell": "Maximize cell",
+      "restoreCell": "Restore cell",
       "reload": "Reload",
       "reloadCell": "Reload cell",
       "setAddress": "Set cell address",
@@ -74,6 +76,7 @@
   "bottomInput": {
     "label": "Unified input",
     "syncCells": "Synchronized cells",
+    "newDiscussion": "Start a new conversation in all cells",
     "placeholder": "Press Enter to send to all, Shift+Enter for a new line",
     "send": "Send",
     "sending": "Sending",
