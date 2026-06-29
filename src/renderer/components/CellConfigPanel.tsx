@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { findPresetSiteByUrl, inferModeFromUrl, PRESET_SITES } from '../../shared/presetSites';
 import { getRiskySiteReasonKey } from '../../shared/riskySites';
@@ -36,6 +36,11 @@ export default function CellConfigPanel({
   const [draftSearchTemplates, setDraftSearchTemplates] = useState<Record<string, string>>(() => ({
     ...searchUrlTemplates,
   }));
+  const [appVersion, setAppVersion] = useState('');
+
+  useEffect(() => {
+    void window.electronAPI.getAppVersion().then(setAppVersion);
+  }, []);
 
   function updateDraftUrl(cellId: string, nextUrl: string) {
     const inferredMode = inferModeFromUrl(nextUrl);
@@ -111,6 +116,10 @@ export default function CellConfigPanel({
               </label>
             ))}
           </div>
+          <span className="settings-section-label">{t('settings.version.label')}</span>
+          <span className="app-version">
+            {appVersion ? t('settings.version.value', { version: appVersion }) : t('settings.version.loading')}
+          </span>
         </section>
         <div className="cell-config-list">
           {visibleCells.map((cellId, index) => (

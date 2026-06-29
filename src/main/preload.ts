@@ -25,6 +25,7 @@ import {
 
 const api: ElectronAPI = {
   getBrowserState: () => ipcRenderer.invoke(IPC.GET_BROWSER_STATE) as Promise<BrowserState>,
+  getAppVersion: () => ipcRenderer.invoke(IPC.GET_APP_VERSION) as Promise<string>,
   applyTemplate: (payload: ApplyTemplatePayload) => ipcRenderer.invoke(IPC.APPLY_TEMPLATE, payload),
   sendToAll: (payload: SendToAllPayload) => ipcRenderer.invoke(IPC.SEND_TO_ALL, payload),
   startNewDiscussion: () => ipcRenderer.invoke(IPC.START_NEW_DISCUSSION),

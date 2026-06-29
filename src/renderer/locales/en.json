@@ -26,7 +26,7 @@
       "quad": "Quad view"
     },
     "actions": {
-      "editCells": "Edit cells"
+      "editCells": "Settings"
     },
     "theme": {
       "toggle": "Toggle theme",
@@ -82,9 +82,9 @@
     }
   },
   "cellConfig": {
-    "title": "Edit cells",
+    "title": "Settings",
     "aria": {
-      "panel": "Edit cells"
+      "panel": "Settings"
     },
     "cell": {
       "label": "Cell {{index}}"
@@ -135,6 +135,11 @@
         "zh": "中文",
         "en": "English"
       }
+    },
+    "version": {
+      "label": "Version",
+      "value": "v{{version}}",
+      "loading": "Version -"
     }
   }
 }

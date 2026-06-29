@@ -30,6 +30,7 @@ export const LAYOUT_CELLS: Record<LayoutMode, string[]> = {
 
 export const IPC = {
   GET_BROWSER_STATE: 'get-browser-state',
+  GET_APP_VERSION: 'get-app-version',
   SEND_TO_ALL: 'send-to-all',
   START_NEW_DISCUSSION: 'start-new-discussion',
   FORWARD_RESPONSE: 'forward-response',
@@ -191,6 +192,7 @@ export interface LayoutChangedPayload {
 
 export interface ElectronAPI {
   getBrowserState: () => Promise<BrowserState>;
+  getAppVersion: () => Promise<string>;
   applyTemplate: (payload: ApplyTemplatePayload) => Promise<BrowserState>;
   sendToAll: (payload: SendToAllPayload) => Promise<void>;
   startNewDiscussion: () => Promise<BrowserState>;

@@ -26,7 +26,7 @@
       "quad": "四格视图"
     },
     "actions": {
-      "editCells": "编辑格子"
+      "editCells": "设置"
     },
     "theme": {
       "toggle": "切换主题",
@@ -82,9 +82,9 @@
     }
   },
   "cellConfig": {
-    "title": "编辑格子",
+    "title": "设置",
     "aria": {
-      "panel": "编辑格子"
+      "panel": "设置"
     },
     "cell": {
       "label": "格子 {{index}}"
@@ -135,6 +135,11 @@
         "zh": "中文",
         "en": "English"
       }
+    },
+    "version": {
+      "label": "版本",
+      "value": "v{{version}}",
+      "loading": "版本 -"
     }
   }
 }

@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { app, ipcMain } from 'electron';
 import {
   ApplyTemplatePayload,
   AppLanguage,
@@ -19,6 +19,8 @@ import { WindowManager } from './windowManager';
 
 export function registerIpcHandlers(windowManager: WindowManager): void {
   registerHandler(IPC.GET_BROWSER_STATE, () => windowManager.getBrowserState());
+
+  registerHandler(IPC.GET_APP_VERSION, () => app.getVersion());
 
   registerHandler(IPC.APPLY_TEMPLATE, (_event, payload: ApplyTemplatePayload) => windowManager.applyTemplate(payload));
 
