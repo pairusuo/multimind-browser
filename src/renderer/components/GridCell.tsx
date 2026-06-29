@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { CellMode, CellNoticePayload } from '../../shared/types';
+import type { CellMode, CellNoticePayload, LayoutMode } from '../../shared/types';
 import CellNotice from './CellNotice';
 
 const shownNoticeKeys = new Set<string>();
@@ -10,6 +10,7 @@ interface GridCellProps {
   cellId: string;
   className: string;
   focused: boolean;
+  layoutMode: LayoutMode;
   maximized: boolean;
   targetCells: Array<{ cellId: string; label: string }>;
   meta: {
@@ -30,6 +31,7 @@ export default function GridCell({
   cellId,
   className,
   focused,
+  layoutMode,
   maximized,
   meta,
   onFocus,
@@ -45,6 +47,7 @@ export default function GridCell({
   const [targetPickerOpen, setTargetPickerOpen] = useState(false);
   const [forwardingTargetId, setForwardingTargetId] = useState<string | null>(null);
   const [forwardStatus, setForwardStatus] = useState<string | null>(null);
+  const showCellMenu = layoutMode !== 'single';
 
   useEffect(() => {
     return window.electronAPI.onCellNotice((payload) => {
@@ -63,15 +66,6 @@ export default function GridCell({
       setNotice(payload);
     });
   }, [cellId]);
-
-  async function changeUrl() {
-    const nextUrl = window.prompt(t('gridCell.address.prompt'), meta.url);
-    if (!nextUrl?.trim()) {
-      return;
-    }
-
-    await window.electronAPI.setCellUrl({ cellId, url: nextUrl });
-  }
 
   async function forwardTo(targetCellId: string) {
     setTargetPickerOpen(false);
@@ -142,7 +136,8 @@ export default function GridCell({
               {meta.mode === 'search' && <span className="cell-mode-badge" title={t('gridCell.mode.search')}>⌕</span>}
               <span>{host}</span>
             </div>
-            <div className="cell-menu" aria-label={t('gridCell.aria.controls', { host })}>
+            {showCellMenu && (
+              <div className="cell-menu" aria-label={t('gridCell.aria.controls', { host })}>
               <button
                 type="button"
                 title={t('gridCell.actions.forwardTo')}
@@ -171,10 +166,7 @@ export default function GridCell({
               <button type="button" title={t('gridCell.actions.reload')} aria-label={t('gridCell.actions.reloadCell')} onClick={() => window.electronAPI.reload(cellId)}>
                 ↻
               </button>
-              <button type="button" title={t('gridCell.actions.setAddress')} aria-label={t('gridCell.actions.setAddress')} onClick={() => void changeUrl()}>
-                ⌘
-              </button>
-              <button type="button" title={t('gridCell.actions.openInNewTab')} aria-label={t('gridCell.actions.openInNewTab')} onClick={() => onNewTab(cellId, meta.url)}>
+              <button type="button" title={t('gridCell.actions.newTab')} aria-label={t('gridCell.actions.newTab')} onClick={() => onNewTab(cellId)}>
                 +
               </button>
               <button
@@ -197,7 +189,8 @@ export default function GridCell({
               >
                 ✓
               </button>
-            </div>
+              </div>
+            )}
           </>
         )}
       </div>

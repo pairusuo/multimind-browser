@@ -47,17 +47,13 @@
     "mode": {
       "search": "搜索格子"
     },
-    "address": {
-      "prompt": "设置格子地址"
-    },
     "actions": {
       "forwardTo": "转发到",
       "maximizeCell": "最大化格子",
       "restoreCell": "还原格子",
       "reload": "重新加载",
       "reloadCell": "重新加载格子",
-      "setAddress": "设置格子地址",
-      "openInNewTab": "在新标签页打开",
+      "newTab": "新建标签页",
       "toggleMute": "切换静音",
       "toggleSync": "切换同步"
     },

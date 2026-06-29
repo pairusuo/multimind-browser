@@ -120,6 +120,7 @@ export default function SplitView({
           cellId="cell-0"
           className="cell-a"
           focused={focusedCellId === 'cell-0'}
+          layoutMode={layoutMode}
           maximized={maximizedCellId === 'cell-0'}
           targetCells={getTargetCells('cell-0', layoutCells, cellUrls)}
           meta={getCellMeta('cell-0', cellUrls, cellModes, activeCells, mutedCells, cellFavicons)}
@@ -148,6 +149,7 @@ export default function SplitView({
           cellId="cell-1"
           className="cell-b"
           focused={focusedCellId === 'cell-1'}
+          layoutMode={layoutMode}
           maximized={maximizedCellId === 'cell-1'}
           targetCells={getTargetCells('cell-1', layoutCells, cellUrls)}
           meta={getCellMeta('cell-1', cellUrls, cellModes, activeCells, mutedCells, cellFavicons)}
@@ -176,6 +178,7 @@ export default function SplitView({
           cellId="cell-2"
           className="cell-c"
           focused={focusedCellId === 'cell-2'}
+          layoutMode={layoutMode}
           maximized={maximizedCellId === 'cell-2'}
           targetCells={getTargetCells('cell-2', layoutCells, cellUrls)}
           meta={getCellMeta('cell-2', cellUrls, cellModes, activeCells, mutedCells, cellFavicons)}
@@ -191,6 +194,7 @@ export default function SplitView({
           cellId="cell-3"
           className="cell-d"
           focused={focusedCellId === 'cell-3'}
+          layoutMode={layoutMode}
           maximized={maximizedCellId === 'cell-3'}
           targetCells={getTargetCells('cell-3', layoutCells, cellUrls)}
           meta={getCellMeta('cell-3', cellUrls, cellModes, activeCells, mutedCells, cellFavicons)}

@@ -105,6 +105,7 @@ export class WindowManager {
   private cellTimelines: Map<string, CellTimeline> = new Map();
   private assistantCaptureChains: Map<string, Promise<void>> = new Map();
   private timelineNavigationCarryUntil: Map<string, number> = new Map();
+  private pendingEmptyTabLoads: Set<string> = new Set();
 
   constructor(
     private readonly window: BrowserWindow,
@@ -250,6 +251,9 @@ export class WindowManager {
     }
 
     const url = normalizeUrl(rawUrl);
+    if (url) {
+      this.pendingEmptyTabLoads.delete(cellId);
+    }
     this.resetTimelineForUrlChange(cellId, this.cellUrls[cellId], url);
     this.rememberCurrentSitePartition(cellId);
     this.cellUrls[cellId] = url;
@@ -289,6 +293,9 @@ export class WindowManager {
     }
 
     const url = normalizeUrl(rawUrl);
+    if (url) {
+      this.pendingEmptyTabLoads.delete(cellId);
+    }
     if (resetTimeline) {
       this.resetTimelineForUrlChange(cellId, this.cellUrls[cellId], url);
     }
@@ -412,6 +419,12 @@ export class WindowManager {
     this.tabs[cellId] = [...(this.tabs[cellId] ?? []), tab];
     this.activeTabIds[cellId] = tab.id;
     this.storeTabs(cellId);
+    if (url) {
+      this.pendingEmptyTabLoads.delete(cellId);
+    } else {
+      this.pendingEmptyTabLoads.add(cellId);
+      this.sendToRenderer(IPC.CELL_FAVICON_CHANGED, { cellId, favicon: '' });
+    }
     this.navigate(cellId, url, false);
     return this.getBrowserState();
   }
@@ -1411,6 +1424,9 @@ export class WindowManager {
       }
 
       const publicUrl = this.toPublicUrl(url);
+      if (this.shouldIgnoreNavigationDuringEmptyTabLoad(cellId, publicUrl)) {
+        return;
+      }
       this.commitCellUrlFromNavigation(cellId, publicUrl);
       this.sendUrl(cellId, publicUrl);
       this.checkNavigationNotice(cellId, publicUrl);
@@ -1421,6 +1437,9 @@ export class WindowManager {
       }
 
       const publicUrl = this.toPublicUrl(url);
+      if (this.shouldIgnoreNavigationDuringEmptyTabLoad(cellId, publicUrl)) {
+        return;
+      }
       this.commitCellUrlFromNavigation(cellId, publicUrl);
       this.sendUrl(cellId, publicUrl);
       this.checkNavigationNotice(cellId, publicUrl);
@@ -1438,6 +1457,10 @@ export class WindowManager {
         return;
       }
 
+      if (this.shouldIgnoreFaviconForEmptyTab(cellId, view)) {
+        return;
+      }
+
       const favicon = favicons[0];
       if (favicon) {
         this.updateActiveTab(cellId, { favicon });
@@ -1451,6 +1474,10 @@ export class WindowManager {
 
       this.clearLoadTimeout(cellId);
       const publicUrl = this.toPublicUrl(view.webContents.getURL());
+      if (this.shouldIgnoreNavigationDuringEmptyTabLoad(cellId, publicUrl)) {
+        return;
+      }
+      this.pendingEmptyTabLoads.delete(cellId);
       const persistedUrl = this.getPersistedUrlAfterLoad(cellId, publicUrl);
       this.resetTimelineForUrlChange(cellId, this.cellUrls[cellId], persistedUrl, { allowCarry: true });
       this.cellUrls[cellId] = persistedUrl;
@@ -1626,6 +1653,28 @@ export class WindowManager {
     }
 
     this.commitCellUrlFromNavigation(cellId, this.toPublicUrl(view.webContents.getURL()));
+  }
+
+  private shouldIgnoreNavigationDuringEmptyTabLoad(cellId: string, publicUrl: string): boolean {
+    if (!this.pendingEmptyTabLoads.has(cellId)) {
+      return false;
+    }
+
+    if (!publicUrl) {
+      return false;
+    }
+
+    const activeTab = this.tabs[cellId]?.find((tab) => tab.id === this.activeTabIds[cellId]);
+    return !activeTab?.url;
+  }
+
+  private shouldIgnoreFaviconForEmptyTab(cellId: string, view: WebContentsView): boolean {
+    const activeTab = this.tabs[cellId]?.find((tab) => tab.id === this.activeTabIds[cellId]);
+    if (activeTab?.url) {
+      return false;
+    }
+
+    return !this.toPublicUrl(view.webContents.getURL());
   }
 
   private resetTimelineForUrlChange(

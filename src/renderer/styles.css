@@ -304,11 +304,6 @@ textarea {
   overflow: hidden;
 }
 
-.split-view-maximized .grid-cell {
-  grid-column: 1;
-  grid-row: 1;
-}
-
 .grid-cell {
   position: relative;
   min-width: 0;
@@ -358,6 +353,11 @@ textarea {
 .cell-d {
   grid-column: 3;
   grid-row: 3;
+}
+
+.split-view.split-view-maximized .grid-cell {
+  grid-column: 1;
+  grid-row: 1;
 }
 
 .splitter {
@@ -441,7 +441,7 @@ textarea {
   right: 10px;
   z-index: 4;
   display: grid;
-  grid-template-columns: repeat(7, 32px);
+  grid-template-columns: repeat(6, 32px);
   gap: 4px;
   opacity: 0;
   pointer-events: none;
@@ -534,19 +534,21 @@ textarea {
   position: absolute;
   top: 5px;
   left: 10px;
-  right: auto;
-  z-index: 5;
+  right: 224px;
+  z-index: 12;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  max-width: min(520px, calc(100% - 190px));
+  gap: 8px;
+  min-width: 0;
+  min-height: 32px;
   border: 1px solid rgba(37, 99, 235, 0.24);
   border-radius: 7px;
-  padding: 6px 9px;
+  padding: 4px 8px;
   background: rgba(239, 246, 255, 0.96);
   color: #1e3a8a;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+  backdrop-filter: blur(10px);
 }
 
 .cell-notice-inject-failed {
@@ -582,16 +584,25 @@ textarea {
 }
 
 .cell-notice-copy {
-  display: grid;
-  gap: 3px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   flex: 1 1 auto;
   min-width: 0;
   font-size: 12px;
   line-height: 1.25;
+  white-space: nowrap;
 }
 
 .cell-notice strong {
+  flex: 0 0 auto;
   font-size: 12px;
+}
+
+.cell-notice-copy span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cell-notice button {
@@ -603,6 +614,12 @@ textarea {
   background: #ffffff;
   color: #1e3a8a;
   cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .cell-notice {
+    right: 10px;
+  }
 }
 
 .grid-cell:hover .cell-menu,

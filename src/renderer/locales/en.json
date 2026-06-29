@@ -47,17 +47,13 @@
     "mode": {
       "search": "Search cell"
     },
-    "address": {
-      "prompt": "Set cell address"
-    },
     "actions": {
       "forwardTo": "Forward to",
       "maximizeCell": "Maximize cell",
       "restoreCell": "Restore cell",
       "reload": "Reload",
       "reloadCell": "Reload cell",
-      "setAddress": "Set cell address",
-      "openInNewTab": "Open in new tab",
+      "newTab": "New tab",
       "toggleMute": "Toggle mute",
       "toggleSync": "Toggle sync"
     },
