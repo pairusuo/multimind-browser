@@ -39,11 +39,6 @@ const INITIAL_SEARCH_TEMPLATES = CELL_IDS.reduce<Record<string, string>>((templa
   return templates;
 }, {});
 
-const INITIAL_MUTED_CELLS = CELL_IDS.reduce<Record<string, boolean>>((mutedCells, cellId) => {
-  mutedCells[cellId] = false;
-  return mutedCells;
-}, {});
-
 const INITIAL_TABS = CELL_IDS.reduce<Record<string, CellTab[]>>((tabs, cellId) => {
   tabs[cellId] = [];
   return tabs;
@@ -60,7 +55,6 @@ export default function App() {
   const [cellModes, setCellModes] = useState<Record<string, CellMode>>(INITIAL_CELL_MODES);
   const [searchUrlTemplates, setSearchUrlTemplates] = useState<Record<string, string>>(INITIAL_SEARCH_TEMPLATES);
   const [activeCells, setActiveCells] = useState<Record<string, boolean>>(INITIAL_ACTIVE_CELLS);
-  const [mutedCells, setMutedCells] = useState<Record<string, boolean>>(INITIAL_MUTED_CELLS);
   const [tabs, setTabs] = useState<Record<string, CellTab[]>>(INITIAL_TABS);
   const [activeTabIds, setActiveTabIds] = useState<Record<string, string>>(INITIAL_ACTIVE_TAB_IDS);
   const activeTabIdsRef = useRef<Record<string, string>>(INITIAL_ACTIVE_TAB_IDS);
@@ -234,11 +228,6 @@ export default function App() {
     applyBrowserState(state);
   }
 
-  async function handleToggleMute(cellId: string) {
-    const state = await window.electronAPI.toggleMute(cellId);
-    applyBrowserState(state);
-  }
-
   async function handleStartNewDiscussion() {
     const state = await window.electronAPI.startNewDiscussion();
     applyBrowserState(state);
@@ -270,10 +259,6 @@ export default function App() {
     setActiveCells({
       ...INITIAL_ACTIVE_CELLS,
       ...state.activeCells,
-    });
-    setMutedCells({
-      ...INITIAL_MUTED_CELLS,
-      ...state.mutedCells,
     });
     setTabs({
       ...INITIAL_TABS,
@@ -357,14 +342,12 @@ export default function App() {
           activeCells={activeCells}
           cellModes={cellModes}
           cellUrls={cellUrls}
-          mutedCells={mutedCells}
           focusedCellId={focusedCellId}
           layoutMode={layoutMode}
           maximizedCellId={maximizedCellId}
           onFocusCell={handleFocusCell}
           onToggleMaximized={handleToggleMaximizedCell}
           onNewTab={(cellId, url) => void handleNewTab(cellId, url)}
-          onToggleMute={(cellId) => void handleToggleMute(cellId)}
           onToggleCell={handleToggleCell}
         />
       </main>

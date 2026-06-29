@@ -1,47 +1,89 @@
 # MultiMind Flow
 
-MultiMind Flow is a desktop workspace for discussing with multiple AI assistants and search engines side by side. It supports split-screen cells, a shared input box, and per-cell configuration.
+MultiMind Flow is a desktop workspace for discussing with multiple AI assistants and search engines side by side. It supports split-screen cells, a shared input box, per-cell configuration, and manual cross-checking between AI responses.
 
-## Install on macOS
+## Supported Platforms
 
-Download the `.dmg`, open it, and drag **MultiMind Flow** into **Applications**.
+- macOS: Apple Silicon and Intel builds are packaged as a Universal app.
+- Windows: x64 installer.
 
-The current MVP is not code-signed or notarized. On first launch, macOS Gatekeeper may show a warning such as "cannot verify the developer" or "the app is damaged and should be moved to the Trash." This is expected for the unsigned MVP build.
-
-To open the app:
-
-1. In Finder, open **Applications**.
-2. Right-click **MultiMind Flow** and choose **Open**.
-3. In the Gatekeeper dialog, choose **Open** again.
-4. If macOS only shows a block message, open **System Settings → Privacy & Security**, find the blocked MultiMind Flow message, and choose **Open Anyway**.
-
-Screenshot guide:
-
-![macOS Gatekeeper Open Anyway flow](docs/images/dmg.png)
-
-## Install on Windows
-
-Download the `.exe` installer and run it.
-
-The current MVP is not code-signed. Windows Defender SmartScreen may show "Windows protected your PC." This is expected for the unsigned MVP build.
-
-To continue installation:
-
-1. Click **More info**.
-2. Click **Run anyway**.
-3. Follow the installer steps.
-4. Launch **MultiMind Flow** from the Start menu or desktop shortcut.
-
-Screenshot guide:
-
-![Windows SmartScreen More info and Run anyway flow](docs/images/exe.png)
-
-## Packaging Verification
-
-The macOS package is built as a Universal Binary. Before publishing a release, verify the app executable contains both Intel and Apple Silicon architectures:
+## Development
 
 ```bash
-lipo -info "release/mac-universal/MultiMind Flow.app/Contents/MacOS/MultiMind Flow"
+npm install
+npm run dev
 ```
 
-The output must include both `x86_64` and `arm64`.
+## Build
+
+```bash
+npm run build
+```
+
+## Packaging
+
+```bash
+npm run package:mac
+npm run package:win
+npm run package:all
+```
+
+## Installation
+
+### macOS
+
+Open the `.dmg`, drag **MultiMind Flow** into **Applications**, then launch it.
+
+The current build is not code-signed or notarized. If macOS blocks the first launch, right-click **MultiMind Flow** and choose **Open**, or allow it from **System Settings -> Privacy & Security**.
+
+### Windows
+
+Run the `.exe` installer and follow the prompts.
+
+The current build is not code-signed. If SmartScreen blocks it, choose **More info -> Run anyway**.
+
+---
+
+# MultiMind Flow 中文说明
+
+MultiMind Flow 是一个桌面工作区，用于并排使用多个 AI 助手和搜索引擎进行讨论。它支持多格子分屏、底部统一输入、单格配置，以及手动把某个 AI 的回答转发给其它 AI 做交叉验证。
+
+## 支持平台
+
+- macOS：Apple Silicon 和 Intel，打包为 Universal 应用。
+- Windows：x64 安装包。
+
+## 本地开发
+
+```bash
+npm install
+npm run dev
+```
+
+## 构建
+
+```bash
+npm run build
+```
+
+## 打包
+
+```bash
+npm run package:mac
+npm run package:win
+npm run package:all
+```
+
+## 安装
+
+### macOS
+
+打开 `.dmg`，把 **MultiMind Flow** 拖入 **Applications**，然后启动应用。
+
+当前构建未做代码签名和 notarization。首次启动如果被 macOS 拦截，可以右键 **MultiMind Flow** 选择 **Open**，或在 **System Settings -> Privacy & Security** 中允许打开。
+
+### Windows
+
+运行 `.exe` 安装包并按提示安装。
+
+当前构建未做代码签名。如果被 SmartScreen 拦截，选择 **More info -> Run anyway**。

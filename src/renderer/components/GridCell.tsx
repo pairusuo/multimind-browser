@@ -18,12 +18,10 @@ interface GridCellProps {
     mode: CellMode;
     favicon: string | null;
     active: boolean;
-    muted: boolean;
   };
   onFocus: (cellId: string, url: string) => void;
   onToggleMaximized: (cellId: string) => void;
   onNewTab: (cellId: string, url?: string) => void;
-  onToggleMute: (cellId: string) => void;
   onToggle: (cellId: string, active: boolean) => void;
 }
 
@@ -37,7 +35,6 @@ export default function GridCell({
   onFocus,
   onToggleMaximized,
   onNewTab,
-  onToggleMute,
   onToggle,
   targetCells,
 }: GridCellProps) {
@@ -168,16 +165,6 @@ export default function GridCell({
               </button>
               <button type="button" title={t('gridCell.actions.newTab')} aria-label={t('gridCell.actions.newTab')} onClick={() => onNewTab(cellId)}>
                 +
-              </button>
-              <button
-                type="button"
-                className={meta.muted ? 'active' : ''}
-                title={t('gridCell.actions.toggleMute')}
-                aria-label={t('gridCell.actions.toggleMute')}
-                aria-pressed={meta.muted}
-                onClick={() => onToggleMute(cellId)}
-              >
-                M
               </button>
               <button
                 type="button"

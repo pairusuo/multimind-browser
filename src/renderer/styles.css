@@ -441,7 +441,7 @@ textarea {
   right: 10px;
   z-index: 4;
   display: grid;
-  grid-template-columns: repeat(6, 32px);
+  grid-template-columns: repeat(5, 32px);
   gap: 4px;
   opacity: 0;
   pointer-events: none;

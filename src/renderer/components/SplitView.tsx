@@ -7,14 +7,12 @@ interface SplitViewProps {
   activeCells: Record<string, boolean>;
   cellModes: Record<string, CellMode>;
   cellUrls: Record<string, string>;
-  mutedCells: Record<string, boolean>;
   focusedCellId: string;
   layoutMode: LayoutMode;
   maximizedCellId: string | null;
   onFocusCell: (cellId: string, url: string) => void;
   onToggleMaximized: (cellId: string) => void;
   onNewTab: (cellId: string, url?: string) => void;
-  onToggleMute: (cellId: string) => void;
   onToggleCell: (cellId: string, active: boolean) => void;
 }
 
@@ -29,14 +27,12 @@ export default function SplitView({
   activeCells,
   cellModes,
   cellUrls,
-  mutedCells,
   focusedCellId,
   layoutMode,
   maximizedCellId,
   onFocusCell,
   onToggleMaximized,
   onNewTab,
-  onToggleMute,
   onToggleCell,
 }: SplitViewProps) {
   const [cellFavicons, setCellFavicons] = useState<CellFavicons>(INITIAL_FAVICONS);
@@ -123,11 +119,10 @@ export default function SplitView({
           layoutMode={layoutMode}
           maximized={maximizedCellId === 'cell-0'}
           targetCells={getTargetCells('cell-0', layoutCells, cellUrls)}
-          meta={getCellMeta('cell-0', cellUrls, cellModes, activeCells, mutedCells, cellFavicons)}
+          meta={getCellMeta('cell-0', cellUrls, cellModes, activeCells, cellFavicons)}
           onFocus={onFocusCell}
           onToggleMaximized={onToggleMaximized}
           onNewTab={onNewTab}
-          onToggleMute={onToggleMute}
           onToggle={onToggleCell}
         />
       )}
@@ -152,11 +147,10 @@ export default function SplitView({
           layoutMode={layoutMode}
           maximized={maximizedCellId === 'cell-1'}
           targetCells={getTargetCells('cell-1', layoutCells, cellUrls)}
-          meta={getCellMeta('cell-1', cellUrls, cellModes, activeCells, mutedCells, cellFavicons)}
+          meta={getCellMeta('cell-1', cellUrls, cellModes, activeCells, cellFavicons)}
           onFocus={onFocusCell}
           onToggleMaximized={onToggleMaximized}
           onNewTab={onNewTab}
-          onToggleMute={onToggleMute}
           onToggle={onToggleCell}
         />
       )}
@@ -181,11 +175,10 @@ export default function SplitView({
           layoutMode={layoutMode}
           maximized={maximizedCellId === 'cell-2'}
           targetCells={getTargetCells('cell-2', layoutCells, cellUrls)}
-          meta={getCellMeta('cell-2', cellUrls, cellModes, activeCells, mutedCells, cellFavicons)}
+          meta={getCellMeta('cell-2', cellUrls, cellModes, activeCells, cellFavicons)}
           onFocus={onFocusCell}
           onToggleMaximized={onToggleMaximized}
           onNewTab={onNewTab}
-          onToggleMute={onToggleMute}
           onToggle={onToggleCell}
         />
       )}
@@ -197,11 +190,10 @@ export default function SplitView({
           layoutMode={layoutMode}
           maximized={maximizedCellId === 'cell-3'}
           targetCells={getTargetCells('cell-3', layoutCells, cellUrls)}
-          meta={getCellMeta('cell-3', cellUrls, cellModes, activeCells, mutedCells, cellFavicons)}
+          meta={getCellMeta('cell-3', cellUrls, cellModes, activeCells, cellFavicons)}
           onFocus={onFocusCell}
           onToggleMaximized={onToggleMaximized}
           onNewTab={onNewTab}
-          onToggleMute={onToggleMute}
           onToggle={onToggleCell}
         />
       )}
@@ -214,7 +206,6 @@ function getCellMeta(
   cellUrls: Record<string, string>,
   cellModes: Record<string, CellMode>,
   activeCells: Record<string, boolean>,
-  mutedCells: Record<string, boolean>,
   favicons: CellFavicons,
 ) {
   return {
@@ -222,7 +213,6 @@ function getCellMeta(
     mode: cellModes[cellId] ?? 'chat',
     favicon: favicons[cellId] ?? null,
     active: Boolean(activeCells[cellId] && cellUrls[cellId]?.trim()),
-    muted: Boolean(mutedCells[cellId]),
   };
 }
 
