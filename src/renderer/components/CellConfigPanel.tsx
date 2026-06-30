@@ -198,6 +198,7 @@ function CellConfigRow({
       <label htmlFor={`${cellId}-preset`}>{t('cellConfig.cell.label', { index: index + 1 })}</label>
       <select
         id={`${cellId}-preset`}
+        className="preset-select"
         value={selectedPresetId}
         onChange={(event) => {
           const preset = PRESET_SITES.find((site) => site.id === event.target.value);

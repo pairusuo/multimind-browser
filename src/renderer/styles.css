@@ -633,7 +633,7 @@ textarea {
   position: relative;
   z-index: 10;
   display: grid;
-  grid-template-columns: max-content 40px minmax(0, 1fr) max-content;
+  grid-template-columns: max-content 40px 40px minmax(0, 1fr) max-content;
   align-items: center;
   gap: 10px;
   height: 64px;
@@ -650,6 +650,7 @@ textarea {
 
 .sync-cell-toggles button,
 .new-discussion-button,
+.generate-document-button,
 .send-all-button {
   height: 40px;
   border: 1px solid rgba(17, 24, 39, 0.14);
@@ -667,6 +668,38 @@ textarea {
   border-color: rgba(37, 99, 235, 0.16);
   background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.generate-document-button {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  padding: 0;
+  border-color: rgba(37, 99, 235, 0.16);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  color: #1a56db;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.generate-document-button:hover {
+  border-color: rgba(37, 99, 235, 0.32);
+  background: #eef6ff;
+}
+
+.generate-document-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.document-summary-icon {
+  display: block;
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .new-discussion-button:hover {
@@ -699,6 +732,7 @@ textarea {
 
 .sync-cell-toggles button:disabled,
 .new-discussion-button:disabled,
+.generate-document-button:disabled,
 .send-all-button:disabled,
 .bottom-input-shell textarea:disabled {
   cursor: not-allowed;
@@ -743,7 +777,8 @@ textarea {
 }
 
 .template-panel,
-.cell-config-panel {
+.cell-config-panel,
+.document-panel {
   width: min(720px, 100%);
   max-height: min(760px, calc(100vh - 40px));
   overflow: auto;
@@ -758,7 +793,8 @@ textarea {
 }
 
 .template-panel h1,
-.cell-config-panel h1 {
+.cell-config-panel h1,
+.document-panel h1 {
   margin: 0;
   font-size: 18px;
   line-height: 1.25;
@@ -879,7 +915,7 @@ textarea {
 
 .cell-config-row {
   display: grid;
-  grid-template-columns: 72px minmax(140px, 180px) minmax(180px, 1fr);
+  grid-template-columns: 72px minmax(150px, 180px) minmax(220px, 1fr);
   align-items: center;
   gap: 10px;
 }
@@ -930,6 +966,35 @@ textarea {
   padding: 0 10px;
   background: #ffffff;
   color: #111827;
+  outline: none;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+
+.cell-config-row select:hover,
+.cell-config-row input:hover {
+  border-color: rgba(37, 99, 235, 0.28);
+}
+
+.cell-config-row select:focus,
+.cell-config-row input:focus {
+  border-color: #1a56db;
+  box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.12);
+}
+
+.cell-config-row .preset-select {
+  appearance: none;
+  padding-right: 38px;
+  color: #111827;
+  font-weight: 650;
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 14px,
+    calc(100% - 13px) 14px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
 }
 
 .panel-actions {
@@ -944,6 +1009,76 @@ textarea {
   border-color: #1a56db;
   background: #1a56db;
   color: #ffffff;
+}
+
+.document-picker {
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px 18px;
+}
+
+.document-picker p {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.document-candidate-list {
+  display: grid;
+  gap: 8px;
+}
+
+.document-candidate-list button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: #111827;
+  text-align: left;
+  cursor: pointer;
+}
+
+.document-candidate-list button:hover {
+  border-color: rgba(5, 150, 105, 0.42);
+  background: #f0fdf4;
+}
+
+.document-candidate-list button:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.document-candidate-list span {
+  font-weight: 700;
+}
+
+.document-candidate-list small {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.document-status,
+.document-error {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.document-status {
+  color: #047857;
+}
+
+.document-error {
+  color: #b91c1c;
+}
+
+.document-panel > .document-error {
+  margin: -4px 18px 14px;
 }
 
 .sr-only {
@@ -1015,26 +1150,26 @@ textarea {
   .browser-stage-vertical,
   .browser-stage-triple,
   .browser-stage-quad {
-    height: calc(100% - 234px);
+    height: calc(100% - 266px);
   }
 
   .toolbar:not(.toolbar-single) + .browser-stage-horizontal,
   .toolbar:not(.toolbar-single) + .browser-stage-vertical,
   .toolbar:not(.toolbar-single) + .browser-stage-triple,
   .toolbar:not(.toolbar-single) + .browser-stage-quad {
-    height: calc(100% - 196px);
+    height: calc(100% - 228px);
   }
 
   .bottom-input-shell {
-    grid-template-columns: max-content minmax(0, 1fr) max-content;
+    grid-template-columns: max-content max-content minmax(0, 1fr) max-content;
     grid-template-rows: max-content max-content;
-    height: 64px;
+    height: 96px;
     gap: 6px 8px;
     padding: 8px;
   }
 
   .sync-cell-toggles {
-    grid-column: 1 / 3;
+    grid-column: 1 / 5;
   }
 
   .new-discussion-button {
@@ -1044,15 +1179,27 @@ textarea {
     width: 34px;
   }
 
+  .generate-document-button {
+    grid-column: 2;
+    grid-row: 2;
+    height: 34px;
+    width: 34px;
+  }
+
+  .document-summary-icon {
+    width: 21px;
+    height: 21px;
+  }
+
   .bottom-input-shell textarea {
-    grid-column: 2 / 4;
+    grid-column: 3;
     grid-row: 2;
     height: 34px;
   }
 
   .send-all-button {
-    grid-column: 3;
-    grid-row: 1;
+    grid-column: 4;
+    grid-row: 2;
     height: 34px;
   }
 
@@ -1207,6 +1354,11 @@ textarea {
   .cell-config-row input {
     border-color: rgba(255, 255, 255, 0.14);
     background: #111827;
+    color: #f9fafb;
+  }
+
+  .cell-config-row .preset-select {
+    background-color: #111827;
     color: #f9fafb;
   }
 

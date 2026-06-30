@@ -8,6 +8,7 @@ interface BottomInputProps {
   activeCells: Record<string, boolean>;
   cellUrls: Record<string, string>;
   layoutMode: LayoutMode;
+  onGenerateDocument: () => void;
   onStartNewDiscussion: () => void;
   onToggleCell: (cellId: string, active: boolean) => void;
 }
@@ -16,6 +17,7 @@ export default function BottomInput({
   activeCells,
   cellUrls,
   layoutMode,
+  onGenerateDocument,
   onStartNewDiscussion,
   onToggleCell,
 }: BottomInputProps) {
@@ -91,6 +93,16 @@ export default function BottomInput({
       >
         <img src={newConversationIconUrl} alt="" />
       </button>
+      <button
+        type="button"
+        className="generate-document-button"
+        title={t('bottomInput.generateDocument')}
+        aria-label={t('bottomInput.generateDocument')}
+        disabled={isSending}
+        onClick={onGenerateDocument}
+      >
+        <DocumentSummaryIcon />
+      </button>
       <textarea
         value={text}
         disabled={isSending}
@@ -108,5 +120,17 @@ export default function BottomInput({
         {isSending ? t('bottomInput.sending') : t('bottomInput.send')}
       </button>
     </aside>
+  );
+}
+
+function DocumentSummaryIcon() {
+  return (
+    <svg className="document-summary-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M7 3.75h7.1L18 7.65v12.6H7z" />
+      <path d="M14 3.75v4h4" />
+      <path d="M9.5 11h6" />
+      <path d="M9.5 14h5.1" />
+      <path d="M9.5 17h3.4" />
+    </svg>
   );
 }

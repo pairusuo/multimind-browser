@@ -4,6 +4,7 @@ import CellConfigPanel from './components/CellConfigPanel';
 import Toolbar from './components/Toolbar';
 import SplitView from './components/SplitView';
 import BottomInput from './components/BottomInput';
+import DocumentSummaryModal from './components/DocumentSummaryModal';
 import TemplateChooser from './components/TemplateChooser';
 import {
   BrowserState,
@@ -12,6 +13,7 @@ import {
   CellMode,
   CellTab,
   DEFAULT_URLS,
+  DocumentCandidate,
   LAYOUT_CELLS,
   LayoutMode,
   ThemeMode,
@@ -49,12 +51,18 @@ const INITIAL_ACTIVE_TAB_IDS = CELL_IDS.reduce<Record<string, string>>((activeTa
   return activeTabIds;
 }, {});
 
+const INITIAL_MUTED_CELLS = CELL_IDS.reduce<Record<string, boolean>>((mutedCells, cellId) => {
+  mutedCells[cellId] = false;
+  return mutedCells;
+}, {});
+
 export default function App() {
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('single');
   const [cellUrls, setCellUrls] = useState<Record<string, string>>(INITIAL_URLS);
   const [cellModes, setCellModes] = useState<Record<string, CellMode>>(INITIAL_CELL_MODES);
   const [searchUrlTemplates, setSearchUrlTemplates] = useState<Record<string, string>>(INITIAL_SEARCH_TEMPLATES);
   const [activeCells, setActiveCells] = useState<Record<string, boolean>>(INITIAL_ACTIVE_CELLS);
+  const [, setMutedCells] = useState<Record<string, boolean>>(INITIAL_MUTED_CELLS);
   const [tabs, setTabs] = useState<Record<string, CellTab[]>>(INITIAL_TABS);
   const [activeTabIds, setActiveTabIds] = useState<Record<string, string>>(INITIAL_ACTIVE_TAB_IDS);
   const activeTabIdsRef = useRef<Record<string, string>>(INITIAL_ACTIVE_TAB_IDS);
@@ -62,6 +70,10 @@ export default function App() {
   const [language, setLanguage] = useState<AppLanguage>('zh');
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [showConfigPanel, setShowConfigPanel] = useState(false);
+  const [showDocumentSummary, setShowDocumentSummary] = useState(false);
+  const [documentCandidates, setDocumentCandidates] = useState<DocumentCandidate[]>([]);
+  const [isGeneratingDocument, setIsGeneratingDocument] = useState(false);
+  const [documentError, setDocumentError] = useState<string | null>(null);
   const [focusedCellId, setFocusedCellId] = useState('cell-0');
   const [maximizedCellId, setMaximizedCellId] = useState<string | null>(null);
   const url = cellUrls[focusedCellId] ?? '';
@@ -81,8 +93,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    void window.electronAPI.setOverlayOpen(showConfigPanel || !hasCompletedOnboarding);
-  }, [hasCompletedOnboarding, showConfigPanel]);
+    void window.electronAPI.setOverlayOpen(showConfigPanel || showDocumentSummary || !hasCompletedOnboarding);
+  }, [hasCompletedOnboarding, showConfigPanel, showDocumentSummary]);
 
   useEffect(() => {
     const removeFocusListener = window.electronAPI.onCellFocused((payload) => {
@@ -233,6 +245,26 @@ export default function App() {
     applyBrowserState(state);
   }
 
+  async function handleOpenDocumentSummary() {
+    setDocumentError(null);
+    setShowDocumentSummary(true);
+    const candidates = await window.electronAPI.getDocumentCandidates();
+    setDocumentCandidates(candidates);
+  }
+
+  async function handleGenerateDocument(summarizerCellId: string) {
+    setIsGeneratingDocument(true);
+    setDocumentError(null);
+    try {
+      await window.electronAPI.generateDocument({ summarizerCellId });
+      setShowDocumentSummary(false);
+    } catch {
+      setDocumentError(i18n.t('documentSummary.errors.generateFailed'));
+    } finally {
+      setIsGeneratingDocument(false);
+    }
+  }
+
   function handleToggleMaximizedCell(cellId: string) {
     const nextCellId = maximizedCellId === cellId ? null : cellId;
     setMaximizedCellId(nextCellId);
@@ -259,6 +291,10 @@ export default function App() {
     setActiveCells({
       ...INITIAL_ACTIVE_CELLS,
       ...state.activeCells,
+    });
+    setMutedCells({
+      ...INITIAL_MUTED_CELLS,
+      ...state.mutedCells,
     });
     setTabs({
       ...INITIAL_TABS,
@@ -356,6 +392,7 @@ export default function App() {
           activeCells={activeCells}
           cellUrls={cellUrls}
           layoutMode={layoutMode}
+          onGenerateDocument={() => void handleOpenDocumentSummary()}
           onStartNewDiscussion={() => void handleStartNewDiscussion()}
           onToggleCell={handleToggleCell}
         />
@@ -373,6 +410,15 @@ export default function App() {
           onSave={(nextUrls, nextModes, nextSearchTemplates) =>
             void handleSaveCellConfig(nextUrls, nextModes, nextSearchTemplates)
           }
+        />
+      )}
+      {showDocumentSummary && (
+        <DocumentSummaryModal
+          candidates={documentCandidates}
+          error={documentError}
+          isGenerating={isGeneratingDocument}
+          onClose={() => setShowDocumentSummary(false)}
+          onGenerate={(cellId) => void handleGenerateDocument(cellId)}
         />
       )}
     </div>

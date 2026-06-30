@@ -9,10 +9,12 @@ import {
   CellTab,
   CellMode,
   DEFAULT_URLS,
+  DocumentCandidate,
   ExtractedConversation,
   ExtractedConversationEntry,
   ForwardRecord,
   ForwardResponsePayload,
+  GenerateDocumentPayload,
   IPC,
   LAYOUT_CELLS,
   LayoutMode,
@@ -37,6 +39,8 @@ const MAX_CONVERSATION_CHARS = 7000;
 const TIMELINE_NAVIGATION_CARRY_MS = 30_000;
 const BLANK_URL = 'about:blank';
 
+type PromptLanguage = 'zh' | 'en';
+
 export interface BrowserStore {
   get: (key: string, defaultValue?: unknown) => unknown;
   set: (key: string, value: unknown) => void;
@@ -56,7 +60,7 @@ interface CellState {
   mode: CellMode;
 }
 
-type TimelineEntrySource = 'bottom-input' | 'forward-injection' | 'dom-detected';
+type TimelineEntrySource = 'bottom-input' | 'forward-injection' | 'document-generation' | 'dom-detected';
 
 interface TimelineEntry {
   role: 'user' | 'assistant';
@@ -577,6 +581,57 @@ export class WindowManager {
     return record;
   }
 
+  getDocumentCandidates(): DocumentCandidate[] {
+    if (this.isDestroyed()) {
+      return [];
+    }
+
+    return this.getDocumentCandidateCellIds().map((cellId) => ({
+      cellId,
+      url: this.cellUrls[cellId] ?? '',
+      active: Boolean(this.activeCells[cellId]),
+      hasTimeline: this.hasTimelineContent(cellId),
+    }));
+  }
+
+  async generateDocument(payload: GenerateDocumentPayload): Promise<void> {
+    if (this.isDestroyed()) {
+      throw new Error('Window has been destroyed.');
+    }
+
+    const { summarizerCellId } = payload;
+    if (!isKnownCellId(summarizerCellId)) {
+      throw new Error('Unknown summarizer cell.');
+    }
+    if (!this.cellUrls[summarizerCellId]?.trim()) {
+      throw new Error(`No URL configured for ${summarizerCellId}.`);
+    }
+
+    const candidateCellIds = this.getDocumentCandidateCellIds();
+    if (!candidateCellIds.includes(summarizerCellId)) {
+      throw new Error('Summarizer cell is not part of the current discussion.');
+    }
+
+    await this.waitForTargetReadyForForward(summarizerCellId);
+    const knownContext = formatTimelineContext(this.getOrCreateTimeline(summarizerCellId).entries);
+    const latestResponse = await this.extractLatestResponseIfSupported(summarizerCellId);
+    const language = detectContentLanguage(knownContext || latestResponse || '');
+    const prompt = buildDocumentPrompt(language);
+    this.beginTimelineNavigationCarry(summarizerCellId);
+    const injected = await this.injectText(summarizerCellId, prompt);
+    if (!injected) {
+      this.cancelTimelineNavigationCarry(summarizerCellId);
+      throw new Error(`Unable to inject document prompt into ${summarizerCellId}.`);
+    }
+
+    this.appendTimelineEntry(summarizerCellId, {
+      role: 'user',
+      content: prompt,
+      source: 'document-generation',
+      timestamp: Date.now(),
+    });
+  }
+
   private async crossValidateCells(
     sourceCellId: string,
     targetCellId: string,
@@ -676,6 +731,26 @@ export class WindowManager {
       truncated: truncated.truncated,
       partial: !syncedFromDom,
     };
+  }
+
+  private getDocumentCandidateCellIds(): string[] {
+    return this.getDocumentDiscussionCellIds().filter((cellId) => {
+      const adapter = getAdapterForUrl(this.cellUrls[cellId] ?? '');
+      return Boolean(adapter?.extractLatestResponse && adapter.isResponseComplete);
+    });
+  }
+
+  private getDocumentDiscussionCellIds(): string[] {
+    return LAYOUT_CELLS[this.layoutMode].filter((cellId) => {
+      if (!this.cellUrls[cellId]?.trim()) {
+        return false;
+      }
+      return Boolean(this.activeCells[cellId]) || this.hasTimelineContent(cellId);
+    });
+  }
+
+  private hasTimelineContent(cellId: string): boolean {
+    return this.getOrCreateTimeline(cellId).entries.some((entry) => Boolean(entry.content.trim()));
   }
 
   private async syncTimelineFromDomIfSupported(cellId: string): Promise<boolean> {
@@ -2189,23 +2264,112 @@ function truncateConversation(fullText: string): { text: string; truncated: bool
   };
 }
 
+function buildDocumentPrompt(language: PromptLanguage): string {
+  const text = DOCUMENT_PROMPT_TEXT[language];
+
+  return [
+    text.intro,
+    text.grounding,
+    text.uncertainty,
+    text.markdownInstruction,
+    '',
+    text.outputHeader,
+    text.outputInstruction,
+    text.headings.join('\n'),
+  ].join('\n');
+}
+
 function buildForwardPrompt(
   sourceContent: string,
   sourceTruncated: boolean,
 ): string {
-  const header = sourceTruncated
-    ? '注意：原始对话较长，已省略最早的部分，以下是保留的最近对话内容。'
-    : '下面是一段用户与其它 AI 的完整对话上下文。';
+  const text = FORWARD_PROMPT_TEXT[detectContentLanguage(sourceContent)];
+  const header = sourceTruncated ? text.truncateNotice : text.intro;
 
   return [
     header,
     '',
-    '# 对话上下文',
+    text.contextHeader,
     sourceContent,
     '',
-    '# 请你评价',
-    '请先理解上面的完整讨论脉络，再评价一下该 AI 回答：有没有遗漏、错误、需要补充或反驳的地方？',
+    text.evaluateHeader,
+    text.evaluateInstruction,
   ].join('\n');
+}
+
+const DOCUMENT_PROMPT_TEXT: Record<PromptLanguage, {
+  intro: string;
+  grounding: string;
+  uncertainty: string;
+  markdownInstruction: string;
+  outputHeader: string;
+  outputInstruction: string;
+  headings: string[];
+}> = {
+  zh: {
+    intro: '请基于当前对话上下文，整理一份可沉淀的结构化总结文档。',
+    grounding: '只基于当前对话中已经出现的信息总结，不编造信息，不补充对话外事实。',
+    uncertainty: '不确定、材料未说明、需要外部验证的内容，统一放入“待核查事项”。',
+    markdownInstruction: '请生成一份完整的 Markdown 文档，并把全文放在一个 ```markdown 代码块中，方便用户直接复制并保存为 .md 文件。',
+    outputHeader: '# 输出格式',
+    outputInstruction: '严格使用下面七个二级标题，保持顺序，不要添加额外章节。如果当前上下文包含多个讨论起点，分别说明，不要猜测唯一原始问题。',
+    headings: [
+      '## 标题',
+      '## 摘要',
+      '## 主要共识',
+      '## 关键分歧与修正',
+      '## 最终结论',
+      '## 待核查事项',
+      '## 可执行建议',
+    ],
+  },
+  en: {
+    intro: 'Based on the current conversation context, create a durable structured summary document.',
+    grounding: 'Summarize only information already present in the current conversation. Do not invent facts or add outside information.',
+    uncertainty: 'Put uncertain, unspecified, or externally verifiable claims under "Items to Verify".',
+    markdownInstruction: 'Generate the complete document as Markdown and put the full text inside a single ```markdown code block so the user can copy it directly and save it as a .md file.',
+    outputHeader: '# Output Format',
+    outputInstruction:
+      'Use exactly the seven second-level headings below, in order, with no extra sections. If the current context contains multiple discussion starts, describe them separately instead of guessing one original question.',
+    headings: [
+      '## Title',
+      '## Summary',
+      '## Main Consensus',
+      '## Key Disagreements and Corrections',
+      '## Final Conclusion',
+      '## Items to Verify',
+      '## Actionable Recommendations',
+    ],
+  },
+};
+
+const FORWARD_PROMPT_TEXT: Record<PromptLanguage, {
+  intro: string;
+  contextHeader: string;
+  evaluateHeader: string;
+  evaluateInstruction: string;
+  truncateNotice: string;
+}> = {
+  zh: {
+    intro: '下面是一段用户与其它 AI 的完整对话上下文。',
+    contextHeader: '# 对话上下文',
+    evaluateHeader: '# 请你评价',
+    evaluateInstruction: '请先理解上面的完整讨论脉络，再评价一下该 AI 回答：有没有遗漏、错误、需要补充或反驳的地方？',
+    truncateNotice: '注意：原始对话较长，已省略最早的部分，以下是保留的最近对话内容。',
+  },
+  en: {
+    intro: 'Below is the full conversation context between the user and another AI.',
+    contextHeader: '# Conversation Context',
+    evaluateHeader: '# Your Evaluation',
+    evaluateInstruction:
+      'Please understand the full discussion above before evaluating the last AI response: are there omissions, errors, or points that need elaboration or rebuttal?',
+    truncateNotice: 'Note: the original conversation was long; the earliest portions were omitted. Below is the retained recent content.',
+  },
+};
+
+function detectContentLanguage(text: string): PromptLanguage {
+  const chineseCharCount = (text.match(/[\u4e00-\u9fa5]/g) ?? []).length;
+  return chineseCharCount / Math.max(text.length, 1) > 0.15 ? 'zh' : 'en';
 }
 
 function normalizeDomTimelineEntries(entries: ExtractedConversationEntry[]): Array<Omit<TimelineEntry, 'timestamp'>> {

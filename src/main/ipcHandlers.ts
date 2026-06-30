@@ -4,6 +4,7 @@ import {
   AppLanguage,
   CellTabPayload,
   ForwardResponsePayload,
+  GenerateDocumentPayload,
   IPC,
   CellFocusedPayload,
   LayoutMode,
@@ -34,6 +35,14 @@ export function registerIpcHandlers(windowManager: WindowManager): void {
 
   registerHandler(IPC.FORWARD_RESPONSE, (_event, payload: ForwardResponsePayload) => {
     return windowManager.forwardResponse(payload);
+  });
+
+  registerHandler(IPC.GET_DOCUMENT_CANDIDATES, () => {
+    return windowManager.getDocumentCandidates();
+  });
+
+  registerHandler(IPC.GENERATE_DOCUMENT, (_event, payload: GenerateDocumentPayload) => {
+    return windowManager.generateDocument(payload);
   });
 
   registerHandler(IPC.SET_THEME_MODE, (_event, mode: ThemeMode) => {

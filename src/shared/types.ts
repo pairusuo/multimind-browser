@@ -34,6 +34,8 @@ export const IPC = {
   SEND_TO_ALL: 'send-to-all',
   START_NEW_DISCUSSION: 'start-new-discussion',
   FORWARD_RESPONSE: 'forward-response',
+  GET_DOCUMENT_CANDIDATES: 'get-document-candidates',
+  GENERATE_DOCUMENT: 'generate-document',
   APPLY_TEMPLATE: 'apply-template',
   SET_LAYOUT: 'set-layout',
   SET_OVERLAY_OPEN: 'set-overlay-open',
@@ -53,7 +55,6 @@ export const IPC = {
   SET_LANGUAGE: 'set-language',
   CELL_FOCUSED: 'cell-focused',
   FORWARD_COMPLETED: 'forward-completed',
-
   SHOW_CELL_NOTICE: 'show-cell-notice',
   LAYOUT_CHANGED: 'layout-changed',
   CELL_URL_CHANGED: 'cell-url-changed',
@@ -91,6 +92,10 @@ export interface ForwardResponsePayload {
   targetCellId: string;
 }
 
+export interface GenerateDocumentPayload {
+  summarizerCellId: string;
+}
+
 export interface ExtractedConversationEntry {
   role: 'user' | 'assistant';
   content: string;
@@ -114,6 +119,13 @@ export interface ForwardRecord {
 
 export interface ForwardCompletedPayload {
   record: ForwardRecord;
+}
+
+export interface DocumentCandidate {
+  cellId: string;
+  url: string;
+  active: boolean;
+  hasTimeline: boolean;
 }
 
 export interface CellTab {
@@ -197,6 +209,8 @@ export interface ElectronAPI {
   sendToAll: (payload: SendToAllPayload) => Promise<void>;
   startNewDiscussion: () => Promise<BrowserState>;
   forwardResponse: (payload: ForwardResponsePayload) => Promise<ForwardRecord>;
+  getDocumentCandidates: () => Promise<DocumentCandidate[]>;
+  generateDocument: (payload: GenerateDocumentPayload) => Promise<void>;
   setLayout: (mode: LayoutMode) => Promise<void>;
   setThemeMode: (mode: ThemeMode) => Promise<BrowserState>;
   setLanguage: (language: AppLanguage) => Promise<BrowserState>;

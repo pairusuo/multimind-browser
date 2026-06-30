@@ -72,6 +72,7 @@
     "label": "统一输入",
     "syncCells": "同步格子",
     "newDiscussion": "所有格子开启新会话",
+    "generateDocument": "生成总结文档",
     "placeholder": "输入后按 Enter 同步发送，Shift+Enter 换行",
     "send": "发送",
     "sending": "发送中",
@@ -79,6 +80,23 @@
       "title": "切换格子 {{index}}",
       "aria": "切换格子 {{index}}",
       "noUrl": "格子 {{index}} 没有 URL"
+    }
+  },
+  "documentSummary": {
+    "title": "总结文档",
+    "cellLabel": "格子 {{index}}",
+    "picker": {
+      "description": "选择一个格子作为总结者。MultiMind Flow 会把总结指令发送给该 AI，然后由该 AI 基于当前对话上下文生成总结。"
+    },
+    "status": {
+      "sending": "正在发送总结指令..."
+    },
+    "actions": {
+      "close": "关闭"
+    },
+    "errors": {
+      "noCandidates": "当前布局中没有可用于总结的讨论格子。",
+      "generateFailed": "总结指令发送失败，请确认总结者格子已登录并支持统一发送。"
     }
   },
   "cellConfig": {

@@ -72,6 +72,7 @@
     "label": "Unified input",
     "syncCells": "Synchronized cells",
     "newDiscussion": "Start a new conversation in all cells",
+    "generateDocument": "Generate summary document",
     "placeholder": "Press Enter to send to all, Shift+Enter for a new line",
     "send": "Send",
     "sending": "Sending",
@@ -79,6 +80,23 @@
       "title": "Toggle cell {{index}}",
       "aria": "Toggle cell {{index}}",
       "noUrl": "Cell {{index}} has no URL"
+    }
+  },
+  "documentSummary": {
+    "title": "Summary Document",
+    "cellLabel": "Cell {{index}}",
+    "picker": {
+      "description": "Choose one cell as the summarizer. MultiMind Flow will send the summary instruction to that AI, then that AI will summarize from its current conversation context."
+    },
+    "status": {
+      "sending": "Sending summary instruction..."
+    },
+    "actions": {
+      "close": "Close"
+    },
+    "errors": {
+      "noCandidates": "No discussion cells are available for summarization in the current layout.",
+      "generateFailed": "Could not send the summary instruction. Confirm the summarizer cell is logged in and supports batch sending."
     }
   },
   "cellConfig": {
