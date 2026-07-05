@@ -559,6 +559,9 @@ export class WindowManager {
     if (!source.content) {
       throw new Error(`No readable source context in ${sourceCellId}.`);
     }
+    if (source.truncated) {
+      this.showCellNotice(sourceCellId, 'conversation-truncated');
+    }
 
     const record: ForwardRecord = {
       id: createRecordId(),

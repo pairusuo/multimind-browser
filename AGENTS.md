@@ -772,7 +772,7 @@ export const IPC = {
 
   // 第二阶段：用户手动转发交叉验证
   FORWARD_RESPONSE: "forward-response", // 渲染进程 → 主进程，用户点击转发后触发
-  FORWARD_COMPLETED: "forward-completed", // 主进程 → 渲染进程，转发链路完成（含目标回复）
+  FORWARD_COMPLETED: "forward-completed", // 主进程 → 渲染进程，转发注入已完成
 
   CELL_URL_CHANGED: "cell-url-changed",
   CELL_TITLE_CHANGED: "cell-title-changed",
@@ -790,7 +790,7 @@ interface ForwardRecord {
   targetCellId: string;
   sourceContent: string;     // 源格子的完整对话上下文（或降级后的最新回答）
   sourceTruncated: boolean;  // 是否因超长被裁切
-  targetReply: string;       // 目标格子收到转述后的回复
+  targetReply: string;       // 可选补充记录：目标格子后续生成的回复；转发完成不依赖它
   timestamp: number;
 }
 
@@ -800,9 +800,11 @@ private forwardRecords: ForwardRecord[] = [];
 ```
 
 `FORWARD_RESPONSE` 的 payload 是 `{ sourceCellId, targetCellId }`，
-主进程收到后执行：提取源格子回答 → 拼接转述 prompt → 注入目标格子 →
-等待生成完毕 → 提取目标回复 → 写入 `forwardRecords` → 通过
-`FORWARD_COMPLETED` 通知渲染进程更新 UI。
+主进程收到后执行：整理源格子完整上下文 → 拼接转述 prompt → 注入目标格子
+并触发发送 → 写入 `forwardRecords` → 通过 `FORWARD_COMPLETED` 通知渲染
+进程更新 UI。**转发功能的完成边界是"成功注入并触发发送"，不承诺目标 AI
+已经完成评价**；目标 AI 后续生成的交叉验证意见由用户自行阅读和判断，
+应用可以异步补充捕获 `targetReply`，但 UI 不应把它作为"转发完成"的前置条件。
 
 ### 统一提示系统
 
@@ -1092,12 +1094,22 @@ interface StoreSchema {
      上下文合并」章节里定义的 `getCellFullContext`，不是简单调用
      `extractConversation` 重新读取整个 DOM），按
      `MAX_CONVERSATION_CHARS` 规则做长度管理（超长裁切+提示），
-     拼接转述 prompt → 注入目标格子 → 等待生成完毕 → 提取目标回复
-   - 转发动作本身（用户消息和目标的回复）需要写入双方格子各自的
-     `CellTimeline`，供后续任意一次再转发时使用
+     拼接转述 prompt → 注入目标格子并触发发送
+   - 超长裁切必须同时进入两条信息流：prompt 内保留裁切提示，让目标 AI
+     知道自己看到的是最近片段；界面侧通过 `SHOW_CELL_NOTICE` 触发
+     `conversation-truncated` notice 告知发起转发的用户，不做静默裁切
+   - 转发动作本身需要写入目标格子的 `CellTimeline`；目标 AI 后续生成的
+     回复可以由异步捕获链路补充写入目标格子的 `CellTimeline`，供后续
+     任意一次再转发时使用，但不作为本次转发操作完成的前置条件
    - 转发次数不限，用户可以反复多次转发（A→B→C→A...），每次都应该
-     拿到当前为止的完整上下文，不会因为链路变长而丢失早期信息
-     （除非触发长度裁切）
+     拿到**源格子自己**当前为止的完整上下文，不会因为链路变长而丢失
+     早期信息（除非触发长度裁切）。每个格子的时间线彼此独立：统一发送
+     后，用户又分别在各 AI 页面里单独追问时，这些追问只属于对应格子的
+     上下文。应用主动触发的底部输入和转发注入必须可靠写入时间线；用户
+     直接在 AI 网页内手动追问时，只有已实现 `extractConversation` 的站点
+     才能通过 DOM 增量同步完整补齐，未实现完整对话提取的站点不能宣称
+     完整捕获。多次转发和 DOM 增量合并必须继续做去重，避免同一段用户
+     问题、AI 回答或转发上下文在时间线里反复累积
 
    **2b. 格子时间线与上下文合并**（已升级为正式架构，不是补丁）：
    - 这是上一版"直接调用 extractConversation 重新读取"方案的修正，
@@ -1109,6 +1121,13 @@ interface StoreSchema {
    - 站点尚未实现 `extractConversation` 不再直接导致转发降级——只要
      这段对话是经过 MultiMind Flow（底部输入或转发注入）发生的，应用
      自己的时间线记录就是完整的
+   - 后续需要补齐完整对话提取适配器：Claude、ChatGPT、Kimi、智谱清言、
+     通义千问等站点都需要逐站实现并现场验证 `extractConversation`，才能
+     可靠捕获用户直接在网页内手动追加的追问。Kimi、智谱、通义当前只是
+     generic 写入适配器，不能因为能发送就默认具备完整对话读取能力；实现
+     时参考豆包/DeepSeek 的方法论（消息容器定位、滚动/虚拟列表采样、角色
+     判定、推荐内容过滤、去重排序），但选择器和完成判断必须按站点实测
+     后单独维护
 
 3. **文档生成**（✅ 当前简易流程已实现）：用户指定一个 AI 汇总，应用
    只负责把总结指令注入该总结者格子，不自动抽取结果、不弹预览、不落盘。
@@ -1142,9 +1161,17 @@ interface StoreSchema {
    判断总结完成；需要明确任务状态、可取消/手动读取兜底、以及保存目录/
    文件命名规则后再实现。
 
-4. **长期记忆存储**：引入 `better-sqlite3`，设计文档表结构（建议至少
-   包含：id、原始问题、参与 AI 列表、最终文档正文、生成时间、标签），
-   实现 FTS5 全文检索
+4. **长期记忆存储**：先设计"最终 Markdown 文档如何进入记忆库"的入口，
+   再引入 `better-sqlite3` 和表结构。当前总结功能只把总结 prompt 发送给
+   指定 AI，用户在网页里得到最终 Markdown 后自行复制/保存；后续长期记忆
+   版本需要明确采用用户粘贴/导入 `.md`、用户授权读取某个本地目录并从中
+   导入已保存的总结文档、用户确认后从总结者页面读取、或其它保存入口。
+   授权目录读取是单独设计议题：必须由用户显式选择目录，不默认扫描磁盘；
+   需要先定义权限边界、索引范围、文件去重、文件删除/移动后的同步语义，
+   再进入实现。无论采用哪种方式，都必须以用户确认后的最终文档为准，不把
+   中间转发记录或未确认的网页内容直接写入长期记忆。表结构建议至少包含：
+   id、原始问题、参与 AI 列表、最终文档正文、生成时间、标签，并实现 FTS5
+   全文检索
 
 5. **记忆检索 UI**：提供一个简单的本地知识库浏览/搜索界面
 
