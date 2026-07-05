@@ -127,7 +127,7 @@
     },
     "injectFailed": {
       "label": "需要手动操作",
-      "message": "该 URL 不支持统一发送"
+      "message": "自动发送未完成，请检查登录状态或手动点击发送"
     },
     "loadFailed": {
       "label": "访问提示",

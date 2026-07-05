@@ -4,6 +4,7 @@ export interface PresetSite {
   id: string;
   name: string;
   url: string;
+  aliases?: string[];
   newConversationUrl?: string;
   region: 'international' | 'china';
   mode: CellMode;
@@ -17,9 +18,9 @@ export const PRESET_SITES: PresetSite[] = [
   { id: 'perplexity', name: 'Perplexity', url: 'https://perplexity.ai', region: 'international', mode: 'chat' },
   { id: 'copilot', name: 'Copilot', url: 'https://copilot.microsoft.com', region: 'international', mode: 'chat' },
   { id: 'deepseek', name: 'DeepSeek', url: 'https://chat.deepseek.com', region: 'china', mode: 'chat' },
-  { id: 'kimi', name: 'Kimi', url: 'https://kimi.moonshot.cn', region: 'china', mode: 'chat' },
+  { id: 'kimi', name: 'Kimi', url: 'https://www.kimi.com', aliases: ['https://kimi.moonshot.cn'], region: 'china', mode: 'chat' },
   { id: 'yiyan', name: '文心一言', url: 'https://yiyan.baidu.com', region: 'china', mode: 'chat' },
-  { id: 'tongyi', name: '通义千问', url: 'https://tongyi.aliyun.com', region: 'china', mode: 'chat' },
+  { id: 'tongyi', name: '通义千问', url: 'https://www.qianwen.com/', aliases: ['https://chat.qwen.ai', 'https://tongyi.aliyun.com'], region: 'china', mode: 'chat' },
   { id: 'doubao', name: '豆包', url: 'https://www.doubao.com', region: 'china', mode: 'chat' },
   { id: 'chatglm', name: '智谱清言', url: 'https://chatglm.cn', region: 'china', mode: 'chat' },
   {
@@ -75,8 +76,11 @@ export function findPresetSiteByUrl(rawUrl: string): PresetSite | null {
   }
 
   return PRESET_SITES.find((site) => {
-    const siteUrl = parseUrl(site.url);
-    return siteUrl ? hostsMatch(url.hostname, siteUrl.hostname) : false;
+    const urls = [site.url, ...(site.aliases ?? [])];
+    return urls.some((candidate) => {
+      const siteUrl = parseUrl(candidate);
+      return siteUrl ? hostsMatch(url.hostname, siteUrl.hostname) : false;
+    });
   }) ?? null;
 }
 

@@ -359,17 +359,18 @@ view.webContents.setUserAgent(
 
 ## 注入时序（多格子并发时）
 
-同时向多个格子注入时，不要完全并发，加入少量延迟避免触发网站的反自动化检测：
+同时向多个格子注入时，必须并发 fan-out，不能按格子顺序串行等待。
+为了降低站点风控，可以在每个并发任务内部加入小幅随机起跑抖动，但某个
+站点提交慢、失败或等待确认，不应该拖慢其它格子收到同一条用户输入。
 
 ```typescript
 // ipcHandlers.ts 中处理 SEND_TO_ALL 时
 async function sendToAll(text: string, cells: string[]) {
   const results: Record<string, boolean> = {};
-  for (const cellId of cells) {
+  await Promise.all(cells.map(async (cellId) => {
+    await delay(Math.random() * 220);
     results[cellId] = await injectToCell(cellId, text);
-    // 各格子之间加 150ms 延迟
-    await new Promise(r => setTimeout(r, 150));
-  }
+  }));
   return results;
 }
 ```
@@ -492,6 +493,9 @@ function extractLatestResponse() {
 | ChatGPT (chatgpt.com) | 模式一，识别真实 `stop` 控件（`button[data-testid="stop-button"]`） | `[data-message-author-role="assistant"]`，内容取 `.markdown` | **已验证通过**。修正记录：最初实现误把"已停止思考"按钮当成正在生成中的信号，导致 `isResponseComplete()` 一直返回 `false`，修正为只识别真实 stop 控件后才正确 |
 | DeepSeek (chat.deepseek.com) | **模式一不可靠，已改用模式三**（最新回答文本稳定 1.5 秒后判定完成） | `.ds-markdown.ds-assistant-message-main-content`（取整条，不只取最后一段） | **已验证通过**。重要教训：模式一（检测停止生成按钮）在 DeepSeek 上不可靠，生成过程中也会返回 `true`，原因待查（可能该站点的停止按钮状态和实际生成状态不同步）。改用模式三后验证通过。发送控件也非标准 `button`，实际是 `div[role="button"].ds-button--primary`，写入适配器已同步修正 |
 | 豆包 (www.doubao.com) | 模式三，最新回答文本稳定 1.5 秒后判定完成，兼容停止按钮检测 | 完整对话提取优先使用虚拟列表行 `.v_list_row`，按 `--vlist-row-transform-y` 排序，用 `data-observe-row` 去重，并从克隆节点中移除 `suggest-*` 推荐容器 | **已验证通过（完整对话提取）**。已验证单轮问题转发给 DeepSeek 时同时包含原始问题和豆包回答；多轮对话转发时能保留真实用户提问和豆包回答，并排除"猜你想问"推荐问题 |
+| Kimi (kimi.com / kimi.moonshot.cn) | 模式三，最新回答文本稳定 1.5 秒后判定完成，兼容停止按钮检测 | Kimi 专属 readable 首版：按消息/markdown/bubble/content 等候选容器提取，过滤建议、推荐、toolbar、feedback 等非对话元素，按位置排序并去重 | **统一发送基本验证通过，读取待完整验证**。写入侧已实测输入框为 Lexical `div.chat-input-editor[data-lexical-editor="true"]`，发送控件为 `.send-button-container`；Kimi 不使用 Enter 兜底，避免把统一发送变成输入框换行。提交动作在主进程里走 `webContents.sendInputEvent` 原生鼠标点击，避免页面内 DOM click 无效。仍需验证转发注入、多轮手动追问、转发后再追问、长回答和推荐问题过滤是否准确 |
+| 通义千问 / 千问 (qianwen.com / tongyi.aliyun.com / chat.qwen.ai) | 模式三，最新回答文本稳定 1.5 秒后判定完成，兼容停止按钮检测 | 通义千问专属 readable 首版：按 message/chat-item/bubble/markdown/answer/response 等候选容器提取，过滤建议、推荐、source、toolbar、feedback 等非对话元素，按位置排序并去重 | **`qianwen.com` 统一发送基本验证通过，`chat.qwen.ai` 待补测，读取待完整验证**。内置入口使用中文官方站 `www.qianwen.com`，适配器仍兼容国际站 `chat.qwen.ai` 和旧域名 `tongyi.aliyun.com`；三套域名共用同一站点适配器文件，但需要分别实站确认前端差异，不走通用 AI DOM 适配器 |
+| 智谱清言 (chatglm.cn) | 模式三，最新回答文本稳定 1.5 秒后判定完成，兼容停止按钮检测 | 智谱清言专属 readable 首版：按 message/chat-item/bubble/markdown/answer/content 等候选容器提取，过滤建议、推荐、source、toolbar、feedback 等非对话元素，按位置排序并去重 | **统一发送基本验证通过，读取待完整验证**。智谱已确认存在"文本可见写入成功，但通用按钮选择、坐标点击、单独原生 Enter 不能稳定提交"的问题；当前写入路径在主进程内保留原生输入，并使用站点专用提交组合触发 `form.requestSubmit()` / `submit`、发送控件 DOM click、Pointer/Mouse、Keyboard Enter，最后以输入框清空或进入生成中确认成功。仍需重点验证用户/AI 角色判定是否可靠，避免右侧用户气泡与 AI markdown 容器被泛化选择器合并 |
 
 ### 豆包完整对话提取经验
 

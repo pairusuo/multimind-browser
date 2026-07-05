@@ -127,7 +127,7 @@
     },
     "injectFailed": {
       "label": "Manual send needed",
-      "message": "This URL does not support batch sending."
+      "message": "Automatic sending did not complete. Check login state or send manually."
     },
     "loadFailed": {
       "label": "Access notice",

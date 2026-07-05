@@ -200,6 +200,28 @@ async function injectAndConfirm(
 这是写入适配器的标准开发模式，不要重新发明，也不要假设"先试试固定
 延迟，能用就行"——已有三个站点的真实教训证明固定延迟不可靠。
 
+### 文本已写入但未提交：必须区分"写入成功"和"发送成功"
+
+部分站点会出现"文本已经稳定进入输入框，但点击/回车没有触发真正发送"
+的情况。此时问题不在 URL 识别、登录态或输入写入，而在站点的提交事件
+入口没有被命中。不要继续通过增加固定延迟或反复调整通用选择器来碰运气。
+
+新站点排查顺序必须明确分层：
+
+1. 确认站点命中正确的独立适配器。
+2. 确认文本是否真实写入输入框。
+3. 如果文本已写入但未发送，先尝试原生鼠标点击和原生 Enter。
+4. 如果仍未发送，改为站点专用提交脚本，按该站点真实结构组合触发：
+   `form.requestSubmit()` / `submit` 事件、发送控件的 DOM click、
+   Pointer/Mouse 事件、Keyboard Enter 事件。
+5. 每次提交后都必须确认"输入框清空"或"进入生成中/停止生成状态"，
+   禁止只因为执行过 click/Enter 就返回成功。
+
+智谱清言（`chatglm.cn`）已经验证过这种模式：可见输入写入成功，但通用
+按钮选择、坐标点击、单独原生 Enter 都不足以稳定提交，最终需要站点专用
+提交组合。因此后续每个 AI 站点仍必须维护自己的写入/提交适配器，不允许
+把这类逻辑折回通用 AI DOM 适配器。
+
 ---
 
 ## 转发功能：信息流分层规则（2026年6月，重要修正）
@@ -493,7 +515,8 @@ async sendToAll(text: string): Promise<void> {
     ([, state]) => state.active && state.url
   );
 
-  for (const [cellId, state] of activeCells) {
+  await Promise.all(activeCells.map(async ([cellId, state]) => {
+    await delay(Math.random() * SEND_FAN_OUT_JITTER_MS);
     if (state.mode === 'search') {
       const site = findPresetSiteByUrl(state.url);
       const searchUrl = buildSearchUrl(site?.searchUrlTemplate, text);
@@ -504,14 +527,18 @@ async sendToAll(text: string): Promise<void> {
         this.sendNotice(cellId, 'inject-failed');
       }
     }
-    await new Promise((r) => setTimeout(r, 150 + Math.random() * 100));
-  }
+  }));
 }
 ```
 
 - 空格子（`url` 为空）和未激活格子（`active: false`）自动跳过，不报错不提示
 - `search` 模式直接 `navigate` 跳转，不走注入逻辑，不会触发 `inject-failed`
 - `chat` 模式走 `injectScript`，失败时统一走提示系统
+- 统一发送必须并发 fan-out 到所有活跃格子；禁止按格子顺序串行 `await`
+  注入完成。单个站点注入确认慢、登录异常或提交失败，只能影响该格子自己的
+  notice 和时间线，不能拖慢其它 AI 收到同一条用户输入
+- 如需降低站点风控，只允许在每个并发任务内部加入小幅随机起跑抖动
+  （例如 0-220ms）；不允许用 `for` 循环逐个等待发送完成
 
 ---
 
@@ -1072,10 +1099,14 @@ interface StoreSchema {
 
 按以下顺序推进，每步验证通过后才进入下一步：
 
-1. **读取适配器**（✅ 已完成并验证）：Claude、ChatGPT、DeepSeek、豆包
+1. **读取适配器 / 站点接入状态**：Claude、ChatGPT、DeepSeek、豆包
    四个站点的 `extractLatestResponse` 和 `isResponseComplete` 均已
-   实现并验证通过，详见 `adapter-reference.md`。同时已验证：多条
-   转述链路可以安全并发触发（互不串读），技术风险已排除
+   实现并验证通过，详见 `adapter-reference.md`。Kimi、智谱清言、
+   通义千问已经接入各自独立适配器；底部统一发送在 Kimi、智谱清言和
+   `qianwen.com` 上已基本验证通过，`chat.qwen.ai` 仍需单独补测。
+   国内三站的 readable 首版已经实现，但 `extractLatestResponse`、
+   `isResponseComplete`、`extractConversation` 仍需要按站点做完整实站
+   验证，不能因为写入成功就宣称读取链路可靠
 
 2. **转发交互 UI**（✅ 已完成并验证：基础转发链路、格子时间线架构、
    多跳转发上下文累积、信息流分层、国际化均已验证通过）：
@@ -1121,13 +1152,14 @@ interface StoreSchema {
    - 站点尚未实现 `extractConversation` 不再直接导致转发降级——只要
      这段对话是经过 MultiMind Flow（底部输入或转发注入）发生的，应用
      自己的时间线记录就是完整的
-   - 后续需要补齐完整对话提取适配器：Claude、ChatGPT、Kimi、智谱清言、
-     通义千问等站点都需要逐站实现并现场验证 `extractConversation`，才能
-     可靠捕获用户直接在网页内手动追加的追问。Kimi、智谱、通义当前只是
-     generic 写入适配器，不能因为能发送就默认具备完整对话读取能力；实现
-     时参考豆包/DeepSeek 的方法论（消息容器定位、滚动/虚拟列表采样、角色
-     判定、推荐内容过滤、去重排序），但选择器和完成判断必须按站点实测
-     后单独维护
+   - 完整对话提取适配器需要逐站实现并现场验证，才能可靠捕获用户直接在
+     网页内手动追加的追问。每个 AI 站点必须维护自己的适配器文件，不使用
+     通用 AI DOM 适配器兜底；即使多个站点实现相似，也以站点边界清晰、
+     便于单站修复为优先。Kimi、智谱清言、通义千问已经接入各自的 readable
+     首版（消息容器定位、角色判定、推荐内容过滤、去重排序），但仍需用
+     已登录账号做实站验证；`chat.qwen.ai` 需要和 `qianwen.com` 分开补测，
+     不能假设两者前端完全一致。Claude、ChatGPT 仍需要后续补齐
+     `extractConversation`
 
 3. **文档生成**（✅ 当前简易流程已实现）：用户指定一个 AI 汇总，应用
    只负责把总结指令注入该总结者格子，不自动抽取结果、不弹预览、不落盘。
