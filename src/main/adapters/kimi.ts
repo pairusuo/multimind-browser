@@ -2,9 +2,11 @@ import type { SiteAdapter } from './index';
 
 export const kimiAdapter: SiteAdapter = {
   urlPattern: /https:\/\/(?:kimi\.moonshot\.cn|(?:www\.)?kimi\.com)/i,
-  // Kimi 的提交动作在 WindowManager 中走 webContents.sendInputEvent 原生点击。
-  // 这个 DOM 脚本只作为非统一路径的兜底，不作为主要发送实现。
   injectScript: (text: string) => buildKimiFallbackInjectScript(text),
+  nativeInjection: {
+    prepareScript: (text: string) => buildKimiPrepareScript(text),
+    acceptedScript: buildKimiAcceptedScript(),
+  },
   readyCheckScript: `
     (() => {
       const isVisible = (element) => {
@@ -21,6 +23,107 @@ export const kimiAdapter: SiteAdapter = {
   extractConversation: () => buildKimiConversationScript(false),
   isResponseComplete: () => buildKimiCompletionScript(),
 };
+
+function buildKimiPrepareScript(text: string): string {
+  return `
+    (async () => {
+      const targetText = ${JSON.stringify(text)};
+      const expectedText = targetText.trim();
+      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const isVisible = (element) => {
+        if (!element) return false;
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+      };
+      const getText = (element) => (element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement)
+        ? element.value.trim()
+        : (element.innerText || element.textContent || '').trim();
+      const normalizeText = (value) => value.replace(/\\s+/g, ' ').trim();
+      const hasExpectedText = (currentText) => {
+        const normalizedCurrent = normalizeText(currentText);
+        const normalizedExpected = normalizeText(expectedText);
+        if (!normalizedCurrent || !normalizedExpected) return false;
+        if (normalizedCurrent === normalizedExpected) return true;
+        if (normalizedExpected.length < 160) return false;
+
+        const head = normalizedExpected.slice(0, 80);
+        const tail = normalizedExpected.slice(-80);
+        return normalizedCurrent.length >= normalizedExpected.length * 0.8
+          && normalizedCurrent.includes(head)
+          && normalizedCurrent.includes(tail);
+      };
+      const input = [
+        ...document.querySelectorAll('.chat-input-editor[data-lexical-editor="true"], [data-lexical-editor="true"], .chat-input-editor, [contenteditable="true"][role="textbox"], [contenteditable="true"]')
+      ].filter(isVisible).at(-1);
+      if (!input) return null;
+
+      input.focus();
+      if (input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement) {
+        const proto = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+        const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+        if (!setter) return null;
+        setter.call(input, targetText);
+      } else {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(input);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        document.execCommand('delete', false, null);
+        document.execCommand('insertText', false, targetText);
+      }
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        const button = document.querySelector('.send-button-container:not(.disabled)')
+          || [...document.querySelectorAll('.send-button-container')]
+            .find((candidate) => !candidate.className?.toString().toLowerCase().includes('disabled'));
+        const currentText = getText(input);
+        if (button && isVisible(button) && hasExpectedText(currentText)) {
+          const rect = button.getBoundingClientRect();
+          return {
+            x: Math.round(rect.left + rect.width / 2),
+            y: Math.round(rect.top + rect.height / 2),
+          };
+        }
+        await delay(100);
+      }
+
+      return null;
+    })();
+  `;
+}
+
+function buildKimiAcceptedScript(): string {
+  return `
+    (async () => {
+      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const getInputText = () => {
+        const input = document.querySelector('.chat-input-editor[data-lexical-editor="true"], .chat-input-editor, [data-lexical-editor="true"]');
+        return (input?.innerText || input?.textContent || '').trim();
+      };
+      const hasGeneratingControl = () => [...document.querySelectorAll('.stop-button-container, [class*="stop" i], [aria-label], [title]')]
+        .some((candidate) => {
+          const label = [
+            candidate.getAttribute?.('aria-label'),
+            candidate.getAttribute?.('title'),
+            candidate.className?.toString(),
+            candidate.textContent,
+          ].filter(Boolean).join(' ');
+          return /stop|cancel|停止|暂停|取消|生成中|思考中/i.test(label);
+        });
+
+      for (let attempt = 0; attempt < 80; attempt += 1) {
+        if (!getInputText()) return true;
+        if (hasGeneratingControl()) return true;
+        await delay(100);
+      }
+      return false;
+    })();
+  `;
+}
 
 function buildKimiFallbackInjectScript(text: string): string {
   return `

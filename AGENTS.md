@@ -553,6 +553,7 @@ export interface SiteAdapter {
   urlPattern: RegExp;
   injectScript: (text: string) => string;
   readyCheckScript: string;
+  nativeInjection?: SiteNativeInjection; // 需要 Electron 原生输入/点击时由站点自己声明
 }
 
 export function getAdapterForUrl(url: string): SiteAdapter | null {
@@ -562,6 +563,14 @@ export function getAdapterForUrl(url: string): SiteAdapter | null {
 
 找不到匹配适配器时返回 `null`，调用方据此返回 `false` 触发失败提示，
 不抛异常导致主进程崩溃。
+
+**适配器边界规则**：每个格子只根据当前 URL 命中一个站点适配器；格子本身
+不绑定具体 AI。每个 AI 站点必须维护自己的独立适配器文件，站点专用的
+输入框定位、发送按钮定位、原生点击、提交兜底、读取和完成判断都必须放在
+对应 adapter 内。`windowManager.ts` 只负责按格子调度、执行 adapter 返回的
+脚本和处理通用 WebContents 行为，禁止在 `WindowManager` 里写
+`if Kimi / if 千问 / if 智谱` 这类具体 AI 分支，也禁止把多个 AI 折回
+通用 AI DOM 适配器兜底。
 
 注入前增加随机延迟（300-800ms），避免"加载完成立即填充提交"这种机械
 时序（详见下方风控规避部分）。

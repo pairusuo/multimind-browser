@@ -1,8 +1,37 @@
 import type { SiteAdapter } from './index';
 
+const TONGYI_INPUT_SELECTORS = [
+  'textarea:not([disabled])',
+  '[contenteditable="true"][role="textbox"]',
+  '[role="textbox"]:not([aria-disabled="true"])',
+  '[contenteditable="true"]',
+];
+
+const TONGYI_BUTTON_SELECTORS = [
+  'button[aria-label*="发送"]',
+  '[role="button"][aria-label*="发送"]',
+  'button[aria-label*="send" i]',
+  '[role="button"][aria-label*="send" i]',
+  '[data-testid*="send" i]',
+  'button[type="submit"]',
+  '[class*="send" i]',
+  '[class*="submit" i]',
+  '[class*="arrow" i]',
+];
+
 export const tongyiAdapter: SiteAdapter = {
   urlPattern: /https:\/\/(?:chat\.qwen\.ai|(?:www\.)?qianwen\.com|tongyi\.aliyun\.com)/i,
   injectScript: (text: string) => buildTongyiInjectScript(text),
+  nativeInjection: {
+    prepareScript: () => buildCoordinateInputFocusScript(TONGYI_INPUT_SELECTORS),
+    usesNativeTextInsertion: true,
+    clickTargetScript: (text: string) => buildCoordinateClickButtonScript({
+      text,
+      inputSelectors: TONGYI_INPUT_SELECTORS,
+      buttonSelectors: TONGYI_BUTTON_SELECTORS,
+    }),
+    acceptedScript: buildTextOrGeneratingAcceptedScript(TONGYI_INPUT_SELECTORS),
+  },
   readyCheckScript: `
     (() => {
       const isVisible = (element) => {
@@ -22,6 +51,175 @@ export const tongyiAdapter: SiteAdapter = {
   extractConversation: () => buildTongyiConversationScript(false),
   isResponseComplete: () => buildTongyiCompletionScript(),
 };
+
+function buildCoordinateInputFocusScript(inputSelectors: string[]): string {
+  return `
+    (() => {
+      const inputSelectors = ${JSON.stringify(inputSelectors)};
+      const isVisible = (element) => {
+        if (!element) return false;
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+      };
+      const input = inputSelectors
+        .flatMap((selector) => [...document.querySelectorAll(selector)])
+        .filter(isVisible)
+        .at(-1);
+      if (!input) return false;
+
+      input.focus();
+      if (input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement) {
+        input.select();
+        input.setSelectionRange?.(0, input.value.length);
+      } else {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(input);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      }
+      return document.activeElement === input || input.contains(document.activeElement);
+    })();
+  `;
+}
+
+function buildCoordinateClickButtonScript({
+  text,
+  inputSelectors,
+  buttonSelectors,
+}: {
+  text: string;
+  inputSelectors: string[];
+  buttonSelectors: string[];
+}): string {
+  return `
+    (async () => {
+      const targetText = ${JSON.stringify(text)};
+      const expectedText = targetText.trim();
+      const inputSelectors = ${JSON.stringify(inputSelectors)};
+      const buttonSelectors = ${JSON.stringify(buttonSelectors)};
+      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const isVisible = (element) => {
+        if (!element) return false;
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+      };
+      const textOf = (element) => (element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement)
+        ? element.value.trim()
+        : (element.innerText || element.textContent || '').trim();
+      const normalizeText = (value) => value.replace(/\\s+/g, ' ').trim();
+      const hasExpectedText = (currentText) => {
+        const normalizedCurrent = normalizeText(currentText);
+        const normalizedExpected = normalizeText(expectedText);
+        if (!normalizedCurrent || !normalizedExpected) return false;
+        if (normalizedCurrent === normalizedExpected) return true;
+        if (normalizedExpected.length < 160) return false;
+
+        const head = normalizedExpected.slice(0, 80);
+        const tail = normalizedExpected.slice(-80);
+        return normalizedCurrent.length >= normalizedExpected.length * 0.8
+          && normalizedCurrent.includes(head)
+          && normalizedCurrent.includes(tail);
+      };
+      const labelOf = (element) => [
+        element?.getAttribute?.('aria-label'),
+        element?.getAttribute?.('title'),
+        element?.getAttribute?.('data-testid'),
+        element?.className?.toString(),
+        element?.textContent,
+      ].filter(Boolean).join(' ');
+      const isEnabled = (element) => element
+        && isVisible(element)
+        && element.getAttribute?.('aria-disabled') !== 'true'
+        && element.getAttribute?.('disabled') === null
+        && !element.disabled
+        && !/disabled|disable|readonly/.test(element.className?.toString().toLowerCase() || '');
+      const isExcluded = (element) => /(attach|upload|file|image|voice|mic|model|setting|history|new|附件|上传|文件|图片|语音|麦克风|模型|设置|历史|新建)/i.test(labelOf(element));
+      const findInput = () => inputSelectors
+        .flatMap((selector) => [...document.querySelectorAll(selector)])
+        .filter(isVisible)
+        .at(-1);
+      const input = findInput();
+      if (!input) return null;
+
+      const composer = input.closest('form') || input.closest('[class*="composer" i], [class*="input" i], [class*="chat" i]') || input.parentElement || document.body;
+      const findButton = () => {
+        for (const selector of buttonSelectors) {
+          const found = [...document.querySelectorAll(selector)].reverse().find((candidate) => isEnabled(candidate) && !isExcluded(candidate));
+          if (found) return found;
+        }
+
+        return [...composer.querySelectorAll('button, [role="button"], [tabindex], [aria-label], [title]')]
+          .filter((candidate) => isEnabled(candidate) && !isExcluded(candidate))
+          .sort((a, b) => {
+            const ar = a.getBoundingClientRect();
+            const br = b.getBoundingClientRect();
+            return (ar.bottom - br.bottom) || (ar.right - br.right);
+          })
+          .at(-1) || null;
+      };
+
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        const button = findButton();
+        const currentText = textOf(findInput());
+        if (button && hasExpectedText(currentText)) {
+          const rect = button.getBoundingClientRect();
+          return {
+            x: Math.round(rect.left + rect.width / 2),
+            y: Math.round(rect.top + rect.height / 2),
+          };
+        }
+        await delay(100);
+      }
+
+      return null;
+    })();
+  `;
+}
+
+function buildTextOrGeneratingAcceptedScript(inputSelectors: string[]): string {
+  return `
+    (async () => {
+      const inputSelectors = ${JSON.stringify(inputSelectors)};
+      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const isVisible = (element) => {
+        if (!element) return false;
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+      };
+      const getInputText = () => {
+        const input = inputSelectors
+          .flatMap((selector) => [...document.querySelectorAll(selector)])
+          .filter(isVisible)
+          .at(-1);
+        if (!input) return '';
+        return input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement
+          ? input.value.trim()
+          : (input.innerText || input.textContent || '').trim();
+      };
+      const hasGeneratingControl = () => [...document.querySelectorAll('button, [role="button"], [aria-label], [title], [class*="stop" i]')]
+        .some((candidate) => {
+          const label = [
+            candidate.getAttribute?.('aria-label'),
+            candidate.getAttribute?.('title'),
+            candidate.className?.toString(),
+            candidate.textContent,
+          ].filter(Boolean).join(' ');
+          return /stop|cancel|停止|暂停|取消|生成中|思考中/i.test(label);
+        });
+
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        if (!getInputText()) return true;
+        if (hasGeneratingControl()) return true;
+        await delay(100);
+      }
+      return false;
+    })();
+  `;
+}
 
 function buildTongyiInjectScript(text: string): string {
   return `

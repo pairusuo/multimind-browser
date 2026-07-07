@@ -14,9 +14,19 @@ export interface SiteAdapter {
   urlPattern: RegExp;
   injectScript: (text: string) => string;
   readyCheckScript: string;
+  nativeInjection?: SiteNativeInjection;
   extractLatestResponse?: () => string;
   isResponseComplete?: () => string;
   extractConversation?: () => string;
+}
+
+export interface SiteNativeInjection {
+  prepareScript: (text: string) => string;
+  usesNativeTextInsertion?: boolean;
+  clickTargetScript?: (text: string) => string;
+  beforeNativeClickScript?: (text: string) => string;
+  acceptedScript: string;
+  enterFallbackScript?: string;
 }
 
 export const adapters: SiteAdapter[] = [
