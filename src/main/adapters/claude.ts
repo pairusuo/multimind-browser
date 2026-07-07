@@ -184,6 +184,7 @@ export const claudeAdapter: SiteAdapter = {
       return fallback || null;
     })();
   `,
+  extractConversation: () => buildClaudeConversationScript(),
   isResponseComplete: () => `
     (() => {
       const isVisible = (element) => {
@@ -204,3 +205,139 @@ export const claudeAdapter: SiteAdapter = {
     })();
   `,
 };
+
+function buildClaudeConversationScript(): string {
+  return `
+    (() => {
+      const getText = (element) => (element?.innerText || element?.textContent || '').trim();
+      const normalize = (text) => text.replace(/\\n{3,}/g, '\\n\\n').trim();
+      const isVisible = (element) => {
+        if (!element) return false;
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+      };
+      const isUiText = (text) => /Claude is AI|Claude can make mistakes|Write a message|How can I help|Free plan|Try Team|Retry|Copy|Share|Like|Dislike|Artifacts|Attach|Upload/i.test(text);
+      const cleanMessageText = (element) => {
+        const clone = element.cloneNode(true);
+        clone.querySelectorAll?.([
+          'button',
+          'nav',
+          'aside',
+          'header',
+          'footer',
+          'textarea',
+          'input',
+          '[contenteditable="true"]',
+          '[role="button"]',
+          '[aria-hidden="true"]',
+          '[data-testid*="copy"]',
+          '[data-testid*="feedback"]',
+          '[class*="toolbar"]',
+          '[class*="actions"]'
+        ].join(',')).forEach((child) => child.remove());
+        return normalize(getText(clone));
+      };
+      const nearestTurn = (element) => {
+        let current = element;
+        for (let depth = 0; depth < 8 && current?.parentElement; depth += 1) {
+          const parent = current.parentElement;
+          if (parent === document.body || parent.tagName === 'MAIN') break;
+          const hasUser = parent.querySelector('[data-testid="user-message"], [data-message-author-role="user"]');
+          const hasAssistant = parent.querySelector('[data-testid="message-content"], [class*="font-claude-message"], [class*="standard-markdown"], [data-message-author-role="assistant"]');
+          if ((hasUser || hasAssistant) && !parent.querySelector('div[contenteditable="true"][data-testid="chat-input"], textarea, input')) {
+            current = parent;
+            continue;
+          }
+          break;
+        }
+        return current || element;
+      };
+      const getOrder = (element, fallback) => {
+        const rect = element.getBoundingClientRect();
+        return Number.isFinite(rect.top) ? rect.top : fallback;
+      };
+      const roleCandidates = [];
+
+      [...document.querySelectorAll('[data-testid="user-message"], [data-message-author-role="user"]')]
+        .filter(isVisible)
+        .forEach((node, index) => {
+          roleCandidates.push({
+            role: 'user',
+            root: node,
+            contentRoot: node,
+            order: getOrder(nearestTurn(node), index)
+          });
+        });
+
+      const assistantSelectors = [
+        '[data-testid="message-content"]',
+        '[class*="font-claude-message"]',
+        '[data-message-author-role="assistant"]',
+        '[class*="standard-markdown"]'
+      ];
+      const seenAssistant = new Set();
+      assistantSelectors
+        .flatMap((selector) => [...document.querySelectorAll(selector)])
+        .filter((node) => {
+          if (seenAssistant.has(node)) return false;
+          seenAssistant.add(node);
+          if (!isVisible(node)) return false;
+          if (node.closest('[data-testid="user-message"], [data-message-author-role="user"]')) return false;
+          if (node.closest('button, a, nav, aside, header, footer, [contenteditable="true"], textarea, input')) return false;
+          return true;
+        })
+        .forEach((node, index) => {
+          roleCandidates.push({
+            role: 'assistant',
+            root: node,
+            contentRoot: node.querySelector('[class*="standard-markdown"]') || node,
+            order: getOrder(nearestTurn(node), index + 10000)
+          });
+        });
+
+      const entries = [];
+      const seen = new Set();
+      for (const candidate of roleCandidates.sort((a, b) => a.order - b.order)) {
+        const content = cleanMessageText(candidate.contentRoot);
+        if (!content || content.length < 2 || content.length > 12000 || isUiText(content)) continue;
+        const key = candidate.role + '|' + content;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        entries.push({
+          role: candidate.role,
+          content,
+          domId: candidate.root.getAttribute('data-testid') || candidate.root.getAttribute('data-message-id') || undefined,
+          order: candidate.order
+        });
+      }
+
+      if (!entries.length) return null;
+
+      const deduped = [];
+      for (const entry of entries) {
+        if (deduped.some((item) => item.role === entry.role && item.content === entry.content)) continue;
+        if (deduped.some((item) => item.role === entry.role && item.content.includes(entry.content) && item.content.length > entry.content.length)) continue;
+        for (let i = deduped.length - 1; i >= 0; i -= 1) {
+          if (
+            deduped[i].role === entry.role
+            && entry.content.includes(deduped[i].content)
+            && entry.content.length > deduped[i].content.length
+          ) {
+            deduped.splice(i, 1);
+          }
+        }
+        deduped.push(entry);
+      }
+
+      return {
+        entries: deduped.map((entry) => ({
+          role: entry.role,
+          content: entry.content,
+          ...(entry.domId ? { domId: entry.domId } : {}),
+          order: entry.order
+        }))
+      };
+    })();
+  `;
+}

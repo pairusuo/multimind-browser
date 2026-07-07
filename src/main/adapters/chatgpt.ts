@@ -93,6 +93,7 @@ export const chatgptAdapter: SiteAdapter = {
       return text;
     })();
   `,
+  extractConversation: () => buildChatGPTConversationScript(),
   isResponseComplete: () => `
     (() => {
       const isVisible = (element) => {
@@ -113,3 +114,110 @@ export const chatgptAdapter: SiteAdapter = {
     })();
   `,
 };
+
+function buildChatGPTConversationScript(): string {
+  return `
+    (() => {
+      const getText = (element) => (element?.innerText || element?.textContent || '').trim();
+      const normalize = (text) => text.replace(/\\n{3,}/g, '\\n\\n').trim();
+      const isVisible = (element) => {
+        if (!element) return false;
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+      };
+      const isUiText = (text) => /ChatGPT 也可能会犯错|Message ChatGPT|发送消息|新聊天|搜索聊天记录|ChatGPT can make mistakes|Regenerate|Share|Copy|Read aloud|Good response|Bad response/i.test(text);
+      const cleanMessageText = (element) => {
+        const clone = element.cloneNode(true);
+        clone.querySelectorAll?.([
+          'button',
+          'nav',
+          'aside',
+          'header',
+          'footer',
+          'textarea',
+          'input',
+          '[contenteditable="true"]',
+          '[role="button"]',
+          '[aria-hidden="true"]',
+          '[data-testid*="copy"]',
+          '[data-testid*="share"]',
+          '[data-testid*="feedback"]',
+          '[class*="toolbar"]',
+          '[class*="actions"]'
+        ].join(',')).forEach((child) => child.remove());
+        return normalize(getText(clone));
+      };
+      const nearestTurn = (element) => {
+        return element.closest('article')
+          || element.closest('[data-testid^="conversation-turn"]')
+          || element.closest('[class*="group"]')
+          || element;
+      };
+      const getOrder = (element, fallback) => {
+        const turn = element.closest('[data-testid^="conversation-turn"]');
+        const match = /conversation-turn-(\\d+)/.exec(turn?.getAttribute('data-testid') || '');
+        if (match) {
+          const value = Number.parseInt(match[1], 10);
+          if (Number.isFinite(value)) return value;
+        }
+        const rect = element.getBoundingClientRect();
+        return Number.isFinite(rect.top) ? rect.top : fallback;
+      };
+      const roleNodes = [...document.querySelectorAll('[data-message-author-role="user"], [data-message-author-role="assistant"]')]
+        .filter(isVisible);
+      const entries = [];
+      const seen = new Set();
+
+      roleNodes.forEach((node, index) => {
+        const role = node.getAttribute('data-message-author-role');
+        if (role !== 'user' && role !== 'assistant') return;
+        const turn = nearestTurn(node);
+        const contentRoot = role === 'assistant'
+          ? (node.querySelector('.markdown') || node.querySelector('[data-message-id]') || node)
+          : (node.querySelector('[data-message-id]') || node);
+        const content = cleanMessageText(contentRoot);
+        if (!content || content.length < 2 || content.length > 12000 || isUiText(content)) return;
+
+        const key = role + '|' + content;
+        if (seen.has(key)) return;
+        seen.add(key);
+        entries.push({
+          role,
+          content,
+          domId: node.getAttribute('data-message-id') || turn?.getAttribute?.('data-testid') || undefined,
+          order: getOrder(turn, index)
+        });
+      });
+
+      if (!entries.length) {
+        return null;
+      }
+
+      const deduped = [];
+      for (const entry of entries.sort((a, b) => a.order - b.order)) {
+        if (deduped.some((item) => item.role === entry.role && item.content === entry.content)) continue;
+        if (deduped.some((item) => item.role === entry.role && item.content.includes(entry.content) && item.content.length > entry.content.length)) continue;
+        for (let i = deduped.length - 1; i >= 0; i -= 1) {
+          if (
+            deduped[i].role === entry.role
+            && entry.content.includes(deduped[i].content)
+            && entry.content.length > deduped[i].content.length
+          ) {
+            deduped.splice(i, 1);
+          }
+        }
+        deduped.push(entry);
+      }
+
+      return {
+        entries: deduped.map((entry) => ({
+          role: entry.role,
+          content: entry.content,
+          ...(entry.domId ? { domId: entry.domId } : {}),
+          order: entry.order
+        }))
+      };
+    })();
+  `;
+}
