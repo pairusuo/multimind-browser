@@ -5,5 +5,6 @@ export const NOTICE_MESSAGE_KEYS: Record<NoticeType, string> = {
   'inject-failed': 'notices.injectFailed.message',
   'load-failed': 'notices.loadFailed.message',
   'load-timeout': 'notices.loadTimeout.message',
+  'source-response-pending': 'notices.sourceResponsePending.message',
   'conversation-truncated': 'notices.conversationTruncated.message',
 };

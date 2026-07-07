@@ -4,7 +4,7 @@ import type { CellMode, CellNoticePayload, LayoutMode } from '../../shared/types
 import CellNotice from './CellNotice';
 
 const shownNoticeKeys = new Set<string>();
-const repeatableNoticeTypes = new Set<CellNoticePayload['type']>(['conversation-truncated']);
+const repeatableNoticeTypes = new Set<CellNoticePayload['type']>(['conversation-truncated', 'source-response-pending']);
 
 interface GridCellProps {
   cellId: string;

@@ -61,7 +61,7 @@
       "cancel": "Cancel forward",
       "dismissStatus": "Dismiss forward status",
       "status": {
-        "forwarding": "Forwarding to {{target}}...",
+        "forwarding": "Waiting for the source response, then forwarding to {{target}}...",
         "completed": "Forwarded to {{target}}",
         "completedTruncated": "Forwarded to {{target}} (long content truncated)",
         "failed": "Forward to {{target}} did not complete"
@@ -136,6 +136,10 @@
     "loadTimeout": {
       "label": "Loading slowly",
       "message": "This site is taking a long time to load and may have network issues."
+    },
+    "sourceResponsePending": {
+      "label": "Waiting for response",
+      "message": "The source cell is still generating. Forwarding will continue automatically when it finishes."
     },
     "conversationTruncated": {
       "label": "Content truncated",

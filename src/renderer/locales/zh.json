@@ -61,7 +61,7 @@
       "cancel": "取消转发",
       "dismissStatus": "关闭转发状态",
       "status": {
-        "forwarding": "正在转发到 {{target}}...",
+        "forwarding": "等待源回答完成后转发到 {{target}}...",
         "completed": "已转发到 {{target}}",
         "completedTruncated": "已转发到 {{target}}（内容超长已裁剪）",
         "failed": "转发到 {{target}} 未完成"
@@ -136,6 +136,10 @@
     "loadTimeout": {
       "label": "加载较慢",
       "message": "该网站加载时间较长，可能存在网络问题"
+    },
+    "sourceResponsePending": {
+      "label": "等待回答完成",
+      "message": "源格子仍在生成回答，完成后会自动转发"
     },
     "conversationTruncated": {
       "label": "内容已裁剪",

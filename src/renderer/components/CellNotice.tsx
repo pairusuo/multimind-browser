@@ -11,6 +11,7 @@ const NOTICE_LABEL_KEYS: Record<CellNoticePayload['type'], string> = {
   'inject-failed': 'notices.injectFailed.label',
   'load-failed': 'notices.loadFailed.label',
   'load-timeout': 'notices.loadTimeout.label',
+  'source-response-pending': 'notices.sourceResponsePending.label',
   'conversation-truncated': 'notices.conversationTruncated.label',
 };
 
@@ -19,6 +20,7 @@ const NOTICE_ICONS: Record<CellNoticePayload['type'], string> = {
   'inject-failed': '↵',
   'load-failed': '!',
   'load-timeout': '…',
+  'source-response-pending': '…',
   'conversation-truncated': '…',
 };
 

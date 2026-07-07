@@ -563,7 +563,12 @@ export class WindowManager {
       throw new Error('Source and target cells must be different.');
     }
 
-    await this.waitForResponseComplete(sourceCellId);
+    await this.waitForCellReady(sourceCellId);
+    if (!(await this.isResponseComplete(sourceCellId))) {
+      this.showCellNotice(sourceCellId, 'source-response-pending');
+      await this.waitForResponseComplete(sourceCellId);
+    }
+
     const source = await this.getCellFullContext(sourceCellId);
     if (!source.content) {
       throw new Error(`No readable source context in ${sourceCellId}.`);
@@ -651,7 +656,7 @@ export class WindowManager {
     sourceTruncated: boolean,
     recordId: string,
   ): Promise<void> {
-    await Promise.all([this.waitForResponseComplete(sourceCellId), this.waitForCellReady(targetCellId)]);
+    await this.waitForCellReady(targetCellId);
 
     const previousTargetResponse = await this.extractLatestResponseIfSupported(targetCellId);
     const targetPrompt = buildForwardPrompt(sourceContent, sourceTruncated);

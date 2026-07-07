@@ -146,6 +146,7 @@ export type NoticeType =
   | 'inject-failed'
   | 'load-failed'
   | 'load-timeout'
+  | 'source-response-pending'
   | 'conversation-truncated';
 
 export interface CellNoticePayload {
