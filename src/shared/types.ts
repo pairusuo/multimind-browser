@@ -36,6 +36,15 @@ export const IPC = {
   FORWARD_RESPONSE: 'forward-response',
   GET_DOCUMENT_CANDIDATES: 'get-document-candidates',
   GENERATE_DOCUMENT: 'generate-document',
+  CHOOSE_MEMORY_DIRECTORY: 'choose-memory-directory',
+  LIST_MEMORY_SOURCES: 'list-memory-sources',
+  REMOVE_MEMORY_SOURCE: 'remove-memory-source',
+  SCAN_MEMORY_INBOX: 'scan-memory-inbox',
+  GET_MEMORY_INBOX_DOCUMENT: 'get-memory-inbox-document',
+  IMPORT_MEMORY_DOCUMENT: 'import-memory-document',
+  SEARCH_MEMORY_DOCUMENTS: 'search-memory-documents',
+  GET_MEMORY_DOCUMENT: 'get-memory-document',
+  DELETE_MEMORY_DOCUMENT: 'delete-memory-document',
   APPLY_TEMPLATE: 'apply-template',
   SET_LAYOUT: 'set-layout',
   SET_OVERLAY_OPEN: 'set-overlay-open',
@@ -94,6 +103,84 @@ export interface ForwardResponsePayload {
 
 export interface GenerateDocumentPayload {
   summarizerCellId: string;
+}
+
+export interface MemoryImportSource {
+  id: string;
+  path: string;
+  createdAt: number;
+  lastScannedAt: number | null;
+}
+
+export interface RemoveMemorySourcePayload {
+  id: string;
+}
+
+export type MemoryInboxStatus = 'new' | 'modified' | 'imported';
+
+export interface MemoryInboxItem {
+  sourceId: string;
+  sourcePath: string;
+  filePath: string;
+  fileName: string;
+  title: string;
+  hash: string;
+  size: number;
+  mtimeMs: number;
+  status: MemoryInboxStatus;
+  existingDocumentId?: string;
+}
+
+export interface MemoryInboxDocument {
+  item: MemoryInboxItem;
+  contentMarkdown: string;
+  suggestedTitle: string;
+}
+
+export interface ImportMemoryDocumentPayload {
+  sourceId?: string;
+  sourcePath?: string;
+  filePath?: string;
+  title: string;
+  originalQuestion?: string;
+  participantSites?: string[];
+  tags?: string[];
+  contentMarkdown?: string;
+}
+
+export interface SearchMemoryDocumentsPayload {
+  query: string;
+}
+
+export interface GetMemoryDocumentPayload {
+  id: string;
+}
+
+export interface DeleteMemoryDocumentPayload {
+  id: string;
+}
+
+export interface MemoryDocumentSummary {
+  id: string;
+  title: string;
+  originalQuestion: string;
+  tags: string[];
+  participantSites: string[];
+  sourceType: string;
+  sourcePath: string | null;
+  sourceExists: boolean;
+  createdAt: number;
+  updatedAt: number;
+  importedAt: number;
+  version: number;
+  snippet?: string;
+}
+
+export interface MemoryDocument extends MemoryDocumentSummary {
+  contentMarkdown: string;
+  sourceHash: string | null;
+  sourceMtime: number | null;
+  sourceSize: number | null;
 }
 
 export interface ExtractedConversationEntry {
@@ -212,6 +299,15 @@ export interface ElectronAPI {
   forwardResponse: (payload: ForwardResponsePayload) => Promise<ForwardRecord>;
   getDocumentCandidates: () => Promise<DocumentCandidate[]>;
   generateDocument: (payload: GenerateDocumentPayload) => Promise<void>;
+  chooseMemoryDirectory: () => Promise<MemoryImportSource | null>;
+  listMemorySources: () => Promise<MemoryImportSource[]>;
+  removeMemorySource: (payload: RemoveMemorySourcePayload) => Promise<void>;
+  scanMemoryInbox: () => Promise<MemoryInboxItem[]>;
+  getMemoryInboxDocument: (filePath: string) => Promise<MemoryInboxDocument>;
+  importMemoryDocument: (payload: ImportMemoryDocumentPayload) => Promise<MemoryDocument>;
+  searchMemoryDocuments: (payload: SearchMemoryDocumentsPayload) => Promise<MemoryDocumentSummary[]>;
+  getMemoryDocument: (payload: GetMemoryDocumentPayload) => Promise<MemoryDocument | null>;
+  deleteMemoryDocument: (payload: DeleteMemoryDocumentPayload) => Promise<void>;
   setLayout: (mode: LayoutMode) => Promise<void>;
   setThemeMode: (mode: ThemeMode) => Promise<BrowserState>;
   setLanguage: (language: AppLanguage) => Promise<BrowserState>;

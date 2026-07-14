@@ -778,7 +778,8 @@ textarea {
 
 .template-panel,
 .cell-config-panel,
-.document-panel {
+.document-panel,
+.memory-panel {
   width: min(720px, 100%);
   max-height: min(760px, calc(100vh - 40px));
   overflow: auto;
@@ -794,10 +795,20 @@ textarea {
 
 .template-panel h1,
 .cell-config-panel h1,
-.document-panel h1 {
+.document-panel h1,
+.memory-panel h1 {
   margin: 0;
   font-size: 18px;
   line-height: 1.25;
+}
+
+.memory-panel {
+  position: relative;
+  width: min(1120px, 100%);
+  height: min(760px, calc(100vh - 40px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .template-grid {
@@ -837,6 +848,13 @@ textarea {
   border-bottom: 1px solid rgba(17, 24, 39, 0.1);
 }
 
+.panel-header p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .panel-header button,
 .panel-actions button {
   min-width: 72px;
@@ -846,6 +864,385 @@ textarea {
   background: #ffffff;
   color: #111827;
   cursor: pointer;
+}
+
+.memory-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 34%) minmax(0, 1fr);
+  min-height: 0;
+}
+
+.memory-sidebar {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  border-right: 1px solid rgba(17, 24, 39, 0.1);
+  background: #f8fafc;
+}
+
+.memory-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 12px;
+}
+
+.memory-tabs button,
+.memory-actions-row button,
+.memory-search-form button,
+.memory-detail-actions button,
+.memory-document-view header button {
+  height: 34px;
+  min-width: 72px;
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  border-radius: 7px;
+  padding: 0 12px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.memory-tabs button {
+  min-width: 0;
+}
+
+.memory-tabs button.active {
+  border-color: rgba(26, 86, 219, 0.35);
+  background: #e0ebff;
+  color: #1a56db;
+}
+
+.memory-list-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: 0;
+  padding: 0 12px 12px;
+}
+
+.memory-actions-row,
+.memory-search-form,
+.memory-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.memory-search-form {
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-bottom: 10px;
+}
+
+.memory-search-form input,
+.memory-form-grid input {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  border-radius: 7px;
+  padding: 0 10px;
+  background: #ffffff;
+  color: #111827;
+}
+
+.memory-source-list {
+  display: grid;
+  gap: 6px;
+  max-height: 72px;
+  margin: 10px 0;
+  overflow: auto;
+}
+
+.memory-source-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 6px;
+}
+
+.memory-source-item span,
+.memory-source-list p {
+  margin: 0;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-source-item button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  border-radius: 6px;
+  background: #ffffff;
+  color: #475569;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.memory-source-item button:hover {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.memory-item-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.memory-item-list button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  border-radius: 8px;
+  padding: 10px;
+  background: #ffffff;
+  color: #111827;
+  text-align: left;
+  cursor: pointer;
+}
+
+.memory-item-list button.active,
+.memory-item-list button:hover {
+  border-color: rgba(26, 86, 219, 0.36);
+  background: #eff6ff;
+}
+
+.memory-item-list strong,
+.memory-item-list span,
+.memory-item-list small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-item-list strong {
+  font-size: 13px;
+}
+
+.memory-item-list span,
+.memory-item-list small,
+.memory-item-list p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.memory-detail {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px;
+}
+
+.memory-status,
+.memory-error {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.memory-status {
+  color: #047857;
+}
+
+.memory-error {
+  color: #b91c1c;
+}
+
+.memory-editor {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  min-height: 100%;
+  height: 100%;
+}
+
+.memory-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.memory-form-grid label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: #111827;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.memory-editor textarea {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  resize: vertical;
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+  color: #111827;
+  font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.memory-detail-actions {
+  align-self: end;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+  padding-top: 2px;
+  background: #ffffff;
+}
+
+.memory-detail-actions button:first-child {
+  border-color: #1a56db;
+  background: #1a56db;
+  color: #ffffff;
+}
+
+.memory-document-view {
+  display: grid;
+  gap: 14px;
+  height: 100%;
+  overflow: auto;
+}
+
+.memory-document-view header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.memory-document-view h2,
+.memory-empty-detail h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.memory-document-view h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.memory-document-view p,
+.memory-empty-detail p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.memory-document-view pre {
+  margin: 0;
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8fafc;
+  color: #111827;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.memory-empty-detail {
+  display: grid;
+  place-content: center;
+  min-height: 100%;
+  text-align: center;
+}
+
+.memory-confirm-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.36);
+}
+
+.memory-confirm-dialog {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  width: min(420px, 100%);
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  border-radius: 8px;
+  padding: 24px;
+  background: #ffffff;
+  color: #111827;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
+  text-align: center;
+}
+
+.memory-confirm-logo {
+  width: 52px;
+  height: 52px;
+}
+
+.memory-confirm-dialog h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.memory-confirm-dialog p {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.memory-confirm-path {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: #111827;
+  font-weight: 700;
+}
+
+.memory-confirm-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.memory-confirm-actions button {
+  height: 36px;
+  min-width: 0;
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  border-radius: 7px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.memory-confirm-actions button:last-child {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #ffffff;
 }
 
 .cell-config-list {
@@ -873,6 +1270,39 @@ textarea {
   font-weight: 700;
   line-height: 34px;
   white-space: nowrap;
+}
+
+.settings-memory-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: min(260px, 100%);
+  min-height: 34px;
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  border-radius: 7px;
+  padding: 0 12px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.settings-memory-button:hover {
+  border-color: rgba(26, 86, 219, 0.28);
+  background: #eef2ff;
+}
+
+.settings-memory-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .language-radio-group {
@@ -1138,6 +1568,29 @@ textarea {
     width: 100%;
   }
 
+  .memory-panel {
+    height: calc(100vh - 24px);
+    max-height: calc(100vh - 24px);
+  }
+
+  .memory-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(220px, 42%) minmax(0, 1fr);
+  }
+
+  .memory-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid rgba(17, 24, 39, 0.1);
+  }
+
+  .memory-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .memory-document-view header {
+    display: grid;
+  }
+
   .browser-stage {
     height: calc(100% - 170px);
   }
@@ -1332,6 +1785,7 @@ textarea {
 
   .template-panel,
   .cell-config-panel,
+  .memory-panel,
   .template-card {
     border-color: rgba(255, 255, 255, 0.14);
     background: #171c23;
@@ -1349,7 +1803,16 @@ textarea {
 
   .panel-header button,
   .panel-actions button,
+  .memory-tabs button,
+  .memory-actions-row button,
+  .memory-search-form button,
+  .memory-detail-actions button,
+  .memory-document-view header button,
+  .memory-source-item button,
+  .settings-memory-button,
   .language-radio-group,
+  .memory-search-form input,
+  .memory-form-grid input,
   .cell-config-row select,
   .cell-config-row input {
     border-color: rgba(255, 255, 255, 0.14);
@@ -1377,6 +1840,122 @@ textarea {
 
   .app-version {
     color: #94a3b8;
+  }
+
+  .settings-memory-button:hover {
+    border-color: rgba(96, 165, 250, 0.34);
+    background: #243042;
+  }
+
+  .panel-header p,
+  .memory-source-item span,
+  .memory-source-list p,
+  .memory-item-list span,
+  .memory-item-list small,
+  .memory-item-list p,
+  .memory-document-view p,
+  .memory-empty-detail p {
+    color: #94a3b8;
+  }
+
+  .memory-sidebar {
+    border-right-color: rgba(255, 255, 255, 0.1);
+    background: #111827;
+  }
+
+  .memory-tabs button.active {
+    border-color: rgba(96, 165, 250, 0.45);
+    background: #173356;
+    color: #bfdbfe;
+  }
+
+  .memory-tabs button:hover,
+  .memory-actions-row button:hover,
+  .memory-search-form button:hover,
+  .memory-document-view header button:hover {
+    background: #243042;
+  }
+
+  .memory-detail-actions button:first-child:hover {
+    background: #2563eb;
+  }
+
+  .memory-item-list button {
+    border-color: rgba(255, 255, 255, 0.12);
+    background: #171c23;
+    color: #f9fafb;
+  }
+
+  .memory-item-list button.active,
+  .memory-item-list button:hover {
+    border-color: rgba(96, 165, 250, 0.45);
+    background: #1e293b;
+  }
+
+  .memory-form-grid label,
+  .memory-document-view h2,
+  .memory-document-view h3,
+  .memory-empty-detail h2 {
+    color: #f9fafb;
+  }
+
+  .memory-editor textarea,
+  .memory-document-view pre {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: #0f141b;
+    color: #e5e7eb;
+  }
+
+  .memory-status {
+    color: #34d399;
+  }
+
+  .memory-error {
+    color: #fca5a5;
+  }
+
+  .memory-detail-actions {
+    background: #171c23;
+  }
+
+  .memory-source-item button:hover {
+    background: #451a1a;
+    color: #fecaca;
+  }
+
+  .memory-confirm-backdrop {
+    background: rgba(2, 6, 23, 0.62);
+  }
+
+  .memory-confirm-dialog {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: #171c23;
+    color: #f9fafb;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+  }
+
+  .memory-confirm-dialog p {
+    color: #94a3b8;
+  }
+
+  .memory-confirm-path {
+    color: #f9fafb;
+  }
+
+  .memory-confirm-actions button {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: #111827;
+    color: #f9fafb;
+  }
+
+  .memory-confirm-actions button:hover {
+    background: #243042;
+  }
+
+  .memory-confirm-actions button:last-child {
+    border-color: #ef4444;
+    background: #dc2626;
+    color: #ffffff;
   }
 
   .grid-cell {

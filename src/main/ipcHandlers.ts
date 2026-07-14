@@ -1,14 +1,19 @@
-import { app, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, OpenDialogOptions } from 'electron';
 import {
   ApplyTemplatePayload,
   AppLanguage,
   CellTabPayload,
+  DeleteMemoryDocumentPayload,
   ForwardResponsePayload,
+  GetMemoryDocumentPayload,
   GenerateDocumentPayload,
   IPC,
+  ImportMemoryDocumentPayload,
   CellFocusedPayload,
   LayoutMode,
   NavigatePayload,
+  RemoveMemorySourcePayload,
+  SearchMemoryDocumentsPayload,
   SendToAllPayload,
   SetMaximizedCellPayload,
   SetCellUrlPayload,
@@ -16,9 +21,10 @@ import {
   ThemeMode,
   ToggleCellPayload,
 } from '../shared/types';
+import { MemoryStore } from './memoryStore';
 import { WindowManager } from './windowManager';
 
-export function registerIpcHandlers(windowManager: WindowManager): void {
+export function registerIpcHandlers(windowManager: WindowManager, memoryStore: MemoryStore): void {
   registerHandler(IPC.GET_BROWSER_STATE, () => windowManager.getBrowserState());
 
   registerHandler(IPC.GET_APP_VERSION, () => app.getVersion());
@@ -43,6 +49,53 @@ export function registerIpcHandlers(windowManager: WindowManager): void {
 
   registerHandler(IPC.GENERATE_DOCUMENT, (_event, payload: GenerateDocumentPayload) => {
     return windowManager.generateDocument(payload);
+  });
+
+  registerHandler(IPC.CHOOSE_MEMORY_DIRECTORY, async () => {
+    const window = BrowserWindow.getFocusedWindow();
+    const options: OpenDialogOptions = {
+      title: 'Choose Memory Inbox Folder',
+      properties: ['openDirectory', 'createDirectory'],
+    };
+    const result = window
+      ? await dialog.showOpenDialog(window, options)
+      : await dialog.showOpenDialog(options);
+    if (result.canceled || !result.filePaths[0]) {
+      return null;
+    }
+    return memoryStore.addImportSource(result.filePaths[0]);
+  });
+
+  registerHandler(IPC.LIST_MEMORY_SOURCES, () => {
+    return memoryStore.listImportSources();
+  });
+
+  registerHandler(IPC.REMOVE_MEMORY_SOURCE, (_event, payload: RemoveMemorySourcePayload) => {
+    return memoryStore.removeImportSource(payload.id);
+  });
+
+  registerHandler(IPC.SCAN_MEMORY_INBOX, () => {
+    return memoryStore.scanInbox();
+  });
+
+  registerHandler(IPC.GET_MEMORY_INBOX_DOCUMENT, (_event, filePath: string) => {
+    return memoryStore.getInboxDocument(filePath);
+  });
+
+  registerHandler(IPC.IMPORT_MEMORY_DOCUMENT, (_event, payload: ImportMemoryDocumentPayload) => {
+    return memoryStore.importDocument(payload);
+  });
+
+  registerHandler(IPC.SEARCH_MEMORY_DOCUMENTS, (_event, payload: SearchMemoryDocumentsPayload) => {
+    return memoryStore.searchDocuments(payload.query);
+  });
+
+  registerHandler(IPC.GET_MEMORY_DOCUMENT, (_event, payload: GetMemoryDocumentPayload) => {
+    return memoryStore.getDocument(payload.id);
+  });
+
+  registerHandler(IPC.DELETE_MEMORY_DOCUMENT, (_event, payload: DeleteMemoryDocumentPayload) => {
+    return memoryStore.deleteDocument(payload.id);
   });
 
   registerHandler(IPC.SET_THEME_MODE, (_event, mode: ThemeMode) => {

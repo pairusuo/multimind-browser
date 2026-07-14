@@ -99,6 +99,68 @@
       "generateFailed": "Could not send the summary instruction. Confirm the summarizer cell is logged in and supports batch sending."
     }
   },
+  "memory": {
+    "title": "Memory Library",
+    "subtitle": "Import Markdown from authorized folders and save confirmed summaries as local memory snapshots.",
+    "tabs": {
+      "label": "Memory views",
+      "inbox": "Inbox",
+      "library": "Search"
+    },
+    "actions": {
+      "close": "Close",
+      "cancel": "Cancel",
+      "addDirectory": "Add folder",
+      "removeDirectory": "Remove folder",
+      "scan": "Scan",
+      "search": "Search",
+      "import": "Confirm import",
+      "archive": "Archive"
+    },
+    "fields": {
+      "title": "Title",
+      "originalQuestion": "Original question",
+      "tags": "Tags, comma-separated",
+      "participants": "Participating AIs, comma-separated"
+    },
+    "statuses": {
+      "new": "New",
+      "modified": "Source updated",
+      "imported": "Imported"
+    },
+    "status": {
+      "directoryAdded": "Authorized folder added",
+      "directoryRemoved": "Authorized folder removed. Imported memory documents are kept.",
+      "imported": "Saved to local memory",
+      "archived": "Memory document archived"
+    },
+    "search": {
+      "placeholder": "Search titles, questions, or body",
+      "untagged": "Untagged"
+    },
+    "confirm": {
+      "removeDirectoryTitle": "Remove this authorized folder?",
+      "removeDirectoryBody": "This only stops scanning this folder. Imported memory documents and local Markdown files will not be deleted."
+    },
+    "empty": {
+      "noSources": "No authorized folders yet",
+      "noInboxItems": "No Markdown files waiting for confirmation",
+      "noMemoryDocuments": "No matching memory documents",
+      "detailTitle": "Select an item",
+      "detailInbox": "Add an authorized folder and scan it, then select a Markdown candidate to preview and import.",
+      "detailLibrary": "Search or select an imported document to view its local memory snapshot."
+    },
+    "errors": {
+      "scanFailed": "Could not scan authorized folders",
+      "directoryFailed": "Could not add authorized folder",
+      "removeDirectoryFailed": "Could not remove authorized folder",
+      "previewFailed": "Could not preview Markdown",
+      "importFailed": "Could not import memory document",
+      "searchFailed": "Could not search memory",
+      "openFailed": "Could not open memory document",
+      "deleteFailed": "Could not archive memory document"
+    }
+  },
   "cellConfig": {
     "title": "Settings",
     "aria": {
@@ -157,6 +219,10 @@
         "zh": "中文",
         "en": "English"
       }
+    },
+    "memory": {
+      "label": "Long-term memory",
+      "open": "Open memory library"
     },
     "version": {
       "label": "Version",

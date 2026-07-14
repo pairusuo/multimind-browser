@@ -5,6 +5,7 @@ import Toolbar from './components/Toolbar';
 import SplitView from './components/SplitView';
 import BottomInput from './components/BottomInput';
 import DocumentSummaryModal from './components/DocumentSummaryModal';
+import MemoryPanel from './components/MemoryPanel';
 import TemplateChooser from './components/TemplateChooser';
 import {
   BrowserState,
@@ -71,6 +72,7 @@ export default function App() {
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [showConfigPanel, setShowConfigPanel] = useState(false);
   const [showDocumentSummary, setShowDocumentSummary] = useState(false);
+  const [showMemoryPanel, setShowMemoryPanel] = useState(false);
   const [documentCandidates, setDocumentCandidates] = useState<DocumentCandidate[]>([]);
   const [isGeneratingDocument, setIsGeneratingDocument] = useState(false);
   const [documentError, setDocumentError] = useState<string | null>(null);
@@ -93,8 +95,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    void window.electronAPI.setOverlayOpen(showConfigPanel || showDocumentSummary || !hasCompletedOnboarding);
-  }, [hasCompletedOnboarding, showConfigPanel, showDocumentSummary]);
+    void window.electronAPI.setOverlayOpen(showConfigPanel || showDocumentSummary || showMemoryPanel || !hasCompletedOnboarding);
+  }, [hasCompletedOnboarding, showConfigPanel, showDocumentSummary, showMemoryPanel]);
 
   useEffect(() => {
     const removeFocusListener = window.electronAPI.onCellFocused((payload) => {
@@ -407,6 +409,10 @@ export default function App() {
           layoutMode={layoutMode}
           onClose={() => setShowConfigPanel(false)}
           onLanguageChange={(nextLanguage) => void handleLanguageChange(nextLanguage)}
+          onOpenMemory={() => {
+            setShowConfigPanel(false);
+            setShowMemoryPanel(true);
+          }}
           onSave={(nextUrls, nextModes, nextSearchTemplates) =>
             void handleSaveCellConfig(nextUrls, nextModes, nextSearchTemplates)
           }
@@ -421,6 +427,7 @@ export default function App() {
           onGenerate={(cellId) => void handleGenerateDocument(cellId)}
         />
       )}
+      {showMemoryPanel && <MemoryPanel onClose={() => setShowMemoryPanel(false)} />}
     </div>
   );
 }

@@ -12,6 +12,7 @@ interface CellConfigPanelProps {
   layoutMode: LayoutMode;
   onClose: () => void;
   onLanguageChange: (language: AppLanguage) => void;
+  onOpenMemory: () => void;
   onSave: (
     nextUrls: Record<string, string>,
     nextModes: Record<string, CellMode>,
@@ -27,6 +28,7 @@ export default function CellConfigPanel({
   layoutMode,
   onClose,
   onLanguageChange,
+  onOpenMemory,
   onSave,
 }: CellConfigPanelProps) {
   const { t } = useTranslation();
@@ -120,6 +122,11 @@ export default function CellConfigPanel({
           <span className="app-version">
             {appVersion ? t('settings.version.value', { version: appVersion }) : t('settings.version.loading')}
           </span>
+          <span className="settings-section-label">{t('settings.memory.label')}</span>
+          <button type="button" className="settings-memory-button" onClick={onOpenMemory}>
+            <MemoryIcon />
+            <span>{t('settings.memory.open')}</span>
+          </button>
         </section>
         <div className="cell-config-list">
           {visibleCells.map((cellId, index) => (
@@ -162,6 +169,17 @@ export default function CellConfigPanel({
         </footer>
       </form>
     </div>
+  );
+}
+
+function MemoryIcon() {
+  return (
+    <svg className="settings-memory-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M5 4.75h10.5L19 8.25v11H5Z" />
+      <path d="M15.5 4.75v3.5H19" />
+      <path d="M8.25 12h7.5" />
+      <path d="M8.25 15.5h5.5" />
+    </svg>
   );
 }
 

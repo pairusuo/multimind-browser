@@ -8,6 +8,8 @@ files:
 extraResources:
   - from: build/icon.ico
     to: icon.ico
+asarUnpack:
+  - "**/node_modules/better-sqlite3/**"
 
 mac:
   icon: build/icon.icns

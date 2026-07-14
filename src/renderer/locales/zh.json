@@ -99,6 +99,68 @@
       "generateFailed": "总结指令发送失败，请确认总结者格子已登录并支持统一发送。"
     }
   },
+  "memory": {
+    "title": "记忆库",
+    "subtitle": "从授权目录导入 Markdown，总结确认后保存为本地记忆快照。",
+    "tabs": {
+      "label": "记忆库视图",
+      "inbox": "收件箱",
+      "library": "搜索"
+    },
+    "actions": {
+      "close": "关闭",
+      "cancel": "取消",
+      "addDirectory": "添加目录",
+      "removeDirectory": "移除目录",
+      "scan": "扫描",
+      "search": "搜索",
+      "import": "确认导入",
+      "archive": "归档"
+    },
+    "fields": {
+      "title": "标题",
+      "originalQuestion": "原始问题",
+      "tags": "标签（逗号分隔）",
+      "participants": "参与 AI（逗号分隔）"
+    },
+    "statuses": {
+      "new": "新文档",
+      "modified": "源文件已更新",
+      "imported": "已导入"
+    },
+    "status": {
+      "directoryAdded": "已添加授权目录",
+      "directoryRemoved": "已移除授权目录。已导入的记忆文档仍会保留。",
+      "imported": "已保存到本地记忆库",
+      "archived": "已归档该记忆文档"
+    },
+    "search": {
+      "placeholder": "搜索标题、问题或正文",
+      "untagged": "未标记"
+    },
+    "confirm": {
+      "removeDirectoryTitle": "移除这个授权目录？",
+      "removeDirectoryBody": "这只会停止扫描该目录，不会删除已经导入的记忆文档，也不会删除本地 Markdown 文件。"
+    },
+    "empty": {
+      "noSources": "尚未添加授权目录",
+      "noInboxItems": "没有待确认的 Markdown",
+      "noMemoryDocuments": "没有匹配的记忆文档",
+      "detailTitle": "选择一项开始",
+      "detailInbox": "添加授权目录并扫描后，选择候选 Markdown 预览和确认导入。",
+      "detailLibrary": "搜索或选择已入库文档，查看本地记忆快照。"
+    },
+    "errors": {
+      "scanFailed": "扫描授权目录失败",
+      "directoryFailed": "添加授权目录失败",
+      "removeDirectoryFailed": "移除授权目录失败",
+      "previewFailed": "读取 Markdown 预览失败",
+      "importFailed": "导入记忆文档失败",
+      "searchFailed": "搜索记忆库失败",
+      "openFailed": "打开记忆文档失败",
+      "deleteFailed": "归档记忆文档失败"
+    }
+  },
   "cellConfig": {
     "title": "设置",
     "aria": {
@@ -157,6 +219,10 @@
         "zh": "中文",
         "en": "English"
       }
+    },
+    "memory": {
+      "label": "长期记忆",
+      "open": "打开记忆库"
     },
     "version": {
       "label": "版本",

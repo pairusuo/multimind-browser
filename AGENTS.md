@@ -1226,17 +1226,49 @@ interface StoreSchema {
    判断总结完成；需要明确任务状态、可取消/手动读取兜底、以及保存目录/
    文件命名规则后再实现。
 
-4. **长期记忆存储**：先设计"最终 Markdown 文档如何进入记忆库"的入口，
-   再引入 `better-sqlite3` 和表结构。当前总结功能只把总结 prompt 发送给
-   指定 AI，用户在网页里得到最终 Markdown 后自行复制/保存；后续长期记忆
-   版本需要明确采用用户粘贴/导入 `.md`、用户授权读取某个本地目录并从中
-   导入已保存的总结文档、用户确认后从总结者页面读取、或其它保存入口。
-   授权目录读取是单独设计议题：必须由用户显式选择目录，不默认扫描磁盘；
-   需要先定义权限边界、索引范围、文件去重、文件删除/移动后的同步语义，
-   再进入实现。无论采用哪种方式，都必须以用户确认后的最终文档为准，不把
-   中间转发记录或未确认的网页内容直接写入长期记忆。表结构建议至少包含：
-   id、原始问题、参与 AI 列表、最终文档正文、生成时间、标签，并实现 FTS5
-   全文检索
+4. **长期记忆存储**：采用 Source / Inbox / Memory 三层架构，不把授权目录
+   直接等同于长期记忆库。
+
+   **架构原则**：
+   - Source Layer：用户从 AI 网页下载或手动保存的 `.md` 文件、用户粘贴的
+     Markdown、未来 API 生成的总结结果，都只是候选来源
+   - Inbox Layer：MultiMind Flow 扫描用户显式授权的 Markdown 目录，把新增
+     或变更文件列入"记忆收件箱"，用户可预览、编辑并批量确认导入
+   - Memory Layer：只有用户确认后的文档快照写入本地 SQLite + FTS5；长期
+     记忆库不是授权目录的实时镜像
+
+   **第一版优先入口**：
+   - 免费/官网模式：用户在 AI 网页生成最终 Markdown，自行保存到授权目录；
+     MultiMind Flow 扫描 `.md` / `.markdown` 候选文件，用户确认后入库
+   - 可补充手动粘贴入口：用户直接粘贴 Markdown，预览确认后入库
+   - API 总结入口作为后续高级能力，不能阻塞第一版目录收件箱
+   - 自动读取总结者网页结果必须后置，只有在重新评审完成状态判断、抽取
+     准确性、可取消流程和确认交互后才能实现
+
+   **授权目录规则**：
+   - 必须由用户显式选择目录，禁止默认扫描 Downloads、Documents、Desktop
+     或用户磁盘
+   - 可以建议默认用户数据目录，例如 `~/Documents/MultiMind Flow/Memory Inbox`
+     或 `%USERPROFILE%\Documents\MultiMind Flow\Memory Inbox`
+   - 禁止把用户 Markdown 文件放在 MultiMind Flow 安装目录、macOS `.app`
+     包内部、Windows `Program Files` 或其它程序目录中，避免升级、重装、
+     卸载或写权限问题导致数据丢失
+   - SQLite 数据库放在 Electron `app.getPath("userData")` 对应的应用数据目录；
+     授权目录只作为候选文件来源
+
+   **确认与同步语义**：
+   - "确认"可以是轻量批量确认，不要求每份文档都重编辑；但不能完全跳过
+     用户确认就把候选文件提升为高权重长期记忆
+   - 源文件删除或移动时，已入库记忆不自动删除，只标记源文件缺失
+   - 源文件修改时，提示用户选择是否创建新版本；不要静默覆盖已确认记忆
+   - 用 content hash 去重，文件名不同但内容相同不重复导入
+   - 中间转发记录、格子时间线、未确认网页内容、失败总结和草稿不得直接
+     写入长期记忆；未来如做 Raw Archive，也必须和 Memory Layer 明确区分
+
+   **表结构方向**：至少包含 id、title、original_question、participant_sites、
+   content_markdown、tags、source_type、source_path、source_hash、
+   source_mtime、source_size、created_at、updated_at、imported_at、version，
+   并实现 FTS5 全文检索。具体 schema 在实现前单独设计和评审。
 
 5. **记忆检索 UI**：提供一个简单的本地知识库浏览/搜索界面
 

@@ -3,10 +3,12 @@ import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { registerIpcHandlers } from './ipcHandlers';
+import { MemoryStore } from './memoryStore';
 import { createBrowserStore, WindowManager } from './windowManager';
 
 let mainWindow: BrowserWindow | null = null;
 let windowManager: WindowManager | null = null;
+let memoryStore: MemoryStore | null = null;
 
 configureAppIdentity();
 bindProcessExceptionHandlers();
@@ -28,8 +30,9 @@ async function createWindow(): Promise<void> {
   });
 
   const store = await createBrowserStore();
+  memoryStore = memoryStore ?? new MemoryStore(path.join(app.getPath('userData'), 'memory.sqlite'));
   windowManager = new WindowManager(mainWindow, store);
-  registerIpcHandlers(windowManager);
+  registerIpcHandlers(windowManager, memoryStore);
 
   mainWindow.on('resize', () => windowManager?.layout());
   mainWindow.on('close', () => {
@@ -63,6 +66,8 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   windowManager?.dispose();
+  memoryStore?.close();
+  memoryStore = null;
 });
 
 app.on('window-all-closed', () => {
