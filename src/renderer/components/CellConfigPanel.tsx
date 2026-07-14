@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { findPresetSiteByUrl, inferModeFromUrl, PRESET_SITES } from '../../shared/presetSites';
 import { getRiskySiteReasonKey } from '../../shared/riskySites';
-import { AppLanguage, CellMode, LAYOUT_CELLS, LayoutMode } from '../../shared/types';
+import { AppLanguage, CellMode, LAYOUT_CELLS, LayoutMode, ThemeMode } from '../../shared/types';
 
 interface CellConfigPanelProps {
   cellUrls: Record<string, string>;
@@ -10,8 +10,11 @@ interface CellConfigPanelProps {
   searchUrlTemplates: Record<string, string>;
   language: AppLanguage;
   layoutMode: LayoutMode;
+  themeMode: ThemeMode;
   onClose: () => void;
+  onLayoutChange: (mode: LayoutMode) => void;
   onLanguageChange: (language: AppLanguage) => void;
+  onThemeModeChange: (mode: ThemeMode) => void;
   onOpenMemory: () => void;
   onSave: (
     nextUrls: Record<string, string>,
@@ -26,8 +29,11 @@ export default function CellConfigPanel({
   searchUrlTemplates,
   language,
   layoutMode,
+  themeMode,
   onClose,
+  onLayoutChange,
   onLanguageChange,
+  onThemeModeChange,
   onOpenMemory,
   onSave,
 }: CellConfigPanelProps) {
@@ -38,7 +44,7 @@ export default function CellConfigPanel({
   const [draftSearchTemplates, setDraftSearchTemplates] = useState<Record<string, string>>(() => ({
     ...searchUrlTemplates,
   }));
-  const [appVersion, setAppVersion] = useState('');
+const [appVersion, setAppVersion] = useState('');
 
   useEffect(() => {
     void window.electronAPI.getAppVersion().then(setAppVersion);
@@ -103,8 +109,38 @@ export default function CellConfigPanel({
           </button>
         </header>
         <section className="settings-section" aria-label={t('settings.title')}>
+          <span className="settings-section-label">{t('settings.layout.label')}</span>
+          <div className="settings-segmented-control settings-layout-control" role="radiogroup" aria-label={t('settings.layout.label')}>
+            {LAYOUT_OPTIONS.map((option) => (
+              <label key={option.mode} className={layoutMode === option.mode ? 'active' : ''} title={t(option.titleKey)}>
+                <input
+                  type="radio"
+                  name="workspace-layout"
+                  value={option.mode}
+                  checked={layoutMode === option.mode}
+                  onChange={() => onLayoutChange(option.mode)}
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+          <span className="settings-section-label">{t('settings.theme.label')}</span>
+          <div className="settings-segmented-control settings-theme-control" role="radiogroup" aria-label={t('settings.theme.label')}>
+            {(['system', 'light', 'dark'] as const).map((option) => (
+              <label key={option} className={themeMode === option ? 'active' : ''}>
+                <input
+                  type="radio"
+                  name="theme-mode"
+                  value={option}
+                  checked={themeMode === option}
+                  onChange={() => onThemeModeChange(option)}
+                />
+                <span>{t(`settings.theme.options.${option}`)}</span>
+              </label>
+            ))}
+          </div>
           <span className="settings-section-label">{t('settings.language.label')}</span>
-          <div className="language-radio-group" role="radiogroup" aria-label={t('settings.language.label')}>
+          <div className="settings-segmented-control settings-language-control" role="radiogroup" aria-label={t('settings.language.label')}>
             {(['zh', 'en'] as const).map((option) => (
               <label key={option} className={language === option ? 'active' : ''}>
                 <input
@@ -118,15 +154,15 @@ export default function CellConfigPanel({
               </label>
             ))}
           </div>
-          <span className="settings-section-label">{t('settings.version.label')}</span>
-          <span className="app-version">
-            {appVersion ? t('settings.version.value', { version: appVersion }) : t('settings.version.loading')}
-          </span>
           <span className="settings-section-label">{t('settings.memory.label')}</span>
           <button type="button" className="settings-memory-button" onClick={onOpenMemory}>
             <MemoryIcon />
             <span>{t('settings.memory.open')}</span>
           </button>
+          <span className="settings-section-label">{t('settings.version.label')}</span>
+          <span className="app-version">
+            {appVersion ? t('settings.version.value', { version: appVersion }) : t('settings.version.loading')}
+          </span>
         </section>
         <div className="cell-config-list">
           {visibleCells.map((cellId, index) => (
@@ -171,6 +207,14 @@ export default function CellConfigPanel({
     </div>
   );
 }
+
+const LAYOUT_OPTIONS: Array<{ mode: LayoutMode; label: string; titleKey: string }> = [
+  { mode: 'single', label: '1', titleKey: 'settings.layout.options.single' },
+  { mode: 'horizontal', label: '2H', titleKey: 'settings.layout.options.horizontal' },
+  { mode: 'vertical', label: '2V', titleKey: 'settings.layout.options.vertical' },
+  { mode: 'triple', label: '3', titleKey: 'settings.layout.options.triple' },
+  { mode: 'quad', label: '4', titleKey: 'settings.layout.options.quad' },
+];
 
 function MemoryIcon() {
   return (

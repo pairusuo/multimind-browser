@@ -362,14 +362,11 @@ export default function App() {
         focusedCellId={focusedCellId}
         tabs={tabs[focusedCellId] ?? []}
         activeTabId={activeTabIds[focusedCellId] ?? ''}
-        themeMode={themeMode}
         layoutMode={layoutMode}
-        onLayoutChange={(mode) => void handleLayoutChange(mode)}
         onNewTab={() => void handleNewTab(focusedCellId)}
         onCloseTab={(tabId) => void handleCloseTab(focusedCellId, tabId)}
         onSwitchTab={(tabId) => void handleSwitchTab(focusedCellId, tabId)}
         onOpenConfig={() => setShowConfigPanel(true)}
-        onThemeModeChange={(mode) => void handleThemeModeChange(mode)}
         onNavigate={(url) => void handleNavigate(url)}
       />
       <main
@@ -407,8 +404,11 @@ export default function App() {
           searchUrlTemplates={searchUrlTemplates}
           language={language}
           layoutMode={layoutMode}
+          themeMode={themeMode}
           onClose={() => setShowConfigPanel(false)}
+          onLayoutChange={(mode) => void handleLayoutChange(mode)}
           onLanguageChange={(nextLanguage) => void handleLanguageChange(nextLanguage)}
+          onThemeModeChange={(mode) => void handleThemeModeChange(mode)}
           onOpenMemory={() => {
             setShowConfigPanel(false);
             setShowMemoryPanel(true);

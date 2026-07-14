@@ -176,7 +176,7 @@ textarea {
 
 .navigation-controls button,
 .tab-controls > button,
-.layout-controls button,
+.toolbar-actions button,
 .cell-menu button {
   width: 32px;
   height: 32px;
@@ -190,18 +190,18 @@ textarea {
 
 .navigation-controls button:hover,
 .tab-controls > button:hover,
-.layout-controls button:hover,
+.toolbar-actions button:hover,
 .cell-menu button:hover {
   background: #eef2ff;
 }
 
-.layout-controls {
+.toolbar-actions {
   display: grid;
-  grid-template-columns: repeat(7, 34px);
+  grid-template-columns: 34px;
   gap: 4px;
 }
 
-.layout-controls button {
+.toolbar-actions button {
   display: inline-grid;
   place-items: center;
   width: 34px;
@@ -211,7 +211,7 @@ textarea {
   line-height: 1;
 }
 
-.layout-controls .toolbar-icon-button {
+.toolbar-actions .toolbar-icon-button {
   color: #1f2937;
 }
 
@@ -227,7 +227,7 @@ textarea {
   overflow: visible;
 }
 
-.layout-controls button.active,
+.toolbar-actions button.active,
 .cell-menu button.active {
   border-color: #1a56db;
   background: #e0ebff;
@@ -789,6 +789,12 @@ textarea {
   box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
 }
 
+.cell-config-panel {
+  --settings-label-width: 96px;
+  --settings-picker-width: 180px;
+  --settings-control-width: 260px;
+}
+
 .template-panel {
   padding: 18px;
 }
@@ -1253,9 +1259,9 @@ textarea {
 
 .settings-section {
   display: grid;
-  grid-template-columns: 120px minmax(160px, 260px);
+  grid-template-columns: var(--settings-label-width) minmax(0, 1fr);
   align-items: center;
-  gap: 10px 4px;
+  gap: 10px;
   padding: 16px 18px 4px;
 }
 
@@ -1277,7 +1283,7 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  width: min(260px, 100%);
+  width: var(--settings-control-width);
   min-height: 34px;
   border: 1px solid rgba(17, 24, 39, 0.14);
   border-radius: 7px;
@@ -1305,10 +1311,8 @@ textarea {
   stroke-linejoin: round;
 }
 
-.language-radio-group {
+.settings-segmented-control {
   display: inline-grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  width: min(260px, 100%);
   height: 34px;
   overflow: hidden;
   border: 1px solid rgba(17, 24, 39, 0.14);
@@ -1316,7 +1320,26 @@ textarea {
   background: #ffffff;
 }
 
-.language-radio-group label {
+.settings-segmented-control {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.settings-segmented-control.settings-layout-control {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  width: var(--settings-control-width);
+}
+
+.settings-segmented-control.settings-theme-control {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: var(--settings-control-width);
+}
+
+.settings-segmented-control.settings-language-control {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: var(--settings-control-width);
+}
+
+.settings-segmented-control label {
   position: relative;
   display: grid;
   place-items: center;
@@ -1328,16 +1351,16 @@ textarea {
   cursor: pointer;
 }
 
-.language-radio-group label + label {
+.settings-segmented-control label + label {
   border-left: 1px solid rgba(17, 24, 39, 0.1);
 }
 
-.language-radio-group label.active {
+.settings-segmented-control label.active {
   background: #e0ebff;
   color: #1a56db;
 }
 
-.language-radio-group input {
+.settings-segmented-control input {
   position: absolute;
   opacity: 0;
   pointer-events: none;
@@ -1345,7 +1368,7 @@ textarea {
 
 .cell-config-row {
   display: grid;
-  grid-template-columns: 72px minmax(150px, 180px) minmax(220px, 1fr);
+  grid-template-columns: var(--settings-label-width) minmax(150px, var(--settings-picker-width)) minmax(220px, 1fr);
   align-items: center;
   gap: 10px;
 }
@@ -1364,17 +1387,24 @@ textarea {
 
 .search-mode-toggle {
   grid-column: 3;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
+  justify-self: start;
   color: #475569;
   font-size: 12px;
   font-weight: 600;
+  line-height: 1.35;
 }
 
-.search-mode-toggle input {
-  width: auto;
-  height: auto;
+.cell-config-row .search-mode-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  margin: 0;
+  padding: 0;
+  border-radius: 4px;
+  flex: 0 0 auto;
 }
 
 .cell-config-row .search-template-input {
@@ -1559,12 +1589,12 @@ textarea {
     grid-area: address;
   }
 
-  .layout-controls {
+  .toolbar-actions {
     grid-area: layouts;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    justify-content: end;
   }
 
-  .layout-controls button {
+  .toolbar-actions button {
     width: 100%;
   }
 
@@ -1666,7 +1696,7 @@ textarea {
     row-gap: 8px;
   }
 
-  .language-radio-group {
+  .settings-segmented-control {
     width: 100%;
   }
 
@@ -1697,7 +1727,7 @@ textarea {
 
   .navigation-controls button,
   .tab-controls > button,
-  .layout-controls button,
+  .toolbar-actions button,
   .cell-menu button,
   .address-form input,
   .browser-tab {
@@ -1723,16 +1753,16 @@ textarea {
   }
 
   .navigation-controls button:hover,
-  .layout-controls button:hover,
+  .toolbar-actions button:hover,
   .cell-menu button:hover {
     background: #243042;
   }
 
-  .layout-controls .toolbar-icon-button {
+  .toolbar-actions .toolbar-icon-button {
     color: #f9fafb;
   }
 
-  .layout-controls button.active,
+  .toolbar-actions button.active,
   .cell-menu button.active {
     border-color: #60a5fa;
     background: #173356;
@@ -1810,7 +1840,7 @@ textarea {
   .memory-document-view header button,
   .memory-source-item button,
   .settings-memory-button,
-  .language-radio-group,
+  .settings-segmented-control,
   .memory-search-form input,
   .memory-form-grid input,
   .cell-config-row select,
@@ -1825,15 +1855,15 @@ textarea {
     color: #f9fafb;
   }
 
-  .language-radio-group label + label {
+  .settings-segmented-control label + label {
     border-left-color: rgba(255, 255, 255, 0.12);
   }
 
-  .language-radio-group label {
+  .settings-segmented-control label {
     color: #e5e7eb;
   }
 
-  .language-radio-group label.active {
+  .settings-segmented-control label.active {
     background: #2746a0;
     color: #ffffff;
   }

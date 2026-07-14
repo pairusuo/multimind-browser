@@ -26,6 +26,7 @@
       "quad": "四格视图"
     },
     "actions": {
+      "label": "工具栏操作",
       "editCells": "设置"
     },
     "theme": {
@@ -213,6 +214,24 @@
   },
   "settings": {
     "title": "设置",
+    "layout": {
+      "label": "布局",
+      "options": {
+        "single": "单格视图",
+        "horizontal": "左右双格",
+        "vertical": "上下双格",
+        "triple": "三格视图",
+        "quad": "四格视图"
+      }
+    },
+    "theme": {
+      "label": "主题",
+      "options": {
+        "system": "跟随系统",
+        "light": "浅色",
+        "dark": "深色"
+      }
+    },
     "language": {
       "label": "语言",
       "options": {

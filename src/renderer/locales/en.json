@@ -26,6 +26,7 @@
       "quad": "Quad view"
     },
     "actions": {
+      "label": "Toolbar actions",
       "editCells": "Settings"
     },
     "theme": {
@@ -213,6 +214,24 @@
   },
   "settings": {
     "title": "Settings",
+    "layout": {
+      "label": "Layout",
+      "options": {
+        "single": "Single view",
+        "horizontal": "Side by side",
+        "vertical": "Stacked",
+        "triple": "Triple view",
+        "quad": "Quad view"
+      }
+    },
+    "theme": {
+      "label": "Theme",
+      "options": {
+        "system": "System",
+        "light": "Light",
+        "dark": "Dark"
+      }
+    },
     "language": {
       "label": "Language",
       "options": {

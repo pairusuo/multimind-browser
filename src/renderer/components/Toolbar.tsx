@@ -1,45 +1,31 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getRiskySiteReasonKey } from '../../shared/riskySites';
-import { CellTab, LayoutMode, ThemeMode } from '../../shared/types';
+import { CellTab, LayoutMode } from '../../shared/types';
 
 interface ToolbarProps {
   currentUrl: string;
   focusedCellId: string;
   tabs: CellTab[];
   activeTabId: string;
-  themeMode: ThemeMode;
   layoutMode: LayoutMode;
-  onLayoutChange: (mode: LayoutMode) => void;
   onNewTab: () => void;
   onCloseTab: (tabId: string) => void;
   onSwitchTab: (tabId: string) => void;
   onOpenConfig: () => void;
-  onThemeModeChange: (mode: ThemeMode) => void;
   onNavigate: (url: string) => void;
 }
-
-const LAYOUT_OPTIONS: Array<{ mode: LayoutMode; label: string; titleKey: string }> = [
-  { mode: 'single', label: '1', titleKey: 'toolbar.layout.single' },
-  { mode: 'horizontal', label: '2H', titleKey: 'toolbar.layout.horizontal' },
-  { mode: 'vertical', label: '2V', titleKey: 'toolbar.layout.vertical' },
-  { mode: 'triple', label: '3', titleKey: 'toolbar.layout.triple' },
-  { mode: 'quad', label: '4', titleKey: 'toolbar.layout.quad' },
-];
 
 export default function Toolbar({
   currentUrl,
   focusedCellId,
   tabs,
   activeTabId,
-  themeMode,
   layoutMode,
-  onLayoutChange,
   onNewTab,
   onCloseTab,
   onSwitchTab,
   onOpenConfig,
-  onThemeModeChange,
   onNavigate,
 }: ToolbarProps) {
   const { t } = useTranslation();
@@ -68,16 +54,6 @@ export default function Toolbar({
     }
 
     onNavigate(nextUrl);
-  }
-
-  async function handleLayoutChange(mode: LayoutMode) {
-    onLayoutChange(mode);
-    await window.electronAPI.setLayout(mode);
-  }
-
-  function cycleThemeMode() {
-    const nextMode: ThemeMode = themeMode === 'system' ? 'light' : themeMode === 'light' ? 'dark' : 'system';
-    onThemeModeChange(nextMode);
   }
 
   return (
@@ -153,24 +129,9 @@ export default function Toolbar({
           </p>
         )}
       </form>
-      <div className="layout-controls" role="group" aria-label={t('toolbar.layout.label')}>
-        {LAYOUT_OPTIONS.map((option) => (
-          <button
-            key={option.mode}
-            type="button"
-            className={layoutMode === option.mode ? 'active' : ''}
-            title={t(option.titleKey)}
-            aria-pressed={layoutMode === option.mode}
-            onClick={() => void handleLayoutChange(option.mode)}
-          >
-            {option.label}
-          </button>
-        ))}
+      <div className="toolbar-actions" role="group" aria-label={t('toolbar.actions.label')}>
         <button type="button" className="toolbar-icon-button toolbar-settings-button" title={t('toolbar.actions.editCells')} aria-label={t('toolbar.actions.editCells')} onClick={onOpenConfig}>
           <SettingsIcon />
-        </button>
-        <button type="button" className="toolbar-icon-button" title={t('toolbar.theme.current', { mode: t(`toolbar.theme.modes.${themeMode}`) })} aria-label={t('toolbar.theme.toggle')} onClick={cycleThemeMode}>
-          <ThemeIcon mode={themeMode} />
         </button>
       </div>
     </header>
@@ -186,32 +147,6 @@ function SettingsIcon() {
       <path d="M4 17h5" />
       <path d="M13 17h7" />
       <circle cx="11" cy="17" r="2" />
-    </svg>
-  );
-}
-
-function ThemeIcon({ mode }: { mode: ThemeMode }) {
-  if (mode === 'light') {
-    return (
-      <svg className="toolbar-svg-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <circle cx="12" cy="12" r="4.25" />
-        <path d="M12 2.75v2.1M12 19.15v2.1M4.4 4.4l1.48 1.48M18.12 18.12l1.48 1.48M2.75 12h2.1M19.15 12h2.1M4.4 19.6l1.48-1.48M18.12 5.88 19.6 4.4" />
-      </svg>
-    );
-  }
-
-  if (mode === 'dark') {
-    return (
-      <svg className="toolbar-svg-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <path d="M20 15.35A8.7 8.7 0 0 1 8.65 4a8.75 8.75 0 1 0 11.35 11.35Z" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg className="toolbar-svg-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <circle cx="12" cy="12" r="8.25" />
-      <path d="M12 3.75a8.25 8.25 0 0 1 0 16.5Z" />
     </svg>
   );
 }
