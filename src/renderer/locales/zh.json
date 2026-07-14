@@ -139,6 +139,10 @@
       "placeholder": "搜索标题、问题或正文",
       "untagged": "未标记"
     },
+    "source": {
+      "available": "源文件仍在授权目录中",
+      "missing": "源文件缺失"
+    },
     "confirm": {
       "removeDirectoryTitle": "移除这个授权目录？",
       "removeDirectoryBody": "这只会停止扫描该目录，不会删除已经导入的记忆文档，也不会删除本地 Markdown 文件。"

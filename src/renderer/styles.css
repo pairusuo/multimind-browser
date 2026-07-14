@@ -1155,6 +1155,16 @@ textarea {
   line-height: 1.5;
 }
 
+.memory-source-status {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.memory-source-status.missing {
+  color: #b91c1c;
+}
+
 .memory-document-view pre {
   margin: 0;
   max-width: 100%;
@@ -1941,6 +1951,14 @@ textarea {
   }
 
   .memory-error {
+    color: #fca5a5;
+  }
+
+  .memory-source-status {
+    color: #94a3b8;
+  }
+
+  .memory-source-status.missing {
     color: #fca5a5;
   }
 

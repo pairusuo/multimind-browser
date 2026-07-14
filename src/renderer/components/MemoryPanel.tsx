@@ -306,7 +306,10 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
                       onClick={() => void selectMemoryDocument(result)}
                     >
                       <strong>{result.title}</strong>
-                      <span>{result.tags.join(', ') || t('memory.search.untagged')}</span>
+                      <span>
+                        {result.tags.join(', ') || t('memory.search.untagged')}
+                        {result.sourcePath && !result.sourceExists ? ` · ${t('memory.source.missing')}` : ''}
+                      </span>
                       <small>{new Date(result.updatedAt).toLocaleString()}</small>
                     </button>
                   ))}
@@ -352,6 +355,13 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
                   <div>
                     <h2>{selectedMemoryDocument.title}</h2>
                     <p>{selectedMemoryDocument.tags.join(', ') || t('memory.search.untagged')}</p>
+                    {selectedMemoryDocument.sourcePath && (
+                      <p className={selectedMemoryDocument.sourceExists ? 'memory-source-status' : 'memory-source-status missing'}>
+                        {selectedMemoryDocument.sourceExists
+                          ? t('memory.source.available')
+                          : t('memory.source.missing')}
+                      </p>
+                    )}
                   </div>
                   <button type="button" onClick={() => void deleteSelectedMemoryDocument()} disabled={busy}>
                     {t('memory.actions.archive')}

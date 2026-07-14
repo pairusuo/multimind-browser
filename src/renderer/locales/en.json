@@ -139,6 +139,10 @@
       "placeholder": "Search titles, questions, or body",
       "untagged": "Untagged"
     },
+    "source": {
+      "available": "Source file is still in an authorized folder",
+      "missing": "Source file missing"
+    },
     "confirm": {
       "removeDirectoryTitle": "Remove this authorized folder?",
       "removeDirectoryBody": "This only stops scanning this folder. Imported memory documents and local Markdown files will not be deleted."
