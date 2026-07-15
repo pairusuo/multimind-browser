@@ -29,12 +29,15 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
   const [draftParticipants, setDraftParticipants] = useState('');
   const [draftMarkdown, setDraftMarkdown] = useState('');
   const [status, setStatus] = useState<string | null>(null);
+  const [scanStatus, setScanStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [pendingRemoveSource, setPendingRemoveSource] = useState<MemoryImportSource | null>(null);
+  const [pendingDisableDocument, setPendingDisableDocument] = useState<MemoryDocument | null>(null);
+  const [hideEmptyInboxMessage, setHideEmptyInboxMessage] = useState(false);
 
   const visibleInboxItems = useMemo(
-    () => inboxItems.filter((item) => item.status === 'new' || item.status === 'modified'),
+    () => inboxItems.filter((item) => item.status === 'new' || item.status === 'modified' || item.status === 'disabled'),
     [inboxItems],
   );
 
@@ -49,12 +52,27 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
     setSources(nextSources);
   }
 
-  async function refreshInbox() {
+  async function refreshInbox(showScanStatus = false) {
     setBusy(true);
     setError(null);
     try {
       const nextItems = await window.electronAPI.scanMemoryInbox();
       setInboxItems(nextItems);
+      await refreshSearch(searchQuery);
+      if (selectedMemoryDocument) {
+        const refreshedDocument = await window.electronAPI.getMemoryDocument({ id: selectedMemoryDocument.id });
+        setSelectedMemoryDocument(refreshedDocument);
+      }
+      if (showScanStatus) {
+        const pendingCount = nextItems.filter((item) => item.status === 'new' || item.status === 'modified' || item.status === 'disabled').length;
+        setHideEmptyInboxMessage(pendingCount === 0);
+        setScanStatus(pendingCount > 0
+          ? t('memory.status.scanCompletedWithItems', { count: pendingCount })
+          : t('memory.status.scanCompletedEmpty'));
+      } else {
+        setHideEmptyInboxMessage(false);
+        setScanStatus(null);
+      }
     } catch {
       setError(t('memory.errors.scanFailed'));
     } finally {
@@ -75,7 +93,7 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
       if (source) {
         setStatus(t('memory.status.directoryAdded'));
         await refreshSources();
-        await refreshInbox();
+        await refreshInbox(true);
       }
     } catch {
       setError(t('memory.errors.directoryFailed'));
@@ -116,6 +134,7 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
 
   async function selectInboxItem(item: MemoryInboxItem) {
     setBusy(true);
+    setStatus(null);
     setError(null);
     try {
       const document = await window.electronAPI.getMemoryInboxDocument(item.filePath);
@@ -162,7 +181,7 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
       });
       setSelectedMemoryDocument(imported);
       setSelectedInboxDocument(null);
-      setStatus(t('memory.status.imported'));
+      setStatus(t(selectedInboxDocument.item.status === 'disabled' ? 'memory.status.restored' : 'memory.status.imported'));
       await refreshInbox();
       await refreshSearch(searchQuery);
       setView('library');
@@ -188,6 +207,7 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
 
   async function selectMemoryDocument(summary: MemoryDocumentSummary) {
     setBusy(true);
+    setStatus(null);
     setError(null);
     try {
       const document = await window.electronAPI.getMemoryDocument({ id: summary.id });
@@ -200,22 +220,26 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
     }
   }
 
-  async function deleteSelectedMemoryDocument() {
-    if (!selectedMemoryDocument) {
+  async function disableSelectedMemoryDocument() {
+    if (!pendingDisableDocument) {
       return;
     }
 
+    const document = pendingDisableDocument;
     setBusy(true);
     setError(null);
     try {
-      await window.electronAPI.deleteMemoryDocument({ id: selectedMemoryDocument.id });
-      setSelectedMemoryDocument(null);
-      setStatus(t('memory.status.archived'));
+      await window.electronAPI.disableMemoryDocument({ id: document.id });
+      if (selectedMemoryDocument?.id === document.id) {
+        setSelectedMemoryDocument(null);
+      }
+      setStatus(t('memory.status.disabled'));
       await refreshSearch(searchQuery);
       await refreshInbox();
     } catch {
-      setError(t('memory.errors.deleteFailed'));
+      setError(t('memory.errors.disableFailed'));
     } finally {
+      setPendingDisableDocument(null);
       setBusy(false);
     }
   }
@@ -228,8 +252,8 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
             <h1>{t('memory.title')}</h1>
             <p>{t('memory.subtitle')}</p>
           </div>
-          <button type="button" onClick={onClose}>
-            {t('memory.actions.close')}
+          <button type="button" className="memory-close-button" aria-label={t('memory.actions.close')} onClick={onClose}>
+            ×
           </button>
         </header>
 
@@ -250,10 +274,11 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
                   <button type="button" onClick={() => void chooseDirectory()} disabled={busy}>
                     {t('memory.actions.addDirectory')}
                   </button>
-                  <button type="button" onClick={() => void refreshInbox()} disabled={busy}>
+                  <button type="button" onClick={() => void refreshInbox(true)} disabled={busy}>
                     {t('memory.actions.scan')}
                   </button>
                 </div>
+                {scanStatus && <p className="memory-scan-status">{scanStatus}</p>}
                 <div className="memory-source-list">
                   {sources.map((source) => (
                     <div key={source.id} className="memory-source-item">
@@ -284,7 +309,7 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
                       <small>{item.fileName}</small>
                     </button>
                   ))}
-                  {!visibleInboxItems.length && <p>{t('memory.empty.noInboxItems')}</p>}
+                  {!visibleInboxItems.length && !hideEmptyInboxMessage && <p>{t('memory.empty.noInboxItems')}</p>}
                 </div>
               </div>
             ) : (
@@ -345,7 +370,7 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
                 <textarea value={draftMarkdown} onChange={(event) => setDraftMarkdown(event.target.value)} />
                 <div className="memory-detail-actions">
                   <button type="button" onClick={() => void importSelectedDocument()} disabled={busy || !draftTitle.trim() || !draftMarkdown.trim()}>
-                    {t('memory.actions.import')}
+                    {t(selectedInboxDocument.item.status === 'disabled' ? 'memory.actions.restore' : 'memory.actions.import')}
                   </button>
                 </div>
               </div>
@@ -354,17 +379,13 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
                 <header>
                   <div>
                     <h2>{selectedMemoryDocument.title}</h2>
-                    <p>{selectedMemoryDocument.tags.join(', ') || t('memory.search.untagged')}</p>
-                    {selectedMemoryDocument.sourcePath && (
-                      <p className={selectedMemoryDocument.sourceExists ? 'memory-source-status' : 'memory-source-status missing'}>
-                        {selectedMemoryDocument.sourceExists
-                          ? t('memory.source.available')
-                          : t('memory.source.missing')}
-                      </p>
+                    {selectedMemoryDocument.tags.length > 0 && <p>{selectedMemoryDocument.tags.join(', ')}</p>}
+                    {selectedMemoryDocument.sourcePath && !selectedMemoryDocument.sourceExists && (
+                      <p className="memory-source-status missing">{t('memory.source.missing')}</p>
                     )}
                   </div>
-                  <button type="button" onClick={() => void deleteSelectedMemoryDocument()} disabled={busy}>
-                    {t('memory.actions.archive')}
+                  <button type="button" onClick={() => setPendingDisableDocument(selectedMemoryDocument)} disabled={busy}>
+                    {t('memory.actions.disable')}
                   </button>
                 </header>
                 {selectedMemoryDocument.originalQuestion && (
@@ -396,6 +417,24 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
                 </button>
                 <button type="button" onClick={() => void confirmRemoveSource()} disabled={busy}>
                   {t('memory.actions.removeDirectory')}
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
+        {pendingDisableDocument && (
+          <div className="memory-confirm-backdrop" role="presentation">
+            <section className="memory-confirm-dialog" role="dialog" aria-modal="true" aria-label={t('memory.confirm.disableDocumentTitle')}>
+              <MultiMindMark />
+              <h2>{t('memory.confirm.disableDocumentTitle')}</h2>
+              <p className="memory-confirm-path">{pendingDisableDocument.title}</p>
+              <p>{t('memory.confirm.disableDocumentBody')}</p>
+              <div className="memory-confirm-actions">
+                <button type="button" onClick={() => setPendingDisableDocument(null)} disabled={busy}>
+                  {t('memory.actions.cancel')}
+                </button>
+                <button type="button" onClick={() => void disableSelectedMemoryDocument()} disabled={busy}>
+                  {t('memory.actions.disable')}
                 </button>
               </div>
             </section>

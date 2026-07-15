@@ -114,7 +114,7 @@ export class MemoryStore {
 
     await this.markMissingSources();
 
-    return items.sort((a, b) => {
+    return dedupeInboxItems(items).sort((a, b) => {
       if (a.status !== b.status) {
         return inboxStatusWeight(a.status) - inboxStatusWeight(b.status);
       }
@@ -163,18 +163,23 @@ export class MemoryStore {
     }
 
     const existingByPath = filePath ? this.findDocumentByPath(filePath) : undefined;
-    if (existingByPath) {
-      const nextVersion = existingByPath.version + (existingByPath.source_hash === sourceHash ? 0 : 1);
+    const disabledByPath = filePath ? this.findDisabledDocumentByPath(filePath) : undefined;
+    const disabledByHash = this.findDisabledDocumentByHash(sourceHash);
+    const documentToUpdate = existingByPath ?? disabledByPath ?? disabledByHash;
+    if (documentToUpdate) {
+      const nextVersion = documentToUpdate.version + (documentToUpdate.source_hash === sourceHash ? 0 : 1);
       const updated = {
-        id: existingByPath.id,
+        id: documentToUpdate.id,
         title,
-        original_question: payload.originalQuestion?.trim() ?? existingByPath.original_question,
-        participant_sites_json: JSON.stringify(payload.participantSites ?? parseJsonArray(existingByPath.participant_sites_json)),
+        original_question: payload.originalQuestion?.trim() ?? documentToUpdate.original_question,
+        participant_sites_json: JSON.stringify(payload.participantSites ?? parseJsonArray(documentToUpdate.participant_sites_json)),
         content_markdown: contentMarkdown,
-        tags_json: JSON.stringify(payload.tags ?? parseJsonArray(existingByPath.tags_json)),
+        tags_json: JSON.stringify(payload.tags ?? parseJsonArray(documentToUpdate.tags_json)),
+        source_type: filePath ? 'directory-import' : documentToUpdate.source_type,
+        source_path: filePath ?? documentToUpdate.source_path,
         source_hash: sourceHash,
-        source_mtime: fileSnapshot?.mtimeMs ?? existingByPath.source_mtime,
-        source_size: fileSnapshot?.size ?? existingByPath.source_size,
+        source_mtime: fileSnapshot?.mtimeMs ?? documentToUpdate.source_mtime,
+        source_size: fileSnapshot?.size ?? documentToUpdate.source_size,
         source_exists: 1,
         updated_at: now,
         version: nextVersion,
@@ -187,6 +192,8 @@ export class MemoryStore {
             participant_sites_json = @participant_sites_json,
             content_markdown = @content_markdown,
             tags_json = @tags_json,
+            source_type = @source_type,
+            source_path = @source_path,
             source_hash = @source_hash,
             source_mtime = @source_mtime,
             source_size = @source_size,
@@ -262,19 +269,23 @@ export class MemoryStore {
         ORDER BY rank
         LIMIT 80
       `).all(buildFtsQuery(trimmed)) as DocumentRow[];
-      return rows.map(mapDocumentSummary);
+      if (rows.length) {
+        return rows.map(mapDocumentSummary);
+      }
     } catch {
-      const like = `%${trimmed}%`;
-      const rows = this.db.prepare(`
-        SELECT *
-        FROM memory_documents
-        WHERE archived_at IS NULL
-          AND (title LIKE ? OR original_question LIKE ? OR content_markdown LIKE ?)
-        ORDER BY updated_at DESC
-        LIMIT 80
-      `).all(like, like, like) as DocumentRow[];
-      return rows.map(mapDocumentSummary);
+      // Fall back to substring search below. FTS5 tokenization is weak for short CJK queries.
     }
+
+    const like = `%${trimmed}%`;
+    const rows = this.db.prepare(`
+      SELECT *
+      FROM memory_documents
+      WHERE archived_at IS NULL
+        AND (title LIKE ? OR original_question LIKE ? OR content_markdown LIKE ?)
+      ORDER BY updated_at DESC
+      LIMIT 80
+    `).all(like, like, like) as DocumentRow[];
+    return rows.map(mapDocumentSummary);
   }
 
   getDocument(id: string): MemoryDocument | null {
@@ -284,7 +295,7 @@ export class MemoryStore {
     return row ? mapDocument(row) : null;
   }
 
-  deleteDocument(id: string): void {
+  disableDocument(id: string): void {
     this.db.prepare(`
       UPDATE memory_documents
       SET archived_at = ?, updated_at = ?
@@ -348,9 +359,13 @@ export class MemoryStore {
       const snapshot = await readFileSnapshot(filePath);
       const existingByPath = this.findDocumentByPath(filePath);
       const existingByHash = this.findDocumentByHash(snapshot.hash);
+      const disabledByPath = this.findDisabledDocumentByPath(filePath);
+      const disabledByHash = this.findDisabledDocumentByHash(snapshot.hash);
       const status: MemoryInboxStatus = existingByPath
         ? existingByPath.source_hash === snapshot.hash ? 'imported' : 'modified'
-        : existingByHash ? 'imported' : 'new';
+        : existingByHash ? 'imported'
+          : disabledByPath || disabledByHash ? 'disabled'
+            : 'new';
 
       return {
         sourceId: source.id,
@@ -362,7 +377,7 @@ export class MemoryStore {
         size: snapshot.size,
         mtimeMs: snapshot.mtimeMs,
         status,
-        existingDocumentId: existingByPath?.id ?? existingByHash?.id,
+        existingDocumentId: existingByPath?.id ?? existingByHash?.id ?? disabledByPath?.id ?? disabledByHash?.id,
       };
     } catch {
       return null;
@@ -383,6 +398,18 @@ export class MemoryStore {
   private findDocumentByHash(hash: string): DocumentRow | undefined {
     return this.db
       .prepare('SELECT * FROM memory_documents WHERE source_hash = ? AND archived_at IS NULL')
+      .get(hash) as DocumentRow | undefined;
+  }
+
+  private findDisabledDocumentByPath(filePath: string): DocumentRow | undefined {
+    return this.db
+      .prepare('SELECT * FROM memory_documents WHERE source_path = ? AND archived_at IS NOT NULL')
+      .get(normalizePath(filePath)) as DocumentRow | undefined;
+  }
+
+  private findDisabledDocumentByHash(hash: string): DocumentRow | undefined {
+    return this.db
+      .prepare('SELECT * FROM memory_documents WHERE source_hash = ? AND archived_at IS NOT NULL')
       .get(hash) as DocumentRow | undefined;
   }
 
@@ -524,7 +551,33 @@ function buildFtsQuery(query: string): string {
 function inboxStatusWeight(status: MemoryInboxStatus): number {
   if (status === 'new') return 0;
   if (status === 'modified') return 1;
-  return 2;
+  if (status === 'disabled') return 2;
+  return 3;
+}
+
+function dedupeInboxItems(items: MemoryInboxItem[]): MemoryInboxItem[] {
+  const byHash = new Map<string, MemoryInboxItem>();
+
+  items.forEach((item) => {
+    const existing = byHash.get(item.hash);
+    if (!existing || shouldReplaceInboxItem(existing, item)) {
+      byHash.set(item.hash, item);
+    }
+  });
+
+  return [...byHash.values()];
+}
+
+function shouldReplaceInboxItem(existing: MemoryInboxItem, next: MemoryInboxItem): boolean {
+  const existingWeight = inboxStatusWeight(existing.status);
+  const nextWeight = inboxStatusWeight(next.status);
+  if (existingWeight !== nextWeight) {
+    return nextWeight < existingWeight;
+  }
+  if (existing.mtimeMs !== next.mtimeMs) {
+    return next.mtimeMs > existing.mtimeMs;
+  }
+  return next.filePath.length < existing.filePath.length;
 }
 
 function mapSource(row: SourceRow): MemoryImportSource {

@@ -105,8 +105,8 @@
     "subtitle": "从授权目录导入 Markdown，总结确认后保存为本地记忆快照。",
     "tabs": {
       "label": "记忆库视图",
-      "inbox": "收件箱",
-      "library": "搜索"
+      "inbox": "待导入",
+      "library": "已导入"
     },
     "actions": {
       "close": "关闭",
@@ -116,7 +116,8 @@
       "scan": "扫描",
       "search": "搜索",
       "import": "确认导入",
-      "archive": "归档"
+      "restore": "恢复记忆",
+      "disable": "停用记忆"
     },
     "fields": {
       "title": "标题",
@@ -127,17 +128,21 @@
     "statuses": {
       "new": "新文档",
       "modified": "源文件已更新",
+      "disabled": "已停用",
       "imported": "已导入"
     },
     "status": {
       "directoryAdded": "已添加授权目录",
       "directoryRemoved": "已移除授权目录。已导入的记忆文档仍会保留。",
+      "scanCompletedEmpty": "扫描完成，没有发现 Markdown 文件。",
+      "scanCompletedWithItems": "扫描完成，发现 {{count}} 个待确认 Markdown。",
       "imported": "已保存到本地记忆库",
-      "archived": "已归档该记忆文档"
+      "restored": "已恢复到长期记忆",
+      "disabled": "已停用该记忆文档"
     },
     "search": {
       "placeholder": "搜索标题、问题或正文",
-      "untagged": "未标记"
+      "untagged": "无标签"
     },
     "source": {
       "available": "源文件仍在授权目录中",
@@ -145,7 +150,9 @@
     },
     "confirm": {
       "removeDirectoryTitle": "移除这个授权目录？",
-      "removeDirectoryBody": "这只会停止扫描该目录，不会删除已经导入的记忆文档，也不会删除本地 Markdown 文件。"
+      "removeDirectoryBody": "这只会停止扫描该目录，不会删除已经导入的记忆文档，也不会删除本地 Markdown 文件。",
+      "disableDocumentTitle": "停用这个记忆文档？",
+      "disableDocumentBody": "停用后，这条文档不会参与长期记忆搜索和后续 AI 上下文召回；不会删除授权目录中的本地 Markdown 文件。"
     },
     "empty": {
       "noSources": "尚未添加授权目录",
@@ -163,7 +170,7 @@
       "importFailed": "导入记忆文档失败",
       "searchFailed": "搜索记忆库失败",
       "openFailed": "打开记忆文档失败",
-      "deleteFailed": "归档记忆文档失败"
+      "disableFailed": "停用记忆文档失败"
     }
   },
   "cellConfig": {

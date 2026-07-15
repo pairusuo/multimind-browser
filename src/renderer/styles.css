@@ -872,6 +872,16 @@ textarea {
   cursor: pointer;
 }
 
+.panel-header .memory-close-button {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  width: 34px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+}
+
 .memory-layout {
   display: grid;
   grid-template-columns: minmax(280px, 34%) minmax(0, 1fr);
@@ -882,6 +892,7 @@ textarea {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
+  overflow: hidden;
   border-right: 1px solid rgba(17, 24, 39, 0.1);
   background: #f8fafc;
 }
@@ -923,9 +934,10 @@ textarea {
 }
 
 .memory-list-panel {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   min-height: 0;
+  overflow: hidden;
   padding: 0 12px 12px;
 }
 
@@ -935,6 +947,13 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.memory-scan-status {
+  margin: 8px 0 0;
+  color: #047857;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .memory-search-form {
@@ -957,7 +976,8 @@ textarea {
 .memory-source-list {
   display: grid;
   gap: 6px;
-  max-height: 72px;
+  flex: 0 0 auto;
+  max-height: 120px;
   margin: 10px 0;
   overflow: auto;
 }
@@ -967,6 +987,7 @@ textarea {
   grid-template-columns: minmax(0, 1fr) 24px;
   align-items: center;
   gap: 6px;
+  min-height: 24px;
 }
 
 .memory-source-item span,
@@ -1003,6 +1024,7 @@ textarea {
   display: grid;
   align-content: start;
   gap: 8px;
+  flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
 }
@@ -1049,6 +1071,8 @@ textarea {
 }
 
 .memory-detail {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -1074,7 +1098,8 @@ textarea {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 12px;
-  min-height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   height: 100%;
 }
 
@@ -1172,7 +1197,7 @@ textarea {
   border: 1px solid rgba(17, 24, 39, 0.12);
   border-radius: 8px;
   padding: 14px;
-  background: #f8fafc;
+  background: #ffffff;
   color: #111827;
   white-space: pre-wrap;
   word-break: break-word;
@@ -1939,14 +1964,23 @@ textarea {
     color: #f9fafb;
   }
 
-  .memory-editor textarea,
-  .memory-document-view pre {
+  .memory-editor textarea {
     border-color: rgba(255, 255, 255, 0.14);
     background: #0f141b;
     color: #e5e7eb;
   }
 
+  .memory-document-view pre {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: #171c23;
+    color: #e5e7eb;
+  }
+
   .memory-status {
+    color: #34d399;
+  }
+
+  .memory-scan-status {
     color: #34d399;
   }
 

@@ -105,8 +105,8 @@
     "subtitle": "Import Markdown from authorized folders and save confirmed summaries as local memory snapshots.",
     "tabs": {
       "label": "Memory views",
-      "inbox": "Inbox",
-      "library": "Search"
+      "inbox": "To import",
+      "library": "Imported"
     },
     "actions": {
       "close": "Close",
@@ -116,7 +116,8 @@
       "scan": "Scan",
       "search": "Search",
       "import": "Confirm import",
-      "archive": "Archive"
+      "restore": "Restore memory",
+      "disable": "Disable memory"
     },
     "fields": {
       "title": "Title",
@@ -127,13 +128,17 @@
     "statuses": {
       "new": "New",
       "modified": "Source updated",
+      "disabled": "Disabled",
       "imported": "Imported"
     },
     "status": {
       "directoryAdded": "Authorized folder added",
       "directoryRemoved": "Authorized folder removed. Imported memory documents are kept.",
+      "scanCompletedEmpty": "Scan complete. No Markdown files found.",
+      "scanCompletedWithItems": "Scan complete. Found {{count}} Markdown files waiting for confirmation.",
       "imported": "Saved to local memory",
-      "archived": "Memory document archived"
+      "restored": "Restored to long-term memory",
+      "disabled": "Memory document disabled"
     },
     "search": {
       "placeholder": "Search titles, questions, or body",
@@ -145,7 +150,9 @@
     },
     "confirm": {
       "removeDirectoryTitle": "Remove this authorized folder?",
-      "removeDirectoryBody": "This only stops scanning this folder. Imported memory documents and local Markdown files will not be deleted."
+      "removeDirectoryBody": "This only stops scanning this folder. Imported memory documents and local Markdown files will not be deleted.",
+      "disableDocumentTitle": "Disable this memory document?",
+      "disableDocumentBody": "After disabling, this document will not participate in long-term memory search or future AI context recall. The local Markdown file in the authorized folder will not be deleted."
     },
     "empty": {
       "noSources": "No authorized folders yet",
@@ -163,7 +170,7 @@
       "importFailed": "Could not import memory document",
       "searchFailed": "Could not search memory",
       "openFailed": "Could not open memory document",
-      "deleteFailed": "Could not archive memory document"
+      "disableFailed": "Could not disable memory document"
     }
   },
   "cellConfig": {

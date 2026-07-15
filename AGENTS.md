@@ -1265,6 +1265,19 @@ interface StoreSchema {
    - 中间转发记录、格子时间线、未确认网页内容、失败总结和草稿不得直接
      写入长期记忆；未来如做 Raw Archive，也必须和 Memory Layer 明确区分
 
+   **记忆状态语义**：
+   - 确认导入：候选 Markdown 经用户确认后成为活跃长期记忆，可搜索，未来可
+     参与 AI 上下文召回
+   - 停用记忆：保留本地 SQLite 记录和版本信息，但从搜索、FTS 和后续 AI
+     上下文召回中排除；不会删除授权目录中的本地 Markdown 文件
+   - 恢复记忆：扫描授权目录时，如果候选 Markdown 命中已停用的同源或同内容
+     记录，收件箱显示为"已停用"，用户确认后把原记录重新设为活跃记忆并
+     重建 FTS，不创建重复记录
+   - 删除记录：真正删除 SQLite 记录及版本历史；当前尚未实现，未来必须使用
+     比停用更强的确认
+   - 禁止把停用记忆命名为删除，也不要用“归档”作为用户可见文案；“停用”
+     才是当前功能的准确语义
+
    **表结构方向**：至少包含 id、title、original_question、participant_sites、
    content_markdown、tags、source_type、source_path、source_hash、
    source_mtime、source_size、created_at、updated_at、imported_at、version，

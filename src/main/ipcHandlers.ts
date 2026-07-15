@@ -3,7 +3,7 @@ import {
   ApplyTemplatePayload,
   AppLanguage,
   CellTabPayload,
-  DeleteMemoryDocumentPayload,
+  DisableMemoryDocumentPayload,
   ForwardResponsePayload,
   GetMemoryDocumentPayload,
   GenerateDocumentPayload,
@@ -94,8 +94,8 @@ export function registerIpcHandlers(windowManager: WindowManager, memoryStore: M
     return memoryStore.getDocument(payload.id);
   });
 
-  registerHandler(IPC.DELETE_MEMORY_DOCUMENT, (_event, payload: DeleteMemoryDocumentPayload) => {
-    return memoryStore.deleteDocument(payload.id);
+  registerHandler(IPC.DISABLE_MEMORY_DOCUMENT, (_event, payload: DisableMemoryDocumentPayload) => {
+    return memoryStore.disableDocument(payload.id);
   });
 
   registerHandler(IPC.SET_THEME_MODE, (_event, mode: ThemeMode) => {

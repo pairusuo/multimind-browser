@@ -26,7 +26,7 @@ The authorized directory is not the memory database and is not a live mirror. So
 - 2026-07-14: Installed `better-sqlite3` and `@types/better-sqlite3`.
 - 2026-07-14: Added main-process `MemoryStore` with schema migration, import sources, Markdown inbox scanning, hash deduplication, document version rows, FTS5 search, and source-missing markers.
 - 2026-07-14: Added memory IPC channels, preload bridge methods, directory picker handler, and `better-sqlite3` `asarUnpack` packaging config.
-- 2026-07-14: Added first renderer memory UI: authorized-directory inbox, Markdown preview/edit, confirm import, search, view, and archive.
+- 2026-07-14: Added first renderer memory UI: authorized-directory inbox, Markdown preview/edit, confirm import, search, view, and disable memory.
 - 2026-07-14: Build passed. Initial Electron runtime failed because `better-sqlite3` was compiled for Node ABI 127; rebuilt it for Electron ABI 130 and added dynamic `rebuild:native` / `postinstall` scripts that read the installed Electron version.
 - 2026-07-14: `npm run dev` starts without SQLite/native module errors.
 - 2026-07-14: Moved the memory library entry out of the top toolbar and into Settings, keeping the toolbar consolidated behind the existing settings button.
@@ -39,7 +39,8 @@ The authorized directory is not the memory database and is not a live mirror. So
 - [x] Add shared memory types and IPC channels.
 - [x] Implement main-process memory store and schema migrations.
 - [x] Implement authorized directory selection and Markdown inbox scanning.
-- [x] Implement confirm import, search, list, read, and delete/archive APIs.
+- [x] Implement confirm import, search, list, read, and disable-memory APIs.
+- [x] Implement restore flow for disabled memory found again in authorized-directory inbox.
 - [x] Add preload bridge methods.
 - [x] Add minimal renderer UI for inbox and memory search.
 - [x] Run TypeScript/build verification.
@@ -48,10 +49,12 @@ The authorized directory is not the memory database and is not a live mirror. So
 
 - `npm run build` passes.
 - `npm run dev` starts Vite and Electron without `better-sqlite3` ABI errors after native rebuild.
-- Manual UI workflow still needs hands-on testing with a real Markdown directory: add folder, scan, preview, import, search, modify source file, rescan, archive.
+- Manual UI workflow still needs hands-on testing with a real Markdown directory: add folder, scan, preview, import, search, modify source file, rescan, disable memory.
 
 ## Open Decisions
 
 - First UI will start as a modal/panel to avoid changing the browser grid architecture.
 - Schema supports multiple authorized directories; the first UI can expose the same capability without adding a separate settings page.
-- Delete in the first UI archives documents instead of hard-deleting them.
+- Current "Disable memory" keeps the SQLite record but removes it from active search/FTS and future AI context recall.
+- Disabled memory can be restored from the inbox when scanning finds the same source file or same content hash again.
+- Hard-delete memory records is a separate future operation and is not implemented yet.

@@ -44,7 +44,7 @@ export const IPC = {
   IMPORT_MEMORY_DOCUMENT: 'import-memory-document',
   SEARCH_MEMORY_DOCUMENTS: 'search-memory-documents',
   GET_MEMORY_DOCUMENT: 'get-memory-document',
-  DELETE_MEMORY_DOCUMENT: 'delete-memory-document',
+  DISABLE_MEMORY_DOCUMENT: 'disable-memory-document',
   APPLY_TEMPLATE: 'apply-template',
   SET_LAYOUT: 'set-layout',
   SET_OVERLAY_OPEN: 'set-overlay-open',
@@ -116,7 +116,7 @@ export interface RemoveMemorySourcePayload {
   id: string;
 }
 
-export type MemoryInboxStatus = 'new' | 'modified' | 'imported';
+export type MemoryInboxStatus = 'new' | 'modified' | 'disabled' | 'imported';
 
 export interface MemoryInboxItem {
   sourceId: string;
@@ -156,7 +156,7 @@ export interface GetMemoryDocumentPayload {
   id: string;
 }
 
-export interface DeleteMemoryDocumentPayload {
+export interface DisableMemoryDocumentPayload {
   id: string;
 }
 
@@ -307,7 +307,7 @@ export interface ElectronAPI {
   importMemoryDocument: (payload: ImportMemoryDocumentPayload) => Promise<MemoryDocument>;
   searchMemoryDocuments: (payload: SearchMemoryDocumentsPayload) => Promise<MemoryDocumentSummary[]>;
   getMemoryDocument: (payload: GetMemoryDocumentPayload) => Promise<MemoryDocument | null>;
-  deleteMemoryDocument: (payload: DeleteMemoryDocumentPayload) => Promise<void>;
+  disableMemoryDocument: (payload: DisableMemoryDocumentPayload) => Promise<void>;
   setLayout: (mode: LayoutMode) => Promise<void>;
   setThemeMode: (mode: ThemeMode) => Promise<BrowserState>;
   setLanguage: (language: AppLanguage) => Promise<BrowserState>;
