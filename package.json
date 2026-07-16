@@ -1,7 +1,7 @@
 {
   "name": "multimind-browser",
   "productName": "MultiMind Flow",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "MultiMind Flow desktop workspace",
   "main": "dist/main/index.js",
@@ -16,7 +16,8 @@
     "build:main": "tsc -p tsconfig.main.json && npm run freeze-main-constants",
     "build": "npm run build:renderer && npm run build:main",
     "test:memory": "npm run build:main && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/test-memory-store.mjs",
-    "package:mac": "npm run generate-icons && npm run build && electron-builder --mac --universal",
+    "clean:package:mac": "node scripts/clean-mac-package.mjs",
+    "package:mac": "npm run clean:package:mac && npm run generate-icons && npm run build && electron-builder --mac --universal",
     "package:win": "cross-env BUILD_TARGET=win npm run generate-icons && cross-env BUILD_TARGET=win npm run build && electron-builder --win --x64",
     "package:all": "npm run package:mac && npm run package:win"
   },

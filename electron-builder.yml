@@ -20,6 +20,21 @@ mac:
   category: public.app-category.productivity
   identity: null
 
+dmg:
+  iconSize: 128
+  iconTextSize: 14
+  window:
+    width: 720
+    height: 440
+  contents:
+    - x: 200
+      y: 250
+      type: file
+    - x: 520
+      y: 250
+      type: link
+      path: /Applications
+
 win:
   icon: build/icon.ico
   target:
