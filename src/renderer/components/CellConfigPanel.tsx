@@ -9,11 +9,13 @@ interface CellConfigPanelProps {
   cellModes: Record<string, CellMode>;
   searchUrlTemplates: Record<string, string>;
   language: AppLanguage;
+  forwardControlsEnabled: boolean;
   layoutMode: LayoutMode;
   themeMode: ThemeMode;
   onClose: () => void;
   onLayoutChange: (mode: LayoutMode) => void;
   onLanguageChange: (language: AppLanguage) => void;
+  onForwardControlsEnabledChange: (enabled: boolean) => void;
   onThemeModeChange: (mode: ThemeMode) => void;
   onOpenMemory: () => void;
   onSave: (
@@ -28,11 +30,13 @@ export default function CellConfigPanel({
   cellModes,
   searchUrlTemplates,
   language,
+  forwardControlsEnabled,
   layoutMode,
   themeMode,
   onClose,
   onLayoutChange,
   onLanguageChange,
+  onForwardControlsEnabledChange,
   onThemeModeChange,
   onOpenMemory,
   onSave,
@@ -44,7 +48,7 @@ export default function CellConfigPanel({
   const [draftSearchTemplates, setDraftSearchTemplates] = useState<Record<string, string>>(() => ({
     ...searchUrlTemplates,
   }));
-const [appVersion, setAppVersion] = useState('');
+  const [appVersion, setAppVersion] = useState('');
 
   useEffect(() => {
     void window.electronAPI.getAppVersion().then(setAppVersion);
@@ -159,6 +163,19 @@ const [appVersion, setAppVersion] = useState('');
             <MemoryIcon />
             <span>{t('settings.memory.open')}</span>
           </button>
+          <span className="settings-section-label">{t('settings.forward.toggle')}</span>
+          <div className="settings-forward-control">
+            <label className="settings-forward-toggle" aria-label={t('settings.forward.toggle')}>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={forwardControlsEnabled}
+                onChange={(event) => onForwardControlsEnabledChange(event.target.checked)}
+              />
+              <span className="settings-switch" aria-hidden="true" />
+            </label>
+            <span className="settings-forward-hint">{t('settings.forward.hint')}</span>
+          </div>
           <span className="settings-section-label">{t('settings.version.label')}</span>
           <span className="app-version">
             {appVersion ? t('settings.version.value', { version: appVersion }) : t('settings.version.loading')}

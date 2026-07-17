@@ -12,6 +12,7 @@ interface GridCellProps {
   focused: boolean;
   layoutMode: LayoutMode;
   maximized: boolean;
+  showForwardControl: boolean;
   targetCells: Array<{ cellId: string; label: string }>;
   meta: {
     url: string;
@@ -31,12 +32,13 @@ export default function GridCell({
   focused,
   layoutMode,
   maximized,
+  showForwardControl,
+  targetCells,
   meta,
   onFocus,
   onToggleMaximized,
   onNewTab,
   onToggle,
-  targetCells,
 }: GridCellProps) {
   const { t } = useTranslation();
   const host = safeHost(meta.url, t('gridCell.empty'));
@@ -135,18 +137,20 @@ export default function GridCell({
             </div>
             {showCellMenu && (
               <div className="cell-menu" aria-label={t('gridCell.aria.controls', { host })}>
-              <button
-                type="button"
-                title={t('gridCell.actions.forwardTo')}
-                aria-label={t('gridCell.actions.forwardTo')}
-                aria-expanded={targetPickerOpen}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setTargetPickerOpen((open) => !open);
-                }}
-              >
-                ⇥
-              </button>
+              {showForwardControl && targetCells.length > 0 && (
+                <button
+                  type="button"
+                  title={t('gridCell.actions.forwardTo')}
+                  aria-label={t('gridCell.actions.forwardTo')}
+                  aria-expanded={targetPickerOpen}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setTargetPickerOpen((open) => !open);
+                  }}
+                >
+                  ⇥
+                </button>
+              )}
               <button
                 type="button"
                 className={maximized ? 'active' : ''}
@@ -186,14 +190,14 @@ export default function GridCell({
   );
 }
 
+function getTargetLabel(targetCells: Array<{ cellId: string; label: string }>, cellId: string): string {
+  return targetCells.find((target) => target.cellId === cellId)?.label ?? cellId.replace('cell-', 'Cell ');
+}
+
 function safeHost(url: string, emptyLabel: string): string {
   try {
     return url ? new URL(url).host : emptyLabel;
   } catch {
     return url || emptyLabel;
   }
-}
-
-function getTargetLabel(targetCells: Array<{ cellId: string; label: string }>, cellId: string): string {
-  return targetCells.find((target) => target.cellId === cellId)?.label ?? cellId.replace('cell-', 'Cell ');
 }

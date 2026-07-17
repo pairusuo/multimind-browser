@@ -62,6 +62,7 @@ export const IPC = {
   SWITCH_TAB: 'switch-tab',
   SET_THEME_MODE: 'set-theme-mode',
   SET_LANGUAGE: 'set-language',
+  SET_FORWARD_CONTROLS_ENABLED: 'set-forward-controls-enabled',
   CELL_FOCUSED: 'cell-focused',
   FORWARD_COMPLETED: 'forward-completed',
   SHOW_CELL_NOTICE: 'show-cell-notice',
@@ -183,6 +184,18 @@ export interface MemoryDocument extends MemoryDocumentSummary {
   sourceSize: number | null;
 }
 
+export interface MemoryRecallItem {
+  id: string;
+  title: string;
+  tags: string[];
+  excerpt: string;
+}
+
+export interface MemoryRecallContext {
+  items: MemoryRecallItem[];
+  agentContext: string;
+}
+
 export interface ExtractedConversationEntry {
   role: 'user' | 'assistant';
   content: string;
@@ -262,6 +275,7 @@ export interface BrowserState {
   activeTabIds: Record<string, string>;
   themeMode: ThemeMode;
   language: AppLanguage;
+  forwardControlsEnabled: boolean;
   focusedCellId: string;
   maximizedCellId: string | null;
   hasCompletedOnboarding: boolean;
@@ -311,6 +325,7 @@ export interface ElectronAPI {
   setLayout: (mode: LayoutMode) => Promise<void>;
   setThemeMode: (mode: ThemeMode) => Promise<BrowserState>;
   setLanguage: (language: AppLanguage) => Promise<BrowserState>;
+  setForwardControlsEnabled: (enabled: boolean) => Promise<BrowserState>;
   setOverlayOpen: (open: boolean) => Promise<void>;
   setMaximizedCell: (payload: SetMaximizedCellPayload) => Promise<void>;
   setSplitRatios: (payload: SplitRatiosPayload) => Promise<void>;

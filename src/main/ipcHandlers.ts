@@ -106,6 +106,10 @@ export function registerIpcHandlers(windowManager: WindowManager, memoryStore: M
     return windowManager.setLanguage(language);
   });
 
+  registerHandler(IPC.SET_FORWARD_CONTROLS_ENABLED, (_event, enabled: boolean) => {
+    return windowManager.setForwardControlsEnabled(enabled);
+  });
+
   registerHandler(IPC.NEW_TAB, (_event, payload: CellTabPayload) => {
     return windowManager.newTab(payload.cellId, payload.url);
   });

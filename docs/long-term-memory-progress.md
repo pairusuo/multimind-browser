@@ -19,6 +19,106 @@ Long-term memory follows the Source / Inbox / Memory model:
 
 The authorized directory is not the memory database and is not a live mirror. Source file deletion must not delete confirmed memory documents.
 
+## Product Intent
+
+Long-term memory is not only an archive or search page. Its core value is to let the future MultiMind Flow Agent reuse user-confirmed context from earlier deep discussions.
+
+Example: after a long investment discussion, the final imported memory may describe the user's risk tolerance, investing experience, position-sizing rules, time available for research, and constraints such as avoiding leverage or short-term speculation. When the user later asks the built-in Agent to analyze a stock, MultiMind Flow should be able to recall this memory and provide it to the Agent as hidden working context, so the Agent answers for this user instead of giving a generic investment answer.
+
+The intended loop is:
+
+1. Discuss a topic deeply with one or more AIs.
+2. Summarize the useful outcome into a clean Markdown document.
+3. Import the document into local long-term memory after user confirmation.
+4. On later Agent tasks, retrieve relevant memories from the local store.
+5. Provide a concise memory context to the Agent as internal working context.
+6. Let the user inspect, disable, or exclude unsuitable memories when needed.
+
+This keeps memory explicit and controllable while still allowing future answers to become personalized.
+
+The embedded AI websites are primarily the discussion and memory-production surface. They do not provide a hidden system/context channel, so MultiMind Flow should not treat ordinary website sending as the final long-term-memory experience. Automatically prepending memory text into website input boxes is only a possible debug/validation technique, not the default product behavior.
+
+## Current Usage Model
+
+Current implementation covers the storage foundation:
+
+- authorized directories act as inboxes for candidate Markdown files;
+- only confirmed documents become active memory snapshots;
+- active memories can be searched and viewed locally;
+- disabled memories are excluded from search and future recall;
+- source files are not treated as the memory database, so deleting or moving a source file does not delete imported memory.
+
+The current UI should be used to collect stable, user-confirmed conclusions:
+
+- personal preferences and constraints;
+- reusable decision rules;
+- project background and architecture decisions;
+- refined conclusions from multi-AI discussions;
+- article, podcast, or meeting summaries that are worth reusing later.
+
+It should not be used as a high-weight store for raw AI answer dumps, full intermediate debate logs, temporary task status, or unreviewed automatic summaries.
+
+## Agent Recall Direction
+
+The next major product step is not more library management. The next step is making memory available to the built-in Agent.
+
+Recommended first Agent recall version:
+
+1. When the user gives the Agent a task, search active memory with the current task text.
+2. Retrieve a small number of relevant memory documents or snippets.
+3. Build a short memory context block, clearly marked as user-confirmed long-term background.
+4. Provide that block to the Agent as internal working context, not as visible user text in embedded AI websites.
+5. Show optional traceability such as "Agent used 3 memories" and allow the user to inspect which memories were included.
+6. Provide a per-task option to run without memory when the user wants a neutral answer.
+
+Agent internal context shape:
+
+```md
+# User Long-Term Memory
+
+The following context was confirmed by the user and may be relevant to this answer:
+
+- The user is a conservative retail investor and prioritizes capital preservation.
+- The user does not use leverage or short-term momentum trading.
+- A single stock position should not exceed the user's agreed position limit.
+
+# Current Agent Task
+
+Analyze this stock and give a buy/sell view.
+```
+
+Recall should stay conservative:
+
+- return only a few memories by default;
+- avoid injecting whole long documents unless the user explicitly selects them;
+- exclude disabled memories;
+- prefer memories with matching tags, domains, titles, or strong search relevance;
+- make used memories inspectable so the user can catch bad recall without turning memory into visible prompt clutter by default.
+
+## Vector Search Consideration
+
+Vector search can improve automatic recall, but it is not the memory feature itself. It is a retrieval technique.
+
+FTS5 keyword search is good for exact terms such as stock names, project names, tags, and explicit words in a document. Vector search is useful when the later prompt is semantically related but does not share the same words as the memory. For example, a question about whether to "buy the dip" may need to recall memories about capital preservation, risk tolerance, and avoiding short-term speculation even if those exact words are not in the prompt.
+
+Recommended path:
+
+1. First implement Agent task recall using the existing SQLite + FTS5 store.
+2. Add UI visibility for which memories were used.
+3. Split long memory documents into smaller retrievable snippets.
+4. Add embeddings only after the recall loop is usable and the limits of keyword search are visible.
+5. Prefer local-first storage for embeddings. If an external embedding API is used later, make the privacy tradeoff explicit.
+
+Long-term architecture should use hybrid retrieval:
+
+- FTS5 for exact keyword and title/tag matches;
+- tags and domains for filtering;
+- vector similarity for semantic matches;
+- recency and user-confirmed status for ranking;
+- disabled state as a hard exclusion.
+
+An external vector database service is not required for the next version. A local SQLite-compatible vector extension or local vector store can be evaluated later after the product loop proves useful.
+
 ## Progress Log
 
 - 2026-07-14: Confirmed architecture and updated `MultiMind_设计文档_v0.2.md` and `AGENTS.md`.
@@ -36,6 +136,12 @@ The authorized directory is not the memory database and is not a live mirror. So
 - 2026-07-15: Duplicate candidate behavior was reported as passed for the main scenarios: same Markdown across multiple directories, same content under different filenames, and near-identical content with whitespace changes.
 - 2026-07-15: Packaged macOS smoke test was reported as passed: packaged app opens the memory library and can import/search Markdown using the local app data directory.
 - 2026-07-15: Added `npm run test:memory` and `scripts/test-memory-store.mjs` to cover the core `MemoryStore` flow with a temporary scan directory.
+- 2026-07-16: Clarified the product purpose of long-term memory: future Agent tasks should be able to reuse user-confirmed memories for personalized answers, not only archive and search imported documents.
+- 2026-07-16: Recorded the recommended recall roadmap: start with a local recall service over SQLite + FTS5, expose it to the future Agent as hidden working context, then evaluate hybrid vector retrieval after the basic loop is validated.
+- 2026-07-16: Implemented the first local memory recall service in `MemoryStore`. Embedded AI website sending remains unchanged and does not automatically prepend memory context.
+- 2026-07-16: Updated the summary-document prompt to request raw Markdown inside one `markdown` code block, and normalized imported memories by stripping an outer full-document Markdown code fence when present.
+- 2026-07-16: Increased forwarded discussion context from 7,000 to 20,000 characters and changed truncation to preserve recent complete user/AI message blocks instead of slicing the raw tail.
+- 2026-07-16: Tightened the summary-document prompt to require exactly one top-level title and normalized imported memories by removing consecutive duplicate leading H1 titles.
 
 ## Implementation Checklist
 
@@ -48,6 +154,7 @@ The authorized directory is not the memory database and is not a live mirror. So
 - [x] Add preload bridge methods.
 - [x] Add minimal renderer UI for inbox and memory search.
 - [x] Add lightweight automated `MemoryStore` workflow test.
+- [x] Add first local memory recall service for future Agent use.
 - [x] Run TypeScript/build verification.
 
 ## Verification
@@ -55,6 +162,9 @@ The authorized directory is not the memory database and is not a live mirror. So
 - `npm run build` passes.
 - `npm run dev` starts Vite and Electron without `better-sqlite3` ABI errors after native rebuild.
 - `npm run test:memory` passes after rebuilding `better-sqlite3` for the local Electron ABI.
+- `npm run test:memory` covers local memory recall, disabled-memory exclusion, and restore-to-recall behavior.
+- `npm run test:memory` covers Markdown code-fence normalization for copied AI outputs.
+- `npm run test:memory` covers duplicate leading H1 normalization.
 - Manual UI workflow has been validated with a real Markdown directory: add folder, scan, preview, import, search, disable, restore, remove source, source-missing recovery, and restart persistence.
 - macOS packaged-app smoke test has been validated locally. Packaging does not include the developer's app data; development and installed builds only appeared to share data because they use the same Electron app data directory on this machine.
 
@@ -64,5 +174,8 @@ The authorized directory is not the memory database and is not a live mirror. So
 - Schema supports multiple authorized directories; the first UI can expose the same capability without adding a separate settings page.
 - Current "Disable memory" keeps the SQLite record but removes it from active search/FTS and future AI context recall.
 - Disabled memory can be restored from the inbox when scanning finds the same source file or same content hash again.
-- Next useful UI additions are imported-memory editing, source path display/opening, and tag filtering.
+- Next product milestone is Agent memory consumption: retrieve relevant active memories during Agent tasks, pass a concise context block as hidden working context, and make used memories inspectable.
+- Library management additions such as imported-memory editing, source path display/opening, and tag filtering remain useful, but should not outrank the recall loop.
+- Vector retrieval is a later enhancement to recall quality, not a prerequisite for the first recall version.
+- Embedded AI website sending should not automatically consume long-term memory by default because website input boxes cannot receive hidden context.
 - Hard-delete memory records is a separate future operation and is not implemented yet.

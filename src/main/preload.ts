@@ -51,6 +51,7 @@ const api: ElectronAPI = {
   setLayout: (mode) => ipcRenderer.invoke(IPC.SET_LAYOUT, mode),
   setThemeMode: (mode: ThemeMode) => ipcRenderer.invoke(IPC.SET_THEME_MODE, mode),
   setLanguage: (language: AppLanguage) => ipcRenderer.invoke(IPC.SET_LANGUAGE, language),
+  setForwardControlsEnabled: (enabled: boolean) => ipcRenderer.invoke(IPC.SET_FORWARD_CONTROLS_ENABLED, enabled),
   setOverlayOpen: (open: boolean) => ipcRenderer.invoke(IPC.SET_OVERLAY_OPEN, open),
   setMaximizedCell: (payload: SetMaximizedCellPayload) => ipcRenderer.invoke(IPC.SET_MAXIMIZED_CELL, payload),
   setSplitRatios: (payload: SplitRatiosPayload) => ipcRenderer.invoke(IPC.SET_SPLIT_RATIOS, payload),

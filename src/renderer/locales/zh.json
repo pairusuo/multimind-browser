@@ -254,6 +254,11 @@
       "label": "长期记忆",
       "open": "打开记忆库"
     },
+    "forward": {
+      "label": "转发",
+      "toggle": "转发功能",
+      "hint": "实验功能，可能漏掉部分上下文或裁剪长内容"
+    },
     "version": {
       "label": "版本",
       "value": "v{{version}}",

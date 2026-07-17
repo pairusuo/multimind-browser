@@ -30,8 +30,10 @@ async function main() {
 
   const fileA = path.join(sourceA, 'financial.md');
   const fileB = path.join(sourceB, 'financial-copy.md');
+  const fileC = path.join(sourceB, 'financial-fenced.md');
   await fs.writeFile(fileA, financialMarkdown, 'utf8');
   await fs.writeFile(fileB, financialMarkdown, 'utf8');
+  await fs.writeFile(fileC, `\`\`\`markdown\n${financialMarkdown}\n\`\`\``, 'utf8');
 
   const store = new MemoryStore(dbPath);
   try {
@@ -44,6 +46,19 @@ async function main() {
     assert(financialItems[0].status === 'new', `Expected first inbox item to be new, got ${financialItems[0].status}.`);
 
     const inboxDocument = await store.getInboxDocument(financialItems[0].filePath);
+    const fencedInboxDocument = await store.getInboxDocument(fileC);
+    assert(fencedInboxDocument.contentMarkdown === financialMarkdown, 'Expected markdown code-fence wrapper to be stripped during preview.');
+    const duplicatedTitle = [
+      '# 重复标题测试',
+      '',
+      '# 重复标题测试',
+      '',
+      '正文',
+    ].join('\n');
+    const duplicatedTitleFile = path.join(sourceA, 'duplicated-title.md');
+    await fs.writeFile(duplicatedTitleFile, duplicatedTitle, 'utf8');
+    const duplicatedTitleDocument = await store.getInboxDocument(duplicatedTitleFile);
+    assert(duplicatedTitleDocument.contentMarkdown === '# 重复标题测试\n\n正文', 'Expected consecutive duplicate top-level titles to be normalized.');
     const imported = await store.importDocument({
       sourceId: inboxDocument.item.sourceId,
       sourcePath: inboxDocument.item.sourcePath,
@@ -55,8 +70,29 @@ async function main() {
     const stockResults = store.searchDocuments('股票');
     assert(stockResults.some((result) => result.id === imported.id), 'Expected Chinese substring search for "股票" to find imported memory.');
 
+    const touchedAt = new Date(Date.now() + 60_000);
+    await fs.utimes(inboxDocument.item.filePath, touchedAt, touchedAt);
+    const touchedInbox = await store.scanInbox();
+    const touchedItem = touchedInbox.find((item) => item.filePath === inboxDocument.item.filePath);
+    assert(touchedItem?.status === 'imported', `Expected unchanged content with newer mtime to stay imported, got ${touchedItem?.status ?? 'missing'}.`);
+
+    const modifiedMarkdown = `${financialMarkdown}\n\n新增一条真实内容变化。`;
+    await fs.writeFile(inboxDocument.item.filePath, modifiedMarkdown, 'utf8');
+    const modifiedInbox = await store.scanInbox();
+    const modifiedItem = modifiedInbox.find((item) => item.filePath === inboxDocument.item.filePath);
+    assert(modifiedItem?.status === 'modified', `Expected changed content hash to be modified, got ${modifiedItem?.status ?? 'missing'}.`);
+
+    await fs.writeFile(inboxDocument.item.filePath, financialMarkdown, 'utf8');
+    await store.scanInbox();
+
+    const recall = store.recallForAgentTask('这只股票最近下跌很多，可以抄底买入吗？');
+    assert(recall.items.some((item) => item.id === imported.id), 'Expected stock-related agent task to recall imported memory.');
+    assert(recall.agentContext.includes('用户长期记忆'), 'Expected agent context to include the memory header.');
+    assert(recall.agentContext.includes('优先保护本金'), 'Expected agent context to include relevant memory content.');
+
     store.disableDocument(imported.id);
     assert(!store.searchDocuments('股票').some((result) => result.id === imported.id), 'Expected disabled memory to be excluded from search.');
+    assert(!store.recallForAgentTask('这只股票可以买吗？').items.some((item) => item.id === imported.id), 'Expected disabled memory to be excluded from agent recall.');
 
     const disabledInbox = await store.scanInbox();
     const disabledItem = disabledInbox.find((item) => item.hash === inboxDocument.item.hash);
@@ -72,6 +108,7 @@ async function main() {
     });
     assert(restored.id === imported.id, 'Expected restoring disabled memory to reuse the original record.');
     assert(store.searchDocuments('股票').some((result) => result.id === restored.id), 'Expected restored memory to return to search results.');
+    assert(store.recallForAgentTask('这只股票可以买吗？').items.some((item) => item.id === restored.id), 'Expected restored memory to return to agent recall.');
 
     assert(restored.sourcePath, 'Expected restored memory to keep a source path.');
     await fs.rm(restored.sourcePath);

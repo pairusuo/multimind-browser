@@ -11,7 +11,13 @@ import {
   MemoryInboxDocument,
   MemoryInboxItem,
   MemoryInboxStatus,
+  MemoryRecallContext,
+  MemoryRecallItem,
 } from '../shared/types';
+
+const MEMORY_RECALL_LIMIT = 3;
+const MEMORY_RECALL_EXCERPT_CHARS = 700;
+const MEMORY_RECALL_CONTEXT_CHARS = 2400;
 
 interface SourceRow {
   id: string;
@@ -133,7 +139,7 @@ export class MemoryStore {
       throw new Error('Markdown file could not be read.');
     }
 
-    const contentMarkdown = await fs.readFile(filePath, 'utf8');
+    const { content: contentMarkdown } = await readFileSnapshot(filePath);
     return {
       item,
       contentMarkdown,
@@ -150,7 +156,7 @@ export class MemoryStore {
     }
 
     const fileSnapshot = filePath ? await readFileSnapshot(filePath) : null;
-    const contentMarkdown = (payload.contentMarkdown ?? fileSnapshot?.content ?? '').trim();
+    const contentMarkdown = normalizeMemoryMarkdown(payload.contentMarkdown ?? fileSnapshot?.content ?? '');
     if (!contentMarkdown) {
       throw new Error('Memory document content is empty.');
     }
@@ -286,6 +292,64 @@ export class MemoryStore {
       LIMIT 80
     `).all(like, like, like) as DocumentRow[];
     return rows.map(mapDocumentSummary);
+  }
+
+  recallForAgentTask(query: string): MemoryRecallContext {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      return { items: [], agentContext: '' };
+    }
+
+    const items = this.findRecallCandidates(trimmed)
+      .slice(0, MEMORY_RECALL_LIMIT)
+      .map((summary): MemoryRecallItem | null => {
+        const document = this.getDocument(summary.id);
+        if (!document) {
+          return null;
+        }
+        const excerpt = createRecallExcerpt(document.contentMarkdown, trimmed, MEMORY_RECALL_EXCERPT_CHARS);
+        if (!excerpt) {
+          return null;
+        }
+        return {
+          id: document.id,
+          title: document.title,
+          tags: document.tags,
+          excerpt,
+        };
+      })
+      .filter((item): item is MemoryRecallItem => item !== null);
+
+    if (!items.length) {
+      return { items: [], agentContext: '' };
+    }
+
+    return {
+      items,
+      agentContext: buildAgentMemoryContext(items, trimmed),
+    };
+  }
+
+  private findRecallCandidates(query: string): MemoryDocumentSummary[] {
+    const byId = new Map<string, MemoryDocumentSummary>();
+    const addResults = (results: MemoryDocumentSummary[]) => {
+      for (const result of results) {
+        if (!byId.has(result.id)) {
+          byId.set(result.id, result);
+        }
+      }
+    };
+
+    addResults(this.searchDocuments(query));
+
+    for (const term of extractRecallTerms(query)) {
+      if (byId.size >= MEMORY_RECALL_LIMIT) {
+        break;
+      }
+      addResults(this.searchDocuments(term));
+    }
+
+    return [...byId.values()];
   }
 
   getDocument(id: string): MemoryDocument | null {
@@ -491,8 +555,8 @@ async function readFileSnapshot(filePath: string): Promise<{
   ]);
 
   return {
-    content,
-    hash: hashText(content),
+    content: normalizeMemoryMarkdown(content),
+    hash: hashText(normalizeMemoryMarkdown(content)),
     mtimeMs: stat.mtimeMs,
     size: stat.size,
   };
@@ -516,6 +580,37 @@ function extractMarkdownTitle(markdown: string, fallbackName: string): string {
     return heading.replace(/^#\s+/, '').trim();
   }
   return fallbackName.replace(/\.(md|markdown)$/i, '').trim() || 'Untitled';
+}
+
+function normalizeMemoryMarkdown(content: string): string {
+  const trimmed = content.trim();
+  const fencedMarkdown = trimmed.match(/^```(?:markdown|md)[ \t]*\r?\n([\s\S]*?)\r?\n```[ \t]*$/i);
+  return dedupeLeadingMarkdownTitle(fencedMarkdown ? fencedMarkdown[1].trim() : trimmed);
+}
+
+function dedupeLeadingMarkdownTitle(markdown: string): string {
+  const lines = markdown.split(/\r?\n/);
+  const firstHeadingIndex = lines.findIndex((line) => /^#\s+\S/.test(line.trim()));
+  if (firstHeadingIndex < 0) {
+    return markdown;
+  }
+
+  const firstHeading = lines[firstHeadingIndex].trim();
+  let index = firstHeadingIndex + 1;
+  while (index < lines.length && !lines[index].trim()) {
+    index += 1;
+  }
+
+  if (lines[index]?.trim() !== firstHeading) {
+    return markdown;
+  }
+
+  const nextLines = [...lines];
+  nextLines.splice(index, 1);
+  if (!nextLines[index]?.trim() && !nextLines[index - 1]?.trim()) {
+    nextLines.splice(index, 1);
+  }
+  return nextLines.join('\n').trim();
 }
 
 function normalizePath(value: string): string {
@@ -615,4 +710,104 @@ function mapDocument(row: DocumentRow): MemoryDocument {
     sourceMtime: row.source_mtime,
     sourceSize: row.source_size,
   };
+}
+
+function buildAgentMemoryContext(items: MemoryRecallItem[], query: string): string {
+  const isChinese = detectChineseText(query);
+  const sections = [
+    isChinese ? '# 用户长期记忆' : '# User Long-Term Memory',
+    '',
+    isChinese
+      ? '以下内容是用户确认保存的长期背景。请只在与当前问题相关时使用。'
+      : 'The following memories were explicitly confirmed by the user. Use them only when relevant to the current request.',
+    '',
+    ...items.flatMap((item, index) => {
+      const tags = item.tags.length ? ` [tags: ${item.tags.join(', ')}]` : '';
+      return [
+        `## ${index + 1}. ${item.title}${tags}`,
+        item.excerpt,
+        '',
+      ];
+    }),
+  ];
+
+  return truncateText(sections.join('\n').trim(), MEMORY_RECALL_CONTEXT_CHARS);
+}
+
+function detectChineseText(text: string): boolean {
+  const chineseCharCount = (text.match(/[\u4e00-\u9fa5]/g) ?? []).length;
+  return chineseCharCount / Math.max(text.length, 1) > 0.15;
+}
+
+function createRecallExcerpt(content: string, query: string, maxChars: number): string {
+  const normalized = normalizeWhitespace(stripMarkdownNoise(content));
+  if (!normalized) {
+    return '';
+  }
+
+  const queryTerms = extractRecallTerms(query);
+  const lowerContent = normalized.toLowerCase();
+  const matchIndex = queryTerms
+    .map((term) => lowerContent.indexOf(term.toLowerCase()))
+    .filter((index) => index >= 0)
+    .sort((a, b) => a - b)[0];
+
+  if (matchIndex === undefined) {
+    return truncateText(normalized, maxChars);
+  }
+
+  const start = Math.max(0, matchIndex - Math.floor(maxChars * 0.35));
+  const excerpt = normalized.slice(start, start + maxChars);
+  return `${start > 0 ? '...' : ''}${truncateText(excerpt, maxChars)}${start + maxChars < normalized.length ? '...' : ''}`;
+}
+
+function extractRecallTerms(query: string): string[] {
+  const chineseTerms = (query.match(/[\u4e00-\u9fa5]{2,}/g) ?? []).flatMap((term) => {
+    const windows = new Set<string>();
+    for (let size = 2; size <= Math.min(4, term.length); size += 1) {
+      for (let index = 0; index <= term.length - size; index += 1) {
+        windows.add(term.slice(index, index + size));
+      }
+    }
+    return [...windows];
+  });
+  const latinTerms = query.match(/[a-zA-Z0-9][a-zA-Z0-9_-]{2,}/g) ?? [];
+  return [...chineseTerms, ...latinTerms]
+    .map((term) => term.trim())
+    .filter((term) => !isWeakRecallTerm(term))
+    .filter(Boolean);
+}
+
+function isWeakRecallTerm(term: string): boolean {
+  return new Set([
+    '这个',
+    '这只',
+    '可以',
+    '是否',
+    '怎么',
+    '什么',
+    '最近',
+    '很多',
+  ]).has(term);
+}
+
+function stripMarkdownNoise(content: string): string {
+  return content
+    .replace(/^---[\s\S]*?---\s*/m, '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!\[[^\]]*]\([^)]*\)/g, ' ')
+    .replace(/\[([^\]]+)]\([^)]*\)/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/[*_`>#~-]+/g, ' ');
+}
+
+function normalizeWhitespace(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+function truncateText(text: string, maxChars: number): string {
+  if (text.length <= maxChars) {
+    return text;
+  }
+  return `${text.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
 }

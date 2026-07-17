@@ -69,6 +69,7 @@ export default function App() {
   const activeTabIdsRef = useRef<Record<string, string>>(INITIAL_ACTIVE_TAB_IDS);
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
   const [language, setLanguage] = useState<AppLanguage>('zh');
+  const [forwardControlsEnabled, setForwardControlsEnabled] = useState(false);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [showConfigPanel, setShowConfigPanel] = useState(false);
   const [showDocumentSummary, setShowDocumentSummary] = useState(false);
@@ -227,6 +228,11 @@ export default function App() {
     applyBrowserState(state);
   }
 
+  async function handleForwardControlsEnabledChange(enabled: boolean) {
+    const state = await window.electronAPI.setForwardControlsEnabled(enabled);
+    applyBrowserState(state);
+  }
+
   async function handleNewTab(cellId: string, url?: string) {
     const state = await window.electronAPI.newTab({ cellId, url });
     applyBrowserState(state);
@@ -312,6 +318,7 @@ export default function App() {
     };
     setThemeMode(state.themeMode);
     setLanguage(state.language);
+    setForwardControlsEnabled(state.forwardControlsEnabled);
     if (i18n.language !== state.language) {
       void i18n.changeLanguage(state.language);
     }
@@ -378,6 +385,7 @@ export default function App() {
           cellModes={cellModes}
           cellUrls={cellUrls}
           focusedCellId={focusedCellId}
+          forwardControlsEnabled={forwardControlsEnabled}
           layoutMode={layoutMode}
           maximizedCellId={maximizedCellId}
           onFocusCell={handleFocusCell}
@@ -403,11 +411,13 @@ export default function App() {
           cellModes={cellModes}
           searchUrlTemplates={searchUrlTemplates}
           language={language}
+          forwardControlsEnabled={forwardControlsEnabled}
           layoutMode={layoutMode}
           themeMode={themeMode}
           onClose={() => setShowConfigPanel(false)}
           onLayoutChange={(mode) => void handleLayoutChange(mode)}
           onLanguageChange={(nextLanguage) => void handleLanguageChange(nextLanguage)}
+          onForwardControlsEnabledChange={(enabled) => void handleForwardControlsEnabledChange(enabled)}
           onThemeModeChange={(mode) => void handleThemeModeChange(mode)}
           onOpenMemory={() => {
             setShowConfigPanel(false);

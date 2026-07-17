@@ -254,6 +254,11 @@
       "label": "Long-term memory",
       "open": "Open memory library"
     },
+    "forward": {
+      "label": "Forward",
+      "toggle": "Forward feature",
+      "hint": "Experimental; context may be incomplete or truncated"
+    },
     "version": {
       "label": "Version",
       "value": "v{{version}}",

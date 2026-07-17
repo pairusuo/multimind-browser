@@ -26,17 +26,17 @@ import { getAdapterForUrl, type SiteNativeInjection } from './adapters';
 import { CHROME_USER_AGENT } from './constants';
 
 const TOOLBAR_HEIGHT = 52;
-const BOTTOM_INPUT_HEIGHT = 64;
+const BOTTOM_INPUT_HEIGHT = 56;
 const CELL_BORDER_SIZE = 1;
 const FOCUSED_CELL_BORDER_SIZE = 2;
 const CELL_HEADER_HEIGHT = 42;
 const SPLITTER_SIZE = 4;
-const LOAD_TIMEOUT_MS = 10_000;
+const LOAD_TIMEOUT_MS = 10000;
 const NOTICE_REPLAY_DELAY_MS = 500;
 const RESPONSE_POLL_INTERVAL_MS = 800;
-const RESPONSE_WAIT_TIMEOUT_MS = 120_000;
-const MAX_CONVERSATION_CHARS = 7000;
-const TIMELINE_NAVIGATION_CARRY_MS = 30_000;
+const RESPONSE_WAIT_TIMEOUT_MS = 120000;
+const MAX_CONVERSATION_CHARS = 20000;
+const TIMELINE_NAVIGATION_CARRY_MS = 30000;
 const SEND_FAN_OUT_JITTER_MS = 220;
 const BLANK_URL = 'about:blank';
 
@@ -94,6 +94,7 @@ export class WindowManager {
   private activeTabIds: Record<string, string>;
   private themeMode: ThemeMode;
   private language: AppLanguage;
+  private forwardControlsEnabled: boolean;
   private activeCells: Record<string, boolean> = {
     'cell-0': true,
     'cell-1': true,
@@ -126,6 +127,7 @@ export class WindowManager {
     this.activeTabIds = this.getStoredActiveTabIds();
     this.themeMode = this.getStoredThemeMode();
     this.language = this.getStoredLanguage();
+    this.forwardControlsEnabled = this.getStoredForwardControlsEnabled();
     nativeTheme.themeSource = this.themeMode;
     this.cellStates = this.createCellStates();
     this.focusedCellId = this.getStoredFocusedCellId();
@@ -375,6 +377,16 @@ export class WindowManager {
     this.language = language;
     this.store.set('app.language', language);
     this.reloadEmptyStateViews();
+    return this.getBrowserState();
+  }
+
+  setForwardControlsEnabled(enabled: boolean): BrowserState {
+    if (this.isDestroyed()) {
+      return this.getBrowserState();
+    }
+
+    this.forwardControlsEnabled = enabled;
+    this.store.set('features.forwardControlsEnabled', enabled);
     return this.getBrowserState();
   }
 
@@ -836,9 +848,7 @@ export class WindowManager {
           return;
         }
         const response = await this.waitForNextResponse(cellId, previousResponse);
-        if (await this.syncTimelineFromDomIfSupported(cellId)) {
-          return;
-        }
+        await this.syncTimelineFromDomIfSupported(cellId);
         this.appendTimelineEntry(cellId, {
           role: 'assistant',
           content: response,
@@ -1321,6 +1331,7 @@ export class WindowManager {
       activeTabIds: { ...this.activeTabIds },
       themeMode: this.themeMode,
       language: this.language,
+      forwardControlsEnabled: this.forwardControlsEnabled,
       focusedCellId: this.focusedCellId,
       maximizedCellId: this.maximizedCellId,
       hasCompletedOnboarding: Boolean(this.store.get('browser.hasCompletedOnboarding', false)),
@@ -2007,6 +2018,10 @@ export class WindowManager {
     return isAppLanguage(storedLanguage) ? storedLanguage : getSystemLanguage();
   }
 
+  private getStoredForwardControlsEnabled(): boolean {
+    return Boolean(this.store.get('features.forwardControlsEnabled', false));
+  }
+
   private bindShortcutEvents(webContents: WebContents): void {
     webContents.on('before-input-event', (event, input) => {
       const nextLayout = getLayoutShortcut(input);
@@ -2394,6 +2409,40 @@ function truncateConversation(fullText: string): { text: string; truncated: bool
     return { text: fullText, truncated: false };
   }
 
+  const blocks = parseRoleBlocks(fullText);
+  if (blocks?.length) {
+    const keptBlocks: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+    let usedChars = 0;
+
+    for (let index = blocks.length - 1; index >= 0; index -= 1) {
+      const block = blocks[index];
+      const formattedBlock = formatRoleBlocks([block]);
+      const separatorChars = keptBlocks.length ? 2 : 0;
+      if (usedChars + separatorChars + formattedBlock.length > MAX_CONVERSATION_CHARS) {
+        break;
+      }
+      keptBlocks.unshift(block);
+      usedChars += separatorChars + formattedBlock.length;
+    }
+
+    if (keptBlocks.length) {
+      return {
+        text: formatRoleBlocks(keptBlocks),
+        truncated: true,
+      };
+    }
+
+    const latestBlock = blocks.at(-1);
+    if (latestBlock) {
+      const roleLabel = latestBlock.role === 'user' ? '用户：' : 'AI：';
+      const contentBudget = Math.max(0, MAX_CONVERSATION_CHARS - roleLabel.length);
+      return {
+        text: `${roleLabel}${latestBlock.content.slice(-contentBudget)}`,
+        truncated: true,
+      };
+    }
+  }
+
   return {
     text: fullText.slice(fullText.length - MAX_CONVERSATION_CHARS),
     truncated: true,
@@ -2449,9 +2498,9 @@ const DOCUMENT_PROMPT_TEXT: Record<PromptLanguage, {
     grounding: '只基于当前对话中已经出现的信息总结，不编造信息，不补充对话外事实。',
     uncertainty: '不确定、材料未说明、需要外部验证的内容，统一放入“待核查事项”。',
     distillationRules: '蒸馏规则：默认不写来源主语，直接陈述观点本身；多个 AI 或多轮讨论重复确认的内容，合并为一条最完整、最有用的结论；保留具体数字、条件、例外、风险边界和可执行判断标准，不要压缩成空泛原则；可以加入极少量解释性连接，把对话中已经出现的因果关系理顺，但不能添加对话外事实。顶层标题只能写主题本身，不要包含“总结”“文档”“沉淀文档”“结构化总结”“复盘”“报告”等元信息。摘要只概括最终内容和适用范围，不说明“本文整合了多轮讨论”“基于对话内信息”“保留了哪些材料”这类生成过程。',
-    markdownInstruction: '请生成一份完整的 Markdown 文档，方便用户直接复制或下载到本地。',
+    markdownInstruction: '请输出原始 Markdown 源码，不要只输出渲染后的富文本。为方便复制，请把完整文档放在一个 markdown 代码块中；代码块内只包含文档正文，不要添加额外说明。',
     outputHeader: '# 输出格式',
-    outputInstruction: '先生成一个一级标题，然后严格使用下面六个二级标题，保持顺序，不要添加额外章节，也不要再添加“标题”章节。文档只呈现沉淀后的结论，不展示讨论过程、回答对比过程或转发过程。不要使用“原始提问”“第一版 AI 回答”“第二份 AI 回答”“不同 AI 生成的回答”“评价对象”“前文/上文回答”等过程性措辞；如需吸收这些信息，请直接改写成最终结论、边界条件或可执行建议。',
+    outputInstruction: '先生成且只生成一个一级标题，然后严格使用下面六个二级标题，保持顺序，不要添加额外章节，也不要重复一级标题或再添加“标题”章节。文档只呈现沉淀后的结论，不展示讨论过程、回答对比过程或转发过程。不要使用“原始提问”“第一版 AI 回答”“第二份 AI 回答”“不同 AI 生成的回答”“评价对象”“前文/上文回答”等过程性措辞；如需吸收这些信息，请直接改写成最终结论、边界条件或可执行建议。',
     headings: [
       '## 摘要',
       '## 背景与适用范围',
@@ -2466,10 +2515,10 @@ const DOCUMENT_PROMPT_TEXT: Record<PromptLanguage, {
     grounding: 'Summarize only information already present in the current conversation. Do not invent facts or add outside information.',
     uncertainty: 'Put uncertain, unspecified, or externally verifiable claims under "Items to Verify".',
     distillationRules: 'Distillation rules: by default, do not name the source speaker or AI; state the idea directly. Merge repeated points confirmed by multiple AIs or multiple turns into the most complete and useful conclusion. Preserve concrete numbers, conditions, exceptions, risk boundaries, and actionable decision criteria instead of flattening them into vague principles. You may add a very thin layer of explanatory connective tissue to clarify causal links already present in the conversation, but do not add facts from outside the conversation.',
-    markdownInstruction: 'Generate a complete Markdown document so the user can copy it directly or download it locally.',
+    markdownInstruction: 'Output the raw Markdown source, not only rendered rich text. To make copying reliable, place the complete document inside one markdown code block; include only the document body inside that block and no extra explanation.',
     outputHeader: '# Output Format',
     outputInstruction:
-      'Generate one top-level title first, then use exactly the six second-level headings below, in order, with no extra sections, and do not add a separate "Title" section. Present only the distilled conclusions. Do not expose the discussion process, answer-comparison process, forwarding process, source-question labels, answer-version labels, or phrases such as "original question", "first AI answer", "second AI answer", "different AI-generated answers", "evaluation target", or "previous answer". If such context is useful, rewrite it directly as final conclusions, boundaries, or actionable recommendations. The top-level title must name only the topic itself; do not include meta labels such as "summary", "document", "distilled document", "structured summary", "review", or "report". The Summary section should summarize the final substance and scope only; it must not explain that the document integrates multiple rounds, uses conversation-only information, or preserves certain source materials.',
+      'Generate exactly one top-level title first, then use exactly the six second-level headings below, in order, with no extra sections, no repeated top-level title, and no separate "Title" section. Present only the distilled conclusions. Do not expose the discussion process, answer-comparison process, forwarding process, source-question labels, answer-version labels, or phrases such as "original question", "first AI answer", "second AI answer", "different AI-generated answers", "evaluation target", or "previous answer". If such context is useful, rewrite it directly as final conclusions, boundaries, or actionable recommendations. The top-level title must name only the topic itself; do not include meta labels such as "summary", "document", "distilled document", "structured summary", "review", or "report". The Summary section should summarize the final substance and scope only; it must not explain that the document integrates multiple rounds, uses conversation-only information, or preserves certain source materials.',
     headings: [
       '## Summary',
       '## Background and Scope',

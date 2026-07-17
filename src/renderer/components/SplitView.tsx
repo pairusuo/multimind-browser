@@ -8,6 +8,7 @@ interface SplitViewProps {
   cellModes: Record<string, CellMode>;
   cellUrls: Record<string, string>;
   focusedCellId: string;
+  forwardControlsEnabled: boolean;
   layoutMode: LayoutMode;
   maximizedCellId: string | null;
   onFocusCell: (cellId: string, url: string) => void;
@@ -28,6 +29,7 @@ export default function SplitView({
   cellModes,
   cellUrls,
   focusedCellId,
+  forwardControlsEnabled,
   layoutMode,
   maximizedCellId,
   onFocusCell,
@@ -118,6 +120,7 @@ export default function SplitView({
           focused={focusedCellId === 'cell-0'}
           layoutMode={layoutMode}
           maximized={maximizedCellId === 'cell-0'}
+          showForwardControl={forwardControlsEnabled}
           targetCells={getTargetCells('cell-0', layoutCells, cellUrls)}
           meta={getCellMeta('cell-0', cellUrls, cellModes, activeCells, cellFavicons)}
           onFocus={onFocusCell}
@@ -146,6 +149,7 @@ export default function SplitView({
           focused={focusedCellId === 'cell-1'}
           layoutMode={layoutMode}
           maximized={maximizedCellId === 'cell-1'}
+          showForwardControl={forwardControlsEnabled}
           targetCells={getTargetCells('cell-1', layoutCells, cellUrls)}
           meta={getCellMeta('cell-1', cellUrls, cellModes, activeCells, cellFavicons)}
           onFocus={onFocusCell}
@@ -174,6 +178,7 @@ export default function SplitView({
           focused={focusedCellId === 'cell-2'}
           layoutMode={layoutMode}
           maximized={maximizedCellId === 'cell-2'}
+          showForwardControl={forwardControlsEnabled}
           targetCells={getTargetCells('cell-2', layoutCells, cellUrls)}
           meta={getCellMeta('cell-2', cellUrls, cellModes, activeCells, cellFavicons)}
           onFocus={onFocusCell}
@@ -189,6 +194,7 @@ export default function SplitView({
           focused={focusedCellId === 'cell-3'}
           layoutMode={layoutMode}
           maximized={maximizedCellId === 'cell-3'}
+          showForwardControl={forwardControlsEnabled}
           targetCells={getTargetCells('cell-3', layoutCells, cellUrls)}
           meta={getCellMeta('cell-3', cellUrls, cellModes, activeCells, cellFavicons)}
           onFocus={onFocusCell}
@@ -218,7 +224,7 @@ function getCellMeta(
 
 function getTargetCells(sourceCellId: string, visibleCells: string[], cellUrls: Record<string, string>) {
   return visibleCells
-    .filter((cellId) => cellId !== sourceCellId)
+    .filter((cellId) => cellId !== sourceCellId && Boolean(cellUrls[cellId]?.trim()))
     .map((cellId) => ({
       cellId,
       label: getCellLabel(cellUrls[cellId] ?? '', cellId),
