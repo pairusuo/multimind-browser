@@ -383,18 +383,22 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
                       ))}
                     </select>
                   </label>
-                  <label>
+                  <label className="memory-choice-field">
                     <span>{t('memory.fields.memoryScope')}</span>
-                    <select
-                      value={draftMemoryScope}
-                      onChange={(event) => setDraftMemoryScope(event.target.value as MemoryScope)}
-                    >
+                    <div className="memory-choice-grid" role="radiogroup" aria-label={t('memory.fields.memoryScope')}>
                       {MEMORY_SCOPE_OPTIONS.map((memoryScope) => (
-                        <option key={memoryScope} value={memoryScope}>
+                        <button
+                          key={memoryScope}
+                          type="button"
+                          role="radio"
+                          aria-checked={draftMemoryScope === memoryScope}
+                          className={draftMemoryScope === memoryScope ? 'active' : ''}
+                          onClick={() => setDraftMemoryScope(memoryScope)}
+                        >
                           {t(`memory.scopes.${memoryScope}`)}
-                        </option>
+                        </button>
                       ))}
-                    </select>
+                    </div>
                   </label>
                   <label>
                     <span>{t('memory.fields.originalQuestion')}</span>

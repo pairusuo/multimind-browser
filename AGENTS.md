@@ -769,6 +769,12 @@ function buildForwardPrompt(fullContext: string, truncated: boolean): string {
 }
 ```
 
+转发 prompt、语言判断、角色块解析和上下文裁切这类纯文本逻辑必须放在
+`src/main/forwardPrompt.ts`，不要重新塞回 `windowManager.ts`。对应回归测试
+放在 `scripts/test-forward-prompt.mjs`，通过 `npm run test:forward` 或
+`npm test` 执行。新增或修改转发 prompt 文案、裁切策略、角色块格式时，必须
+同步更新这条测试。
+
 **关键点**：`fullContext`（即 `getCellFullContext` 的返回值）即使
 经过了多跳转发积累（A→B→C 场景下，C 的时间线里包含了 A 的提问、
 A的AI回答、转发给B时B的回答），这段拼接的内容里**绝不应该混入
