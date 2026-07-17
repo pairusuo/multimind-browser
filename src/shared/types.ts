@@ -118,6 +118,8 @@ export interface RemoveMemorySourcePayload {
 }
 
 export type MemoryInboxStatus = 'new' | 'modified' | 'disabled' | 'imported';
+export type MemoryDocumentType = 'profile' | 'project' | 'decision_rule' | 'event' | 'reference';
+export type MemoryScope = 'global' | 'project';
 
 export interface MemoryInboxItem {
   sourceId: string;
@@ -143,6 +145,8 @@ export interface ImportMemoryDocumentPayload {
   sourcePath?: string;
   filePath?: string;
   title: string;
+  memoryType?: MemoryDocumentType;
+  memoryScope?: MemoryScope;
   originalQuestion?: string;
   participantSites?: string[];
   tags?: string[];
@@ -165,6 +169,8 @@ export interface MemoryDocumentSummary {
   id: string;
   title: string;
   originalQuestion: string;
+  memoryType: MemoryDocumentType;
+  memoryScope: MemoryScope;
   tags: string[];
   participantSites: string[];
   sourceType: string;
@@ -187,6 +193,8 @@ export interface MemoryDocument extends MemoryDocumentSummary {
 export interface MemoryRecallItem {
   id: string;
   title: string;
+  memoryType: MemoryDocumentType;
+  memoryScope: MemoryScope;
   tags: string[];
   excerpt: string;
 }

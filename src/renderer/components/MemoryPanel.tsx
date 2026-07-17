@@ -2,10 +2,12 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   MemoryDocument,
+  MemoryDocumentType,
   MemoryDocumentSummary,
   MemoryImportSource,
   MemoryInboxDocument,
   MemoryInboxItem,
+  MemoryScope,
 } from '../../shared/types';
 
 interface MemoryPanelProps {
@@ -13,6 +15,10 @@ interface MemoryPanelProps {
 }
 
 type MemoryView = 'inbox' | 'library';
+type DraftMemoryType = MemoryDocumentType | 'auto';
+
+const MEMORY_TYPE_OPTIONS: DraftMemoryType[] = ['auto', 'profile', 'project', 'decision_rule', 'event', 'reference'];
+const MEMORY_SCOPE_OPTIONS: MemoryScope[] = ['global', 'project'];
 
 export default function MemoryPanel({ onClose }: MemoryPanelProps) {
   const { t } = useTranslation();
@@ -24,6 +30,8 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
   const [searchResults, setSearchResults] = useState<MemoryDocumentSummary[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [draftTitle, setDraftTitle] = useState('');
+  const [draftMemoryType, setDraftMemoryType] = useState<DraftMemoryType>('auto');
+  const [draftMemoryScope, setDraftMemoryScope] = useState<MemoryScope>('global');
   const [draftOriginalQuestion, setDraftOriginalQuestion] = useState('');
   const [draftTags, setDraftTags] = useState('');
   const [draftParticipants, setDraftParticipants] = useState('');
@@ -141,6 +149,8 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
       setSelectedInboxDocument(document);
       setSelectedMemoryDocument(null);
       setDraftTitle(document.suggestedTitle);
+      setDraftMemoryType('auto');
+      setDraftMemoryScope('global');
       setDraftOriginalQuestion('');
       setDraftTags('');
       setDraftParticipants('');
@@ -155,6 +165,8 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
   function clearSelectedInboxDocument() {
     setSelectedInboxDocument(null);
     setDraftTitle('');
+    setDraftMemoryType('auto');
+    setDraftMemoryScope('global');
     setDraftOriginalQuestion('');
     setDraftTags('');
     setDraftParticipants('');
@@ -174,6 +186,8 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
         sourcePath: selectedInboxDocument.item.sourcePath,
         filePath: selectedInboxDocument.item.filePath,
         title: draftTitle,
+        ...(draftMemoryType === 'auto' ? {} : { memoryType: draftMemoryType }),
+        memoryScope: draftMemoryScope,
         originalQuestion: draftOriginalQuestion,
         tags: splitList(draftTags),
         participantSites: splitList(draftParticipants),
@@ -332,7 +346,9 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
                     >
                       <strong>{result.title}</strong>
                       <span>
-                        {result.tags.join(', ') || t('memory.search.untagged')}
+                        {t(`memory.types.${result.memoryType}`)}
+                        {` · ${t(`memory.scopes.${result.memoryScope}`)}`}
+                        {result.tags.length ? ` · ${result.tags.join(', ')}` : ` · ${t('memory.search.untagged')}`}
                         {result.sourcePath && !result.sourceExists ? ` · ${t('memory.source.missing')}` : ''}
                       </span>
                       <small>{new Date(result.updatedAt).toLocaleString()}</small>
@@ -353,6 +369,32 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
                   <label>
                     <span>{t('memory.fields.title')}</span>
                     <input value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} />
+                  </label>
+                  <label>
+                    <span>{t('memory.fields.memoryType')}</span>
+                    <select
+                      value={draftMemoryType}
+                      onChange={(event) => setDraftMemoryType(event.target.value as DraftMemoryType)}
+                    >
+                      {MEMORY_TYPE_OPTIONS.map((memoryType) => (
+                        <option key={memoryType} value={memoryType}>
+                          {t(`memory.types.${memoryType}`)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>{t('memory.fields.memoryScope')}</span>
+                    <select
+                      value={draftMemoryScope}
+                      onChange={(event) => setDraftMemoryScope(event.target.value as MemoryScope)}
+                    >
+                      {MEMORY_SCOPE_OPTIONS.map((memoryScope) => (
+                        <option key={memoryScope} value={memoryScope}>
+                          {t(`memory.scopes.${memoryScope}`)}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label>
                     <span>{t('memory.fields.originalQuestion')}</span>
@@ -379,7 +421,11 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
                 <header>
                   <div>
                     <h2>{selectedMemoryDocument.title}</h2>
-                    {selectedMemoryDocument.tags.length > 0 && <p>{selectedMemoryDocument.tags.join(', ')}</p>}
+                    <p>
+                      {t(`memory.types.${selectedMemoryDocument.memoryType}`)}
+                      {` · ${t(`memory.scopes.${selectedMemoryDocument.memoryScope}`)}`}
+                      {selectedMemoryDocument.tags.length > 0 ? ` · ${selectedMemoryDocument.tags.join(', ')}` : ''}
+                    </p>
                     {selectedMemoryDocument.sourcePath && !selectedMemoryDocument.sourceExists && (
                       <p className="memory-source-status missing">{t('memory.source.missing')}</p>
                     )}

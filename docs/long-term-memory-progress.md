@@ -76,11 +76,17 @@ Agent internal context shape:
 ```md
 # User Long-Term Memory
 
-The following context was confirmed by the user and may be relevant to this answer:
+The following memories were explicitly confirmed by the user. Use them only when relevant to the current request.
 
-- The user is a conservative retail investor and prioritizes capital preservation.
-- The user does not use leverage or short-term momentum trading.
-- A single stock position should not exceed the user's agreed position limit.
+## Stable User Profile
+
+### 1. Investment Preferences
+The user is a conservative retail investor and prioritizes capital preservation.
+
+## Relevant Decision Rules
+
+### 1. Retail Stock Investment Rules
+A single stock position should not exceed the user's agreed position limit. Avoid leverage and short-term momentum trading.
 
 # Current Agent Task
 
@@ -94,6 +100,42 @@ Recall should stay conservative:
 - exclude disabled memories;
 - prefer memories with matching tags, domains, titles, or strong search relevance;
 - make used memories inspectable so the user can catch bad recall without turning memory into visible prompt clutter by default.
+
+## Memory Type Taxonomy
+
+Each imported memory document has a lightweight type. The type is metadata for recall and context injection, not a replacement for tags.
+
+- `profile`: stable user facts, preferences, constraints, habits, risk tolerance, long-term goals.
+- `decision_rule`: reusable rules, checklists, criteria, operating principles, and decision standards.
+- `project`: durable background for a project, product, architecture, research direction, or ongoing work.
+- `event`: time-bound discussions, meetings, retrospectives, experiences, and episodic records.
+- `reference`: reusable reference material, article summaries, podcast notes, external facts, or general documents.
+
+Import UI should allow "Auto" so the user does not need to classify every document manually. Auto classification should remain conservative and can be corrected by manually selecting a type before import.
+
+Agent recall should use memory type to organize context:
+
+- profile memories become stable user background;
+- decision rules become applicable constraints or judgment criteria;
+- project memories become task background;
+- event memories provide recent or episodic context;
+- reference memories provide supporting material only when clearly relevant.
+
+## Scope And Lifecycle Metadata
+
+Memory type only describes what a memory contains. It must not be overloaded to describe where the memory applies, whether it is still valid, or how certain the content is.
+
+The next durable metadata layer should be kept separate:
+
+- `memory_scope`: where the memory applies. The first version uses `global` and `project`.
+- lifecycle status: whether the memory is active, disabled, deleted, or later superseded.
+- validity window: optional future `valid_from` and `valid_until` for time-sensitive memories.
+- epistemic type: optional future marker for explicit user facts, AI inference, or behavior-derived patterns.
+- confidence: optional future signal for inferred or behavior-derived memories.
+
+The current implementation should only add the low-risk `memory_scope` field. It defaults to `global`; users can mark a memory as `project` when it should mainly apply to a specific project or task family. Agent recall can then prefer global memories plus clearly relevant project memories without treating every imported note as universal user context.
+
+Agent context must state that the current user instruction takes priority over long-term memory. Memories are background, not commands.
 
 ## Vector Search Consideration
 
@@ -142,6 +184,9 @@ An external vector database service is not required for the next version. A loca
 - 2026-07-16: Updated the summary-document prompt to request raw Markdown inside one `markdown` code block, and normalized imported memories by stripping an outer full-document Markdown code fence when present.
 - 2026-07-16: Increased forwarded discussion context from 7,000 to 20,000 characters and changed truncation to preserve recent complete user/AI message blocks instead of slicing the raw tail.
 - 2026-07-16: Tightened the summary-document prompt to require exactly one top-level title and normalized imported memories by removing consecutive duplicate leading H1 titles.
+- 2026-07-17: Added memory document types for user profile, project background, decision rules, event memories, and reference material. Import can auto-classify or accept a manual type.
+- 2026-07-17: Updated Agent recall context to group recalled memories by type, so future Agent prompts can distinguish stable user background from decision rules and supporting references.
+- 2026-07-17: Split memory content type from applicability metadata. Added the first `memory_scope` plan and implementation target, with current user instruction taking priority over recalled memories.
 
 ## Implementation Checklist
 
@@ -155,6 +200,9 @@ An external vector database service is not required for the next version. A loca
 - [x] Add minimal renderer UI for inbox and memory search.
 - [x] Add lightweight automated `MemoryStore` workflow test.
 - [x] Add first local memory recall service for future Agent use.
+- [x] Add memory document type metadata and auto-classification.
+- [x] Group Agent recall context by memory type.
+- [x] Add memory scope metadata for global/project applicability.
 - [x] Run TypeScript/build verification.
 
 ## Verification
@@ -165,6 +213,9 @@ An external vector database service is not required for the next version. A loca
 - `npm run test:memory` covers local memory recall, disabled-memory exclusion, and restore-to-recall behavior.
 - `npm run test:memory` covers Markdown code-fence normalization for copied AI outputs.
 - `npm run test:memory` covers duplicate leading H1 normalization.
+- `npm run test:memory` covers memory type inference, manually assigned profile memories, and grouped Agent recall context.
+- `npm run test:memory` covers default global scope, manually assigned project scope, and scope metadata in Agent recall context.
+- `npm run build` passes after memory scope implementation.
 - Manual UI workflow has been validated with a real Markdown directory: add folder, scan, preview, import, search, disable, restore, remove source, source-missing recovery, and restart persistence.
 - macOS packaged-app smoke test has been validated locally. Packaging does not include the developer's app data; development and installed builds only appeared to share data because they use the same Electron app data directory on this machine.
 

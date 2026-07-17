@@ -7,6 +7,8 @@ import {
   ImportMemoryDocumentPayload,
   MemoryDocument,
   MemoryDocumentSummary,
+  MemoryDocumentType,
+  MemoryScope,
   MemoryImportSource,
   MemoryInboxDocument,
   MemoryInboxItem,
@@ -18,6 +20,8 @@ import {
 const MEMORY_RECALL_LIMIT = 3;
 const MEMORY_RECALL_EXCERPT_CHARS = 700;
 const MEMORY_RECALL_CONTEXT_CHARS = 2400;
+const MEMORY_TYPE_PRIORITY: MemoryDocumentType[] = ['profile', 'decision_rule', 'project', 'event', 'reference'];
+const MEMORY_SCOPE_PRIORITY: MemoryScope[] = ['global', 'project'];
 
 interface SourceRow {
   id: string;
@@ -30,6 +34,8 @@ interface DocumentRow {
   id: string;
   title: string;
   original_question: string;
+  memory_type: MemoryDocumentType;
+  memory_scope: MemoryScope;
   participant_sites_json: string;
   content_markdown: string;
   tags_json: string;
@@ -162,6 +168,8 @@ export class MemoryStore {
     }
 
     const title = (payload.title || extractMarkdownTitle(contentMarkdown, filePath ? path.basename(filePath) : 'Untitled')).trim();
+    const memoryType = payload.memoryType ?? inferMemoryType(title, payload.tags ?? [], contentMarkdown);
+    const memoryScope = normalizeMemoryScope(payload.memoryScope);
     const sourceHash = fileSnapshot?.hash ?? hashText(contentMarkdown);
     const existingByHash = this.findDocumentByHash(sourceHash);
     if (existingByHash && existingByHash.source_path !== filePath) {
@@ -177,6 +185,8 @@ export class MemoryStore {
       const updated = {
         id: documentToUpdate.id,
         title,
+        memory_type: memoryType,
+        memory_scope: memoryScope,
         original_question: payload.originalQuestion?.trim() ?? documentToUpdate.original_question,
         participant_sites_json: JSON.stringify(payload.participantSites ?? parseJsonArray(documentToUpdate.participant_sites_json)),
         content_markdown: contentMarkdown,
@@ -194,6 +204,8 @@ export class MemoryStore {
       this.db.prepare(`
         UPDATE memory_documents
         SET title = @title,
+            memory_type = @memory_type,
+            memory_scope = @memory_scope,
             original_question = @original_question,
             participant_sites_json = @participant_sites_json,
             content_markdown = @content_markdown,
@@ -218,6 +230,8 @@ export class MemoryStore {
     const row = {
       id,
       title,
+      memory_type: memoryType,
+      memory_scope: memoryScope,
       original_question: payload.originalQuestion?.trim() ?? '',
       participant_sites_json: JSON.stringify(payload.participantSites ?? []),
       content_markdown: contentMarkdown,
@@ -238,12 +252,12 @@ export class MemoryStore {
     this.db.prepare(`
       INSERT INTO memory_documents (
         id, title, original_question, participant_sites_json, content_markdown,
-        tags_json, source_type, source_path, source_hash, source_mtime, source_size,
+        memory_type, memory_scope, tags_json, source_type, source_path, source_hash, source_mtime, source_size,
         source_exists, created_at, updated_at, imported_at, version, archived_at
       )
       VALUES (
         @id, @title, @original_question, @participant_sites_json, @content_markdown,
-        @tags_json, @source_type, @source_path, @source_hash, @source_mtime, @source_size,
+        @memory_type, @memory_scope, @tags_json, @source_type, @source_path, @source_hash, @source_mtime, @source_size,
         @source_exists, @created_at, @updated_at, @imported_at, @version, @archived_at
       )
     `).run(row);
@@ -287,10 +301,10 @@ export class MemoryStore {
       SELECT *
       FROM memory_documents
       WHERE archived_at IS NULL
-        AND (title LIKE ? OR original_question LIKE ? OR content_markdown LIKE ?)
+        AND (title LIKE ? OR original_question LIKE ? OR content_markdown LIKE ? OR tags_json LIKE ?)
       ORDER BY updated_at DESC
       LIMIT 80
-    `).all(like, like, like) as DocumentRow[];
+    `).all(like, like, like, like) as DocumentRow[];
     return rows.map(mapDocumentSummary);
   }
 
@@ -300,7 +314,7 @@ export class MemoryStore {
       return { items: [], agentContext: '' };
     }
 
-    const items = this.findRecallCandidates(trimmed)
+    const items = prioritizeRecallCandidates(this.findRecallCandidates(trimmed))
       .slice(0, MEMORY_RECALL_LIMIT)
       .map((summary): MemoryRecallItem | null => {
         const document = this.getDocument(summary.id);
@@ -314,6 +328,8 @@ export class MemoryStore {
         return {
           id: document.id,
           title: document.title,
+          memoryType: document.memoryType,
+          memoryScope: document.memoryScope,
           tags: document.tags,
           excerpt,
         };
@@ -381,6 +397,8 @@ export class MemoryStore {
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         original_question TEXT NOT NULL DEFAULT '',
+        memory_type TEXT NOT NULL DEFAULT 'reference',
+        memory_scope TEXT NOT NULL DEFAULT 'global',
         participant_sites_json TEXT NOT NULL DEFAULT '[]',
         content_markdown TEXT NOT NULL,
         tags_json TEXT NOT NULL DEFAULT '[]',
@@ -416,6 +434,9 @@ export class MemoryStore {
       CREATE INDEX IF NOT EXISTS idx_memory_documents_source_hash
       ON memory_documents(source_hash);
     `);
+
+    ensureColumn(this.db, 'memory_documents', 'memory_type', "TEXT NOT NULL DEFAULT 'reference'");
+    ensureColumn(this.db, 'memory_documents', 'memory_scope', "TEXT NOT NULL DEFAULT 'global'");
   }
 
   private async buildInboxItem(source: MemoryImportSource, filePath: string): Promise<MemoryInboxItem | null> {
@@ -643,6 +664,61 @@ function buildFtsQuery(query: string): string {
   return `"${query.replace(/"/g, '""')}"`;
 }
 
+function ensureColumn(db: Database.Database, tableName: string, columnName: string, definition: string): void {
+  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  if (columns.some((column) => column.name === columnName)) {
+    return;
+  }
+  db.prepare(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`).run();
+}
+
+function inferMemoryType(title: string, tags: string[], contentMarkdown: string): MemoryDocumentType {
+  const text = `${title}\n${tags.join('\n')}\n${contentMarkdown}`.toLowerCase();
+  if (/(用户档案|个人档案|个人偏好|风险偏好|投资偏好|习惯|原则偏好|user profile|preference|risk tolerance)/i.test(text)) {
+    return 'profile';
+  }
+  if (/(准则|规则|原则|决策标准|操作依据|判断标准|decision rule|rule|principle|criteria|policy)/i.test(text)) {
+    return 'decision_rule';
+  }
+  if (/(项目|方案|产品|架构|路线图|需求|project|roadmap|architecture|requirements?)/i.test(text)) {
+    return 'project';
+  }
+  if (/(复盘|记录|会议|事件|经历|timeline|meeting|event|incident|retrospective)/i.test(text)) {
+    return 'event';
+  }
+  return 'reference';
+}
+
+function normalizeMemoryDocumentType(value: string | null | undefined): MemoryDocumentType {
+  return MEMORY_TYPE_PRIORITY.includes(value as MemoryDocumentType) ? value as MemoryDocumentType : 'reference';
+}
+
+function normalizeMemoryScope(value: string | null | undefined): MemoryScope {
+  return MEMORY_SCOPE_PRIORITY.includes(value as MemoryScope) ? value as MemoryScope : 'global';
+}
+
+function prioritizeRecallCandidates(candidates: MemoryDocumentSummary[]): MemoryDocumentSummary[] {
+  return [...candidates].sort((left, right) => {
+    const typeDelta = memoryTypeWeight(left.memoryType) - memoryTypeWeight(right.memoryType);
+    if (typeDelta !== 0) {
+      return typeDelta;
+    }
+    const scopeDelta = memoryScopeWeight(left.memoryScope) - memoryScopeWeight(right.memoryScope);
+    if (scopeDelta !== 0) {
+      return scopeDelta;
+    }
+    return right.updatedAt - left.updatedAt;
+  });
+}
+
+function memoryTypeWeight(memoryType: MemoryDocumentType): number {
+  return MEMORY_TYPE_PRIORITY.indexOf(memoryType);
+}
+
+function memoryScopeWeight(memoryScope: MemoryScope): number {
+  return MEMORY_SCOPE_PRIORITY.indexOf(memoryScope);
+}
+
 function inboxStatusWeight(status: MemoryInboxStatus): number {
   if (status === 'new') return 0;
   if (status === 'modified') return 1;
@@ -689,6 +765,8 @@ function mapDocumentSummary(row: DocumentRow): MemoryDocumentSummary {
     id: row.id,
     title: row.title,
     originalQuestion: row.original_question,
+    memoryType: normalizeMemoryDocumentType(row.memory_type),
+    memoryScope: normalizeMemoryScope(row.memory_scope),
     tags: parseJsonArray(row.tags_json),
     participantSites: parseJsonArray(row.participant_sites_json),
     sourceType: row.source_type,
@@ -714,24 +792,61 @@ function mapDocument(row: DocumentRow): MemoryDocument {
 
 function buildAgentMemoryContext(items: MemoryRecallItem[], query: string): string {
   const isChinese = detectChineseText(query);
+  const groupedItems = groupRecallItems(items);
   const sections = [
     isChinese ? '# 用户长期记忆' : '# User Long-Term Memory',
     '',
     isChinese
-      ? '以下内容是用户确认保存的长期背景。请只在与当前问题相关时使用。'
-      : 'The following memories were explicitly confirmed by the user. Use them only when relevant to the current request.',
+      ? '以下内容是用户确认保存的长期背景。请只在与当前问题相关时使用；当前用户指令优先于长期记忆。'
+      : 'The following memories were explicitly confirmed by the user. Use them only when relevant to the current request; the current user instruction takes priority over long-term memory.',
     '',
-    ...items.flatMap((item, index) => {
-      const tags = item.tags.length ? ` [tags: ${item.tags.join(', ')}]` : '';
-      return [
-        `## ${index + 1}. ${item.title}${tags}`,
-        item.excerpt,
-        '',
-      ];
-    }),
+    ...groupedItems.flatMap(([memoryType, groupItems]) => [
+      `## ${getMemoryTypeContextLabel(memoryType, isChinese)}`,
+      '',
+      ...groupItems.flatMap((item, index) => {
+        const scope = isChinese ? getMemoryScopeContextLabel(item.memoryScope, true) : getMemoryScopeContextLabel(item.memoryScope, false);
+        const tags = item.tags.length ? `; tags: ${item.tags.join(', ')}` : '';
+        return [
+          `### ${index + 1}. ${item.title} [${scope}${tags}]`,
+          item.excerpt,
+          '',
+        ];
+      }),
+    ]),
   ];
 
   return truncateText(sections.join('\n').trim(), MEMORY_RECALL_CONTEXT_CHARS);
+}
+
+function groupRecallItems(items: MemoryRecallItem[]): Array<[MemoryDocumentType, MemoryRecallItem[]]> {
+  const groups = new Map<MemoryDocumentType, MemoryRecallItem[]>();
+  for (const item of items) {
+    const group = groups.get(item.memoryType) ?? [];
+    group.push(item);
+    groups.set(item.memoryType, group);
+  }
+  return MEMORY_TYPE_PRIORITY
+    .map((memoryType): [MemoryDocumentType, MemoryRecallItem[]] => [memoryType, groups.get(memoryType) ?? []])
+    .filter(([, groupItems]) => groupItems.length > 0);
+}
+
+function getMemoryTypeContextLabel(memoryType: MemoryDocumentType, isChinese: boolean): string {
+  const labels: Record<MemoryDocumentType, { zh: string; en: string }> = {
+    profile: { zh: '稳定用户档案', en: 'Stable User Profile' },
+    decision_rule: { zh: '相关决策准则', en: 'Relevant Decision Rules' },
+    project: { zh: '项目和任务背景', en: 'Project and Task Background' },
+    event: { zh: '情景事件记忆', en: 'Episodic Memories' },
+    reference: { zh: '参考资料', en: 'Reference Material' },
+  };
+  return isChinese ? labels[memoryType].zh : labels[memoryType].en;
+}
+
+function getMemoryScopeContextLabel(memoryScope: MemoryScope, isChinese: boolean): string {
+  const labels: Record<MemoryScope, { zh: string; en: string }> = {
+    global: { zh: '全局', en: 'global' },
+    project: { zh: '项目', en: 'project' },
+  };
+  return isChinese ? labels[memoryScope].zh : labels[memoryScope].en;
 }
 
 function detectChineseText(text: string): boolean {

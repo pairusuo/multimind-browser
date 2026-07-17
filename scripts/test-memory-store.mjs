@@ -66,6 +66,8 @@ async function main() {
       title: inboxDocument.suggestedTitle,
       contentMarkdown: inboxDocument.contentMarkdown,
     });
+    assert(imported.memoryType === 'decision_rule', `Expected financial rules document to infer decision_rule, got ${imported.memoryType}.`);
+    assert(imported.memoryScope === 'global', `Expected imported memory to default to global scope, got ${imported.memoryScope}.`);
 
     const stockResults = store.searchDocuments('股票');
     assert(stockResults.some((result) => result.id === imported.id), 'Expected Chinese substring search for "股票" to find imported memory.');
@@ -87,8 +89,35 @@ async function main() {
 
     const recall = store.recallForAgentTask('这只股票最近下跌很多，可以抄底买入吗？');
     assert(recall.items.some((item) => item.id === imported.id), 'Expected stock-related agent task to recall imported memory.');
+    assert(recall.items.some((item) => item.memoryType === 'decision_rule'), 'Expected recalled items to preserve memory type.');
     assert(recall.agentContext.includes('用户长期记忆'), 'Expected agent context to include the memory header.');
+    assert(recall.agentContext.includes('相关决策准则'), 'Expected agent context to group decision rules separately.');
+    assert(recall.agentContext.includes('当前用户指令优先于长期记忆'), 'Expected agent context to state current instruction priority.');
+    assert(recall.agentContext.includes('[全局'), 'Expected agent context to include memory scope metadata.');
     assert(recall.agentContext.includes('优先保护本金'), 'Expected agent context to include relevant memory content.');
+
+    const profileMemory = await store.importDocument({
+      title: '用户投资偏好',
+      memoryType: 'profile',
+      memoryScope: 'global',
+      tags: ['投资'],
+      contentMarkdown: '# 用户投资偏好\n\n用户更看重稳健和长期确定性。',
+    });
+    const profileRecall = store.recallForAgentTask('帮我判断这只股票是否适合长期持有');
+    assert(profileRecall.items.some((item) => item.id === profileMemory.id && item.memoryType === 'profile'), 'Expected profile memory to participate in recall.');
+    assert(profileRecall.agentContext.includes('稳定用户档案'), 'Expected agent context to group profile memories separately.');
+
+    const projectMemory = await store.importDocument({
+      title: 'Alpha 项目交易看板背景',
+      memoryType: 'project',
+      memoryScope: 'project',
+      tags: ['Alpha'],
+      contentMarkdown: '# Alpha 项目交易看板背景\n\nAlpha 项目只面向 A 股交易看板，不覆盖基金和 ETF。',
+    });
+    assert(projectMemory.memoryScope === 'project', `Expected project memory to keep project scope, got ${projectMemory.memoryScope}.`);
+    const projectRecall = store.recallForAgentTask('Alpha 项目的交易看板需要注意什么？');
+    assert(projectRecall.items.some((item) => item.id === projectMemory.id && item.memoryScope === 'project'), 'Expected project-scoped memory to participate in recall.');
+    assert(projectRecall.agentContext.includes('[项目'), 'Expected agent context to include project scope metadata.');
 
     store.disableDocument(imported.id);
     assert(!store.searchDocuments('股票').some((result) => result.id === imported.id), 'Expected disabled memory to be excluded from search.');

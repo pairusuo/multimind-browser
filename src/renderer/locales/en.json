@@ -121,9 +121,23 @@
     },
     "fields": {
       "title": "Title",
+      "memoryScope": "Scope",
+      "memoryType": "Memory type",
       "originalQuestion": "Original question",
       "tags": "Tags, comma-separated",
       "participants": "Participating AIs, comma-separated"
+    },
+    "types": {
+      "auto": "Auto",
+      "profile": "User profile",
+      "project": "Project background",
+      "decision_rule": "Decision rule",
+      "event": "Event memory",
+      "reference": "Reference"
+    },
+    "scopes": {
+      "global": "Global",
+      "project": "Project"
     },
     "statuses": {
       "new": "New",

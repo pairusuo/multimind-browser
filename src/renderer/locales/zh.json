@@ -121,9 +121,23 @@
     },
     "fields": {
       "title": "标题",
+      "memoryScope": "适用范围",
+      "memoryType": "记忆类型",
       "originalQuestion": "原始问题",
       "tags": "标签（逗号分隔）",
       "participants": "参与 AI（逗号分隔）"
+    },
+    "types": {
+      "auto": "自动判断",
+      "profile": "用户档案",
+      "project": "项目背景",
+      "decision_rule": "决策准则",
+      "event": "事件记忆",
+      "reference": "参考资料"
+    },
+    "scopes": {
+      "global": "全局",
+      "project": "项目"
     },
     "statuses": {
       "new": "新文档",
