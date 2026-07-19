@@ -128,6 +128,27 @@ async function main() {
     assert(recalledProject?.matchReasons.includes('project_scope'), 'Expected project-scoped recall to explain project scope matching.');
     assert(projectRecall.agentContext.includes('[项目'), 'Expected agent context to include project scope metadata.');
 
+    const foodMemory = await store.importDocument({
+      title: '用户饮食与生活习惯约束',
+      memoryType: 'profile',
+      memoryScope: 'global',
+      tags: ['饮食', '旅行'],
+      contentMarkdown: '# 用户饮食与生活习惯约束\n\n用户不能吃辣，不喝酒，不抽烟。餐厅、旅行、聚餐建议应避开辣、酒、烟。',
+    });
+    const travelFoodRecall = store.recallForAgentTask('我计划去重庆玩，推荐一下吃喝玩乐');
+    assert(travelFoodRecall.items.some((item) => item.id === foodMemory.id), 'Expected travel food task to recall dietary constraints.');
+    assert(!travelFoodRecall.items.some((item) => item.id === imported.id), 'Expected travel food task not to recall unrelated investment rules.');
+
+    const unrelatedProfile = await store.importDocument({
+      title: '用户阅读偏好',
+      memoryType: 'profile',
+      memoryScope: 'global',
+      tags: ['阅读'],
+      contentMarkdown: '# 用户阅读偏好\n\n用户偏好纸质书和长篇非虚构作品。',
+    });
+    const unrelatedProfileRecall = store.recallForAgentTask('我计划去重庆玩，推荐一下吃喝玩乐');
+    assert(!unrelatedProfileRecall.items.some((item) => item.id === unrelatedProfile.id), 'Expected profile/type priority not to recall unrelated user profile memory.');
+
     store.disableDocument(imported.id);
     assert(!store.searchDocuments('股票').some((result) => result.id === imported.id), 'Expected disabled memory to be excluded from search.');
     assert(!store.recallForAgentTask('这只股票可以买吗？').items.some((item) => item.id === imported.id), 'Expected disabled memory to be excluded from agent recall.');

@@ -13,7 +13,7 @@ Implement the first usable long-term memory foundation for MultiMind Flow:
 
 Long-term memory follows the Source / Inbox / Memory model:
 
-- Source: Markdown files, pasted Markdown, and future API-generated summaries are candidate inputs.
+- Source: Markdown files, pasted Markdown, embedded-website discussions, and future API multi-model discussions are candidate inputs.
 - Inbox: scanned candidates from user-authorized directories are reviewed before import.
 - Memory: confirmed document snapshots are stored in the app data SQLite database and indexed for search.
 
@@ -36,7 +36,7 @@ The intended loop is:
 
 This keeps memory explicit and controllable while still allowing future answers to become personalized.
 
-The embedded AI websites are primarily the discussion and memory-production surface. They do not provide a hidden system/context channel, so MultiMind Flow should not treat ordinary website sending as the final long-term-memory experience. Automatically prepending memory text into website input boxes is only a possible debug/validation technique, not the default product behavior.
+The embedded AI websites are one discussion and memory-production surface, not the only one. API-based multi-model answering is another discussion entry: MultiMind Flow can send the same question to multiple model APIs, collect answers, compare or summarize them, and then produce a candidate Markdown memory. Both entry points should feed the same memory pipeline: candidate source -> user review -> confirmed local memory -> Agent recall. Automatically prepending memory text into website input boxes is only a possible debug/validation technique, not the default product behavior.
 
 ## Current Usage Model
 
@@ -70,6 +70,8 @@ Recommended first Agent recall version:
 4. Provide that block to the Agent as internal working context, not as visible user text in embedded AI websites.
 5. Show optional traceability such as "Agent used 3 memories" and allow the user to inspect which memories were included.
 6. Provide a per-task option to run without memory when the user wants a neutral answer.
+
+The recall service should stay source-agnostic. It should not care whether a memory came from an embedded website conversation, a pasted Markdown note, a saved local file, or a future API multi-model discussion. Import metadata should record provenance, but ranking and Agent context generation should operate on confirmed memory content and metadata.
 
 Agent internal context shape:
 
@@ -154,7 +156,7 @@ Recommended path:
 Long-term architecture should use hybrid retrieval:
 
 - FTS5 for exact keyword and title/tag matches;
-- tags and domains for filtering;
+- tags, memory type, scope, and source metadata for filtering;
 - vector similarity for semantic matches;
 - recency and user-confirmed status for ranking;
 - disabled state as a hard exclusion.
@@ -190,6 +192,9 @@ An external vector database service is not required for the next version. A loca
 - 2026-07-19: Added a local Agent recall test entry in the memory library. It lets the user inspect recalled memories and the hidden Agent context without sending anything to embedded AI websites.
 - 2026-07-19: Added explainable recall ranking. Recall items now include a score and structured match reasons such as title match, tag match, body match, type priority, and scope match.
 - 2026-07-19: Improved recall debugging usability: recalled items can open the source memory, Agent context can be copied, and low-score recall results show a quality warning.
+- 2026-07-19: Tightened recall relevance after manual testing. Generic words such as "plan" and "recommend" no longer create enough body-match score by themselves. Domain-specific synonym expansion was removed from core recall logic; recall now requires real title, tag, original-question, or body relevance before applying type, scope, or recency boosts.
+- 2026-07-19: Clarified that API-based multi-model answering is a parallel memory-production entry alongside embedded website discussions. Both routes should produce candidate Markdown memories and reuse the same confirmation, storage, and Agent recall pipeline.
+- 2026-07-19: Split long-term-memory rules from storage orchestration. `memoryStore.ts` now delegates recall/type heuristics to `memoryRecallRules.ts` and Agent hidden-context text to `agentMemoryContext.ts`, so Chinese retrieval rules and Agent templates are no longer mixed into the SQLite store implementation.
 
 ## Implementation Checklist
 
@@ -222,6 +227,7 @@ An external vector database service is not required for the next version. A loca
 - `npm run test:memory` covers memory type inference, manually assigned profile memories, and grouped Agent recall context.
 - `npm run test:memory` covers default global scope, manually assigned project scope, and scope metadata in Agent recall context.
 - `npm run test:memory` covers recall scores, match reasons, decision-rule priority, profile priority, and project-scoped ranking.
+- `npm run test:memory` covers the travel/food recall case so unrelated investment rules are not recalled for a Chongqing food/travel task.
 - `npm run build` passes after memory scope implementation.
 - `npm test` covers shared preset logic, forward prompt text/cropping, and the memory store workflow.
 - Manual UI workflow has been validated with a real Markdown directory: add folder, scan, preview, import, search, disable, restore, remove source, source-missing recovery, and restart persistence.

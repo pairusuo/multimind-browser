@@ -3,12 +3,22 @@ import crypto from 'node:crypto';
 import { Dirent } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { buildAgentMemoryContext } from './agentMemoryContext';
+import {
+  extractMeaningfulCjkChars,
+  extractRecallTerms,
+  inferMemoryType,
+  memoryScopeWeight,
+  memoryTypeWeight,
+  normalizeMemoryDocumentType,
+  normalizeMemoryScope,
+  scoreRecallCandidate,
+} from './memoryRecallRules';
 import {
   ImportMemoryDocumentPayload,
   MemoryDocument,
   MemoryDocumentSummary,
   MemoryDocumentType,
-  MemoryRecallReason,
   MemoryScope,
   MemoryImportSource,
   MemoryInboxDocument,
@@ -21,8 +31,6 @@ import {
 const MEMORY_RECALL_LIMIT = 3;
 const MEMORY_RECALL_EXCERPT_CHARS = 700;
 const MEMORY_RECALL_CONTEXT_CHARS = 2400;
-const MEMORY_TYPE_PRIORITY: MemoryDocumentType[] = ['profile', 'decision_rule', 'project', 'event', 'reference'];
-const MEMORY_SCOPE_PRIORITY: MemoryScope[] = ['global', 'project'];
 
 interface SourceRow {
   id: string;
@@ -359,7 +367,7 @@ export class MemoryStore {
 
     return {
       items,
-      agentContext: buildAgentMemoryContext(items, trimmed),
+      agentContext: buildAgentMemoryContext(items, trimmed, MEMORY_RECALL_CONTEXT_CHARS),
     };
   }
 
@@ -375,11 +383,12 @@ export class MemoryStore {
 
     addResults(this.searchDocuments(query));
 
-    for (const term of extractRecallTerms(query)) {
-      if (byId.size >= 40) {
-        break;
-      }
+    for (const term of extractRecallTerms(query).slice(0, 24)) {
       addResults(this.searchDocuments(term));
+    }
+
+    for (const char of extractMeaningfulCjkChars(query).slice(0, 24)) {
+      addResults(this.searchDocuments(char));
     }
 
     return [...byId.values()];
@@ -689,39 +698,6 @@ function ensureColumn(db: Database.Database, tableName: string, columnName: stri
   db.prepare(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`).run();
 }
 
-function inferMemoryType(title: string, tags: string[], contentMarkdown: string): MemoryDocumentType {
-  const text = `${title}\n${tags.join('\n')}\n${contentMarkdown}`.toLowerCase();
-  if (/(用户档案|个人档案|个人偏好|风险偏好|投资偏好|习惯|原则偏好|user profile|preference|risk tolerance)/i.test(text)) {
-    return 'profile';
-  }
-  if (/(准则|规则|原则|决策标准|操作依据|判断标准|decision rule|rule|principle|criteria|policy)/i.test(text)) {
-    return 'decision_rule';
-  }
-  if (/(项目|方案|产品|架构|路线图|需求|project|roadmap|architecture|requirements?)/i.test(text)) {
-    return 'project';
-  }
-  if (/(复盘|记录|会议|事件|经历|timeline|meeting|event|incident|retrospective)/i.test(text)) {
-    return 'event';
-  }
-  return 'reference';
-}
-
-function normalizeMemoryDocumentType(value: string | null | undefined): MemoryDocumentType {
-  return MEMORY_TYPE_PRIORITY.includes(value as MemoryDocumentType) ? value as MemoryDocumentType : 'reference';
-}
-
-function normalizeMemoryScope(value: string | null | undefined): MemoryScope {
-  return MEMORY_SCOPE_PRIORITY.includes(value as MemoryScope) ? value as MemoryScope : 'global';
-}
-
-function memoryTypeWeight(memoryType: MemoryDocumentType): number {
-  return MEMORY_TYPE_PRIORITY.indexOf(memoryType);
-}
-
-function memoryScopeWeight(memoryScope: MemoryScope): number {
-  return MEMORY_SCOPE_PRIORITY.indexOf(memoryScope);
-}
-
 function inboxStatusWeight(status: MemoryInboxStatus): number {
   if (status === 'new') return 0;
   if (status === 'modified') return 1;
@@ -793,136 +769,6 @@ function mapDocument(row: DocumentRow): MemoryDocument {
   };
 }
 
-function buildAgentMemoryContext(items: MemoryRecallItem[], query: string): string {
-  const isChinese = detectChineseText(query);
-  const groupedItems = groupRecallItems(items);
-  const sections = [
-    isChinese ? '# 用户长期记忆' : '# User Long-Term Memory',
-    '',
-    isChinese
-      ? '以下内容是用户确认保存的长期背景。请只在与当前问题相关时使用；当前用户指令优先于长期记忆。'
-      : 'The following memories were explicitly confirmed by the user. Use them only when relevant to the current request; the current user instruction takes priority over long-term memory.',
-    '',
-    ...groupedItems.flatMap(([memoryType, groupItems]) => [
-      `## ${getMemoryTypeContextLabel(memoryType, isChinese)}`,
-      '',
-      ...groupItems.flatMap((item, index) => {
-        const scope = isChinese ? getMemoryScopeContextLabel(item.memoryScope, true) : getMemoryScopeContextLabel(item.memoryScope, false);
-        const tags = item.tags.length ? `; tags: ${item.tags.join(', ')}` : '';
-        return [
-          `### ${index + 1}. ${item.title} [${scope}${tags}]`,
-          item.excerpt,
-          '',
-        ];
-      }),
-    ]),
-  ];
-
-  return truncateText(sections.join('\n').trim(), MEMORY_RECALL_CONTEXT_CHARS);
-}
-
-function scoreRecallCandidate(document: MemoryDocument, query: string): {
-  score: number;
-  matchReasons: MemoryRecallReason[];
-} {
-  const terms = extractRecallTerms(query);
-  const normalizedQuery = normalizeForRecallMatch(query);
-  const title = normalizeForRecallMatch(document.title);
-  const originalQuestion = normalizeForRecallMatch(document.originalQuestion);
-  const tags = document.tags.map(normalizeForRecallMatch);
-  const body = normalizeForRecallMatch(document.contentMarkdown);
-  const matchReasons: MemoryRecallReason[] = [];
-  let score = 0;
-
-  if (title.includes(normalizedQuery) || terms.some((term) => title.includes(normalizeForRecallMatch(term)))) {
-    score += 90;
-    matchReasons.push('title');
-  }
-
-  if (tags.some((tag) => tag.includes(normalizedQuery) || terms.some((term) => tag.includes(normalizeForRecallMatch(term))))) {
-    score += 80;
-    matchReasons.push('tag');
-  }
-
-  if (originalQuestion.includes(normalizedQuery)) {
-    score += 55;
-    matchReasons.push('body');
-  } else {
-    const matchedBodyTerms = terms.filter((term) => body.includes(normalizeForRecallMatch(term)));
-    if (matchedBodyTerms.length) {
-      score += Math.min(60, 25 + matchedBodyTerms.length * 5);
-      matchReasons.push('body');
-    }
-  }
-
-  if (document.memoryType === 'profile' && querySuggestsPersonalization(query)) {
-    score += 25;
-    matchReasons.push('profile_priority');
-  }
-
-  if (document.memoryType === 'decision_rule' && querySuggestsDecision(query)) {
-    score += 22;
-    matchReasons.push('decision_rule_priority');
-  }
-
-  if (document.memoryScope === 'project') {
-    const projectRelevant = matchReasons.includes('title') || matchReasons.includes('tag') || originalQuestion.includes(normalizedQuery);
-    if (projectRelevant) {
-      score += 16;
-      matchReasons.push('project_scope');
-    }
-  } else if (score > 0) {
-    score += 6;
-    matchReasons.push('global_scope');
-  }
-
-  if (score > 0) {
-    score += Math.max(0, 5 - Math.floor((Date.now() - document.updatedAt) / (30 * 24 * 60 * 60 * 1000)));
-    matchReasons.push('recent');
-  }
-
-  return {
-    score,
-    matchReasons: [...new Set(matchReasons)],
-  };
-}
-
-function groupRecallItems(items: MemoryRecallItem[]): Array<[MemoryDocumentType, MemoryRecallItem[]]> {
-  const groups = new Map<MemoryDocumentType, MemoryRecallItem[]>();
-  for (const item of items) {
-    const group = groups.get(item.memoryType) ?? [];
-    group.push(item);
-    groups.set(item.memoryType, group);
-  }
-  return MEMORY_TYPE_PRIORITY
-    .map((memoryType): [MemoryDocumentType, MemoryRecallItem[]] => [memoryType, groups.get(memoryType) ?? []])
-    .filter(([, groupItems]) => groupItems.length > 0);
-}
-
-function getMemoryTypeContextLabel(memoryType: MemoryDocumentType, isChinese: boolean): string {
-  const labels: Record<MemoryDocumentType, { zh: string; en: string }> = {
-    profile: { zh: '稳定用户档案', en: 'Stable User Profile' },
-    decision_rule: { zh: '相关决策准则', en: 'Relevant Decision Rules' },
-    project: { zh: '项目和任务背景', en: 'Project and Task Background' },
-    event: { zh: '情景事件记忆', en: 'Episodic Memories' },
-    reference: { zh: '参考资料', en: 'Reference Material' },
-  };
-  return isChinese ? labels[memoryType].zh : labels[memoryType].en;
-}
-
-function getMemoryScopeContextLabel(memoryScope: MemoryScope, isChinese: boolean): string {
-  const labels: Record<MemoryScope, { zh: string; en: string }> = {
-    global: { zh: '全局', en: 'global' },
-    project: { zh: '项目', en: 'project' },
-  };
-  return isChinese ? labels[memoryScope].zh : labels[memoryScope].en;
-}
-
-function detectChineseText(text: string): boolean {
-  const chineseCharCount = (text.match(/[\u4e00-\u9fa5]/g) ?? []).length;
-  return chineseCharCount / Math.max(text.length, 1) > 0.15;
-}
-
 function createRecallExcerpt(content: string, query: string, maxChars: number): string {
   const normalized = normalizeWhitespace(stripMarkdownNoise(content));
   if (!normalized) {
@@ -943,48 +789,6 @@ function createRecallExcerpt(content: string, query: string, maxChars: number): 
   const start = Math.max(0, matchIndex - Math.floor(maxChars * 0.35));
   const excerpt = normalized.slice(start, start + maxChars);
   return `${start > 0 ? '...' : ''}${truncateText(excerpt, maxChars)}${start + maxChars < normalized.length ? '...' : ''}`;
-}
-
-function extractRecallTerms(query: string): string[] {
-  const chineseTerms = (query.match(/[\u4e00-\u9fa5]{2,}/g) ?? []).flatMap((term) => {
-    const windows = new Set<string>();
-    for (let size = 2; size <= Math.min(4, term.length); size += 1) {
-      for (let index = 0; index <= term.length - size; index += 1) {
-        windows.add(term.slice(index, index + size));
-      }
-    }
-    return [...windows];
-  });
-  const latinTerms = query.match(/[a-zA-Z0-9][a-zA-Z0-9_-]{2,}/g) ?? [];
-  return [...chineseTerms, ...latinTerms]
-    .map((term) => term.trim())
-    .filter((term) => !isWeakRecallTerm(term))
-    .filter(Boolean);
-}
-
-function normalizeForRecallMatch(text: string): string {
-  return normalizeWhitespace(text).toLowerCase();
-}
-
-function querySuggestsPersonalization(query: string): boolean {
-  return /(我|我的|适合我|偏好|风险|经验|习惯|长期|稳健|should i|for me|my |risk tolerance|preference)/i.test(query);
-}
-
-function querySuggestsDecision(query: string): boolean {
-  return /(是否|应该|可以|怎么买|怎么卖|买入|卖出|持有|判断|建议|决策|规则|准则|should|buy|sell|hold|decide|criteria|rule)/i.test(query);
-}
-
-function isWeakRecallTerm(term: string): boolean {
-  return new Set([
-    '这个',
-    '这只',
-    '可以',
-    '是否',
-    '怎么',
-    '什么',
-    '最近',
-    '很多',
-  ]).has(term);
 }
 
 function stripMarkdownNoise(content: string): string {
