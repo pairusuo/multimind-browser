@@ -18,7 +18,7 @@
       "geminiRestricted": "Gemini 登录受限"
     },
     "apiMode": {
-      "title": "API 模型会谈"
+      "title": "API 调用"
     },
     "layout": {
       "label": "布局",
@@ -74,19 +74,23 @@
     },
     "api": {
       "emptyModel": "未配置模型",
-      "noModel": "在设置里为这个格子配置模型。",
+      "noModel": "在格子标题栏选择模型。",
       "placeholder": "输入问题后，这里会显示模型回答。",
       "running": "模型正在回答...",
       "failed": "模型请求失败",
       "elapsed": "{{seconds}} 秒",
-      "modelSelect": "选择模型"
+      "modelSelect": "选择模型",
+      "streaming": "正在生成...",
+      "newDiscussion": "新建本格 API 会话"
     }
   },
   "bottomInput": {
     "label": "统一输入",
     "syncCells": "同步格子",
     "newDiscussion": "所有格子开启新会话",
+    "apiNewDiscussion": "清空所有 API 回答",
     "generateDocument": "生成总结文档",
+    "apiGenerateDocument": "让一个模型总结当前回答",
     "placeholder": "输入后按 Enter 同步发送，Shift+Enter 换行",
     "send": "发送",
     "sending": "发送中",
@@ -339,10 +343,10 @@
       }
     },
     "conversationEntry": {
-      "label": "会谈入口",
+      "label": "会谈模式",
       "options": {
         "embedded": "内嵌官网",
-        "api": "API 模型"
+        "api": "API 调用"
       }
     },
     "memory": {
@@ -350,12 +354,10 @@
       "open": "打开记忆库"
     },
     "apiConversation": {
-      "baseUrl": "API 地址",
+      "baseUrl": "API 基础地址",
       "apiKey": "API Key",
       "apiKeyPlaceholder": "输入 API Key",
-      "apiKeyConfigured": "已保存，留空不修改",
-      "models": "可选模型",
-      "cellModelHint": "也可以在格子标题栏直接切换"
+      "apiKeyConfigured": "已保存，留空不修改"
     },
     "forward": {
       "label": "转发",

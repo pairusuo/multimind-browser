@@ -20,6 +20,7 @@ interface SplitViewProps {
   onToggleCell: (cellId: string, active: boolean) => void;
   onApiCellModelChange: (cellId: string, model: string) => void;
   onApiForward: (sourceCellId: string, targetCellId: string) => Promise<void>;
+  onClearApiCell: (cellId: string) => void;
 }
 
 type CellFavicons = Record<string, string | null>;
@@ -46,6 +47,7 @@ export default function SplitView({
   onToggleCell,
   onApiCellModelChange,
   onApiForward,
+  onClearApiCell,
 }: SplitViewProps) {
   const [cellFavicons, setCellFavicons] = useState<CellFavicons>(INITIAL_FAVICONS);
   const layoutCells = LAYOUT_CELLS[layoutMode];
@@ -66,7 +68,7 @@ export default function SplitView({
 
   return (
     <section
-      className={`split-view split-view-${layoutMode}${maximizedCellId ? ' split-view-maximized' : ''}`}
+      className={`split-view split-view-${maximizedCellId ? 'single' : layoutMode}${maximizedCellId ? ' split-view-maximized' : ''}`}
       aria-label="Split browser cells"
     >
       {visibleCells.includes('cell-0') && (
@@ -88,6 +90,7 @@ export default function SplitView({
           onToggle={onToggleCell}
           onApiModelChange={onApiCellModelChange}
           onApiForward={onApiForward}
+          onClearApiCell={onClearApiCell}
         />
       )}
       {visibleCells.includes('cell-1') && (
@@ -109,6 +112,7 @@ export default function SplitView({
           onToggle={onToggleCell}
           onApiModelChange={onApiCellModelChange}
           onApiForward={onApiForward}
+          onClearApiCell={onClearApiCell}
         />
       )}
       {visibleCells.includes('cell-2') && (
@@ -130,6 +134,7 @@ export default function SplitView({
           onToggle={onToggleCell}
           onApiModelChange={onApiCellModelChange}
           onApiForward={onApiForward}
+          onClearApiCell={onClearApiCell}
         />
       )}
       {visibleCells.includes('cell-3') && (
@@ -151,6 +156,7 @@ export default function SplitView({
           onToggle={onToggleCell}
           onApiModelChange={onApiCellModelChange}
           onApiForward={onApiForward}
+          onClearApiCell={onClearApiCell}
         />
       )}
     </section>

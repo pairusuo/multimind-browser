@@ -187,8 +187,7 @@ textarea {
 
 .navigation-controls button,
 .tab-controls > button,
-.toolbar-actions button,
-.cell-menu button {
+.toolbar-actions button {
   width: 32px;
   height: 32px;
   border: 1px solid rgba(17, 24, 39, 0.14);
@@ -201,9 +200,36 @@ textarea {
 
 .navigation-controls button:hover,
 .tab-controls > button:hover,
-.toolbar-actions button:hover,
-.cell-menu button:hover {
+.toolbar-actions button:hover {
   background: #eef2ff;
+}
+
+.cell-menu button {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #475569;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cell-menu button:hover {
+  background: rgba(15, 23, 42, 0.07);
+  color: #111827;
+}
+
+.cell-menu button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.cell-menu button:disabled:hover {
+  background: transparent;
+  color: #475569;
 }
 
 .toolbar-actions {
@@ -240,7 +266,7 @@ textarea {
 
 .toolbar-actions button.active,
 .cell-menu button.active {
-  border-color: #1a56db;
+  border: 1px solid #1a56db;
   background: #e0ebff;
   color: #1a56db;
 }
@@ -331,6 +357,11 @@ textarea {
 .split-view-triple,
 .split-view-quad {
   grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+
+.split-view.split-view-maximized {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .grid-cell {
@@ -473,15 +504,12 @@ textarea {
   right: 10px;
   z-index: 4;
   display: grid;
-  grid-template-columns: repeat(5, 32px);
+  grid-auto-flow: column;
+  grid-auto-columns: 32px;
   gap: 4px;
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease;
-}
-
-.api-grid-cell .cell-menu {
-  grid-template-columns: repeat(2, 32px);
 }
 
 .forward-picker-inline {
@@ -1817,17 +1845,6 @@ textarea {
   gap: 10px;
 }
 
-.api-cell-config-row {
-  grid-template-columns: var(--settings-label-width) minmax(220px, var(--settings-control-width)) minmax(0, 1fr);
-}
-
-.api-cell-config-hint {
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.35;
-}
-
 .risk-warning {
   grid-column: 3;
   margin: -4px 0 0;
@@ -2183,7 +2200,6 @@ textarea {
   .navigation-controls button,
   .tab-controls > button,
   .toolbar-actions button,
-  .cell-menu button,
   .address-form input,
   .browser-tab {
     border-color: rgba(255, 255, 255, 0.14);
@@ -2208,9 +2224,23 @@ textarea {
   }
 
   .navigation-controls button:hover,
-  .toolbar-actions button:hover,
-  .cell-menu button:hover {
+  .toolbar-actions button:hover {
     background: #243042;
+  }
+
+  .cell-menu button {
+    background: transparent;
+    color: #cbd5e1;
+  }
+
+  .cell-menu button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f9fafb;
+  }
+
+  .cell-menu button:disabled:hover {
+    background: transparent;
+    color: #cbd5e1;
   }
 
   .toolbar-actions .toolbar-icon-button {
@@ -2223,7 +2253,7 @@ textarea {
 
   .toolbar-actions button.active,
   .cell-menu button.active {
-    border-color: #60a5fa;
+    border: 1px solid #60a5fa;
     background: #173356;
     color: #bfdbfe;
   }

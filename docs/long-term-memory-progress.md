@@ -38,6 +38,8 @@ This keeps memory explicit and controllable while still allowing future answers 
 
 The embedded AI websites are one discussion and memory-production surface, not the only one. API-based multi-model answering is another discussion entry: MultiMind Flow can send the same question to multiple model APIs, collect answers, compare or summarize them, and then produce a candidate Markdown memory. Both entry points should feed the same memory pipeline: candidate source -> user review -> confirmed local memory -> Agent recall. Automatically prepending memory text into website input boxes is only a possible debug/validation technique, not the default product behavior.
 
+The first API conversation implementation is intentionally narrow: one OpenAI-compatible service configuration, local API Key storage, a comma-separated model list, and non-streaming parallel chat-completions requests. It is a main workspace entry mode, not a separate settings tool: the same split cells show either embedded AI websites or API model responses. This validates the API discussion surface before adding streaming output, multiple provider-specific key managers, hosted billing, automatic summary generation, or direct memory-candidate creation.
+
 ## Current Usage Model
 
 Current implementation covers the storage foundation:
@@ -219,6 +221,7 @@ Vector-search PoC should be planned but not rushed into production:
 - 2026-07-19: Clarified that API-based multi-model answering is a parallel memory-production entry alongside embedded website discussions. Both routes should produce candidate Markdown memories and reuse the same confirmation, storage, and Agent recall pipeline.
 - 2026-07-19: Split long-term-memory rules from storage orchestration. `memoryStore.ts` now delegates recall/type heuristics to `memoryRecallRules.ts` and Agent hidden-context text to `agentMemoryContext.ts`, so Chinese retrieval rules and Agent templates are no longer mixed into the SQLite store implementation.
 - 2026-07-19: Added import metadata suggestions and recall score details. Inbox preview now proposes conservative tags, import preserves/merges metadata tags, and recall debug results expose per-reason score increments plus matched words or CJK fallback markers.
+- 2026-07-19: Started the API conversation line. Added a first OpenAI-compatible API conversation MVP with local config storage, model-list configuration, non-streaming parallel model calls, and a workspace mode switch. API mode reuses the split-cell UI so the bottom input still means one question fan-out to multiple AIs. Automatic summary and memory-candidate generation are still future work.
 
 ## Implementation Checklist
 

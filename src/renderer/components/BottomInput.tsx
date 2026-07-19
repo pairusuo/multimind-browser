@@ -30,6 +30,12 @@ export default function BottomInput({
   const [lastSentText, setLastSentText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const visibleCells = LAYOUT_CELLS[layoutMode];
+  const newDiscussionLabel = conversationEntryMode === 'api'
+    ? t('bottomInput.apiNewDiscussion')
+    : t('bottomInput.newDiscussion');
+  const generateDocumentLabel = conversationEntryMode === 'api'
+    ? t('bottomInput.apiGenerateDocument')
+    : t('bottomInput.generateDocument');
 
   if (layoutMode === 'single' && conversationEntryMode === 'embedded') {
     return null;
@@ -91,8 +97,8 @@ export default function BottomInput({
       <button
         type="button"
         className="new-discussion-button"
-        title={t('bottomInput.newDiscussion')}
-        aria-label={t('bottomInput.newDiscussion')}
+        title={newDiscussionLabel}
+        aria-label={newDiscussionLabel}
         disabled={isSending}
         onClick={onStartNewDiscussion}
       >
@@ -101,8 +107,8 @@ export default function BottomInput({
       <button
         type="button"
         className="generate-document-button"
-        title={t('bottomInput.generateDocument')}
-        aria-label={t('bottomInput.generateDocument')}
+        title={generateDocumentLabel}
+        aria-label={generateDocumentLabel}
         disabled={isSending}
         onClick={onGenerateDocument}
       >

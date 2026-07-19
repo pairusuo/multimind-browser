@@ -48,8 +48,10 @@ export const IPC = {
   DISABLE_MEMORY_DOCUMENT: 'disable-memory-document',
   RECALL_MEMORY_FOR_AGENT_TASK: 'recall-memory-for-agent-task',
   GET_API_CONVERSATION_CONFIG: 'get-api-conversation-config',
+  REFRESH_API_CONVERSATION_MODELS: 'refresh-api-conversation-models',
   SAVE_API_CONVERSATION_CONFIG: 'save-api-conversation-config',
   RUN_API_CONVERSATION: 'run-api-conversation',
+  API_CONVERSATION_DELTA: 'api-conversation-delta',
   APPLY_TEMPLATE: 'apply-template',
   SET_LAYOUT: 'set-layout',
   SET_OVERLAY_OPEN: 'set-overlay-open',
@@ -242,7 +244,7 @@ export interface ApiConversationConfig {
 
 export interface SaveApiConversationConfigPayload {
   baseUrl: string;
-  models: string[];
+  models?: string[];
   cellModels?: Record<string, string>;
   apiKey?: string;
 }
@@ -250,6 +252,7 @@ export interface SaveApiConversationConfigPayload {
 export interface RunApiConversationPayload {
   prompt: string;
   models?: string[];
+  requestId?: string;
 }
 
 export interface ApiConversationModelResult {
@@ -273,6 +276,16 @@ export interface ApiConversationResult {
   prompt: string;
   results: ApiConversationModelResult[];
   createdAt: number;
+}
+
+export interface ApiConversationDeltaPayload {
+  requestId?: string;
+  model: string;
+  delta?: string;
+  content: string;
+  done: boolean;
+  error?: string;
+  elapsedMs?: number;
 }
 
 export interface ExtractedConversationEntry {
@@ -399,8 +412,10 @@ export interface ElectronAPI {
   disableMemoryDocument: (payload: DisableMemoryDocumentPayload) => Promise<void>;
   recallMemoryForAgentTask: (payload: RecallMemoryForAgentTaskPayload) => Promise<MemoryRecallContext>;
   getApiConversationConfig: () => Promise<ApiConversationConfig>;
+  refreshApiConversationModels: () => Promise<ApiConversationConfig>;
   saveApiConversationConfig: (payload: SaveApiConversationConfigPayload) => Promise<ApiConversationConfig>;
   runApiConversation: (payload: RunApiConversationPayload) => Promise<ApiConversationResult>;
+  onApiConversationDelta: (callback: (payload: ApiConversationDeltaPayload) => void) => () => void;
   setLayout: (mode: LayoutMode) => Promise<void>;
   setThemeMode: (mode: ThemeMode) => Promise<BrowserState>;
   setLanguage: (language: AppLanguage) => Promise<BrowserState>;

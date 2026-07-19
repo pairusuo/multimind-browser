@@ -18,7 +18,7 @@
       "geminiRestricted": "Gemini login restricted"
     },
     "apiMode": {
-      "title": "API Model Conversation"
+      "title": "API Calls"
     },
     "layout": {
       "label": "Layout",
@@ -74,19 +74,23 @@
     },
     "api": {
       "emptyModel": "No model configured",
-      "noModel": "Configure a model for this cell in Settings.",
+      "noModel": "Select a model in the cell header.",
       "placeholder": "Ask a question to show this model's response here.",
       "running": "Model is responding...",
       "failed": "Model request failed",
       "elapsed": "{{seconds}}s",
-      "modelSelect": "Select model"
+      "modelSelect": "Select model",
+      "streaming": "Generating...",
+      "newDiscussion": "Start a new API conversation in this cell"
     }
   },
   "bottomInput": {
     "label": "Unified input",
     "syncCells": "Synchronized cells",
     "newDiscussion": "Start a new conversation in all cells",
+    "apiNewDiscussion": "Clear all API responses",
     "generateDocument": "Generate summary document",
+    "apiGenerateDocument": "Summarize current responses with one model",
     "placeholder": "Press Enter to send to all, Shift+Enter for a new line",
     "send": "Send",
     "sending": "Sending",
@@ -339,10 +343,10 @@
       }
     },
     "conversationEntry": {
-      "label": "Entry",
+      "label": "Conversation Mode",
       "options": {
         "embedded": "Embedded sites",
-        "api": "API models"
+        "api": "API Calls"
       }
     },
     "memory": {
@@ -350,12 +354,10 @@
       "open": "Open memory library"
     },
     "apiConversation": {
-      "baseUrl": "API URL",
+      "baseUrl": "API Base URL",
       "apiKey": "API Key",
       "apiKeyPlaceholder": "Enter API Key",
-      "apiKeyConfigured": "Saved. Leave blank to keep it",
-      "models": "Available models",
-      "cellModelHint": "You can also switch this in the cell header"
+      "apiKeyConfigured": "Saved. Leave blank to keep it"
     },
     "forward": {
       "label": "Forward",

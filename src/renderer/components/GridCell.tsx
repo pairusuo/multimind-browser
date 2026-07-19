@@ -6,6 +6,18 @@ import CellNotice from './CellNotice';
 const shownNoticeKeys = new Set<string>();
 const repeatableNoticeTypes = new Set<CellNoticePayload['type']>(['conversation-truncated', 'source-response-pending']);
 
+interface CellMenuAction {
+  id: string;
+  title: string;
+  ariaLabel: string;
+  icon: string;
+  active?: boolean;
+  disabled?: boolean;
+  pressed?: boolean;
+  expanded?: boolean;
+  onClick: () => void;
+}
+
 interface GridCellProps {
   cellId: string;
   className: string;
@@ -29,6 +41,7 @@ interface GridCellProps {
   onToggle: (cellId: string, active: boolean) => void;
   onApiModelChange: (cellId: string, model: string) => void;
   onApiForward: (sourceCellId: string, targetCellId: string) => Promise<void>;
+  onClearApiCell: (cellId: string) => void;
 }
 
 export default function GridCell({
@@ -49,6 +62,7 @@ export default function GridCell({
   onToggle,
   onApiModelChange,
   onApiForward,
+  onClearApiCell,
 }: GridCellProps) {
   const { t } = useTranslation();
   const isApiMode = conversationEntryMode === 'api';
@@ -58,6 +72,65 @@ export default function GridCell({
   const [forwardingTargetId, setForwardingTargetId] = useState<string | null>(null);
   const [forwardStatus, setForwardStatus] = useState<string | null>(null);
   const showCellMenu = layoutMode !== 'single';
+  const hasApiContent = Boolean(apiState?.content);
+  const forwardAction: CellMenuAction | null = showForwardControl && targetCells.length > 0
+    ? {
+        id: 'forward',
+        title: t('gridCell.actions.forwardTo'),
+        ariaLabel: t('gridCell.actions.forwardTo'),
+        icon: '⇥',
+        expanded: targetPickerOpen,
+        disabled: isApiMode && !hasApiContent,
+        onClick: () => setTargetPickerOpen((open) => !open),
+      }
+    : null;
+  const maximizeAction: CellMenuAction = {
+    id: 'maximize',
+    title: maximized ? t('gridCell.actions.restoreCell') : t('gridCell.actions.maximizeCell'),
+    ariaLabel: maximized ? t('gridCell.actions.restoreCell') : t('gridCell.actions.maximizeCell'),
+    icon: maximized ? '▣' : '□',
+    pressed: maximized,
+    onClick: () => onToggleMaximized(cellId),
+  };
+  const modeActions: CellMenuAction[] = isApiMode
+    ? [{
+        id: 'api-new-discussion',
+        title: t('gridCell.api.newDiscussion'),
+        ariaLabel: t('gridCell.api.newDiscussion'),
+        icon: '+',
+        onClick: () => onClearApiCell(cellId),
+      }]
+    : [
+        {
+          id: 'reload',
+          title: t('gridCell.actions.reload'),
+          ariaLabel: t('gridCell.actions.reloadCell'),
+          icon: '↻',
+          onClick: () => window.electronAPI.reload(cellId),
+        },
+        {
+          id: 'new-tab',
+          title: t('gridCell.actions.newTab'),
+          ariaLabel: t('gridCell.actions.newTab'),
+          icon: '+',
+          onClick: () => onNewTab(cellId),
+        },
+      ];
+  const syncAction: CellMenuAction = {
+    id: 'sync',
+    title: t('gridCell.actions.toggleSync'),
+    ariaLabel: t('gridCell.actions.toggleSync'),
+    icon: '✓',
+    active: meta.active,
+    pressed: meta.active,
+    onClick: () => onToggle(cellId, !meta.active),
+  };
+  const cellMenuActions: CellMenuAction[] = [
+    ...(forwardAction ? [forwardAction] : []),
+    maximizeAction,
+    ...modeActions,
+    syncAction,
+  ];
 
   useEffect(() => {
     return window.electronAPI.onCellNotice((payload) => {
@@ -157,11 +230,19 @@ export default function GridCell({
                   onClick={(event) => event.stopPropagation()}
                   onChange={(event) => onApiModelChange(cellId, event.target.value)}
                 >
-                  <option value="">{t('gridCell.api.emptyModel')}</option>
-                  {getApiModelOptions(apiState?.model ?? '', apiModels).map((model) => (
-                    <option key={model} value={model}>
-                      {model}
+                  {!apiState?.model && (
+                    <option value="" disabled>
+                      {t('gridCell.api.emptyModel')}
                     </option>
+                  )}
+                  {getGroupedApiModelOptions(apiState?.model ?? '', apiModels).map((group) => (
+                    <optgroup key={group.provider} label={group.label}>
+                      {group.models.map((model) => (
+                        <option key={model} value={model}>
+                          {getModelDisplayName(model)}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
               ) : (
@@ -169,55 +250,7 @@ export default function GridCell({
               )}
             </div>
             {(isApiMode || showCellMenu) && (
-              <div className="cell-menu" aria-label={t('gridCell.aria.controls', { host })}>
-              {showForwardControl && targetCells.length > 0 && (!isApiMode || Boolean(apiState?.content.trim())) && (
-                <button
-                  type="button"
-                  title={t('gridCell.actions.forwardTo')}
-                  aria-label={t('gridCell.actions.forwardTo')}
-                  aria-expanded={targetPickerOpen}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setTargetPickerOpen((open) => !open);
-                  }}
-                >
-                  ⇥
-                </button>
-              )}
-              <button
-                type="button"
-                className={maximized ? 'active' : ''}
-                title={maximized ? t('gridCell.actions.restoreCell') : t('gridCell.actions.maximizeCell')}
-                aria-label={maximized ? t('gridCell.actions.restoreCell') : t('gridCell.actions.maximizeCell')}
-                aria-pressed={maximized}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onToggleMaximized(cellId);
-                }}
-              >
-                {maximized ? '▣' : '□'}
-              </button>
-              {!isApiMode && (
-                <>
-                  <button type="button" title={t('gridCell.actions.reload')} aria-label={t('gridCell.actions.reloadCell')} onClick={() => window.electronAPI.reload(cellId)}>
-                    ↻
-                  </button>
-                  <button type="button" title={t('gridCell.actions.newTab')} aria-label={t('gridCell.actions.newTab')} onClick={() => onNewTab(cellId)}>
-                    +
-                  </button>
-                </>
-              )}
-              <button
-                type="button"
-                className={meta.active ? 'active' : ''}
-                title={t('gridCell.actions.toggleSync')}
-                aria-label={t('gridCell.actions.toggleSync')}
-                aria-pressed={meta.active}
-                onClick={() => onToggle(cellId, !meta.active)}
-              >
-                ✓
-              </button>
-              </div>
+              <CellMenu label={t('gridCell.aria.controls', { host })} actions={cellMenuActions} />
             )}
           </>
         )}
@@ -228,6 +261,31 @@ export default function GridCell({
   );
 }
 
+function CellMenu({ label, actions }: { label: string; actions: CellMenuAction[] }) {
+  return (
+    <div className="cell-menu" aria-label={label}>
+      {actions.map((action) => (
+        <button
+          key={action.id}
+          type="button"
+          className={action.active ? 'active' : ''}
+          title={action.title}
+          aria-label={action.ariaLabel}
+          aria-pressed={action.pressed}
+          aria-expanded={action.expanded}
+          disabled={action.disabled}
+          onClick={(event) => {
+            event.stopPropagation();
+            action.onClick();
+          }}
+        >
+          {action.icon}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ApiCellBody({ state }: { state: ApiConversationCellState | undefined }) {
   const { t } = useTranslation();
 
@@ -235,14 +293,6 @@ function ApiCellBody({ state }: { state: ApiConversationCellState | undefined })
     return (
       <div className="api-cell-body api-cell-empty">
         <p>{t('gridCell.api.noModel')}</p>
-      </div>
-    );
-  }
-
-  if (state.status === 'running') {
-    return (
-      <div className="api-cell-body api-cell-empty" role="status">
-        <p>{t('gridCell.api.running')}</p>
       </div>
     );
   }
@@ -258,16 +308,20 @@ function ApiCellBody({ state }: { state: ApiConversationCellState | undefined })
   if (!state.content) {
     return (
       <div className="api-cell-body api-cell-empty">
-        <p>{t('gridCell.api.placeholder')}</p>
+        <p>{state.status === 'running' ? t('gridCell.api.running') : t('gridCell.api.placeholder')}</p>
       </div>
     );
   }
 
   return (
     <div className="api-cell-body">
-      {typeof state.elapsedMs === 'number' && (
-        <div className="api-cell-meta">{t('gridCell.api.elapsed', { seconds: (state.elapsedMs / 1000).toFixed(1) })}</div>
-      )}
+      <div className="api-cell-meta">
+        {state.status === 'running'
+          ? t('gridCell.api.streaming')
+          : typeof state.elapsedMs === 'number'
+            ? t('gridCell.api.elapsed', { seconds: (state.elapsedMs / 1000).toFixed(1) })
+            : null}
+      </div>
       <pre>{state.content}</pre>
     </div>
   );
@@ -277,8 +331,45 @@ function getTargetLabel(targetCells: Array<{ cellId: string; label: string }>, c
   return targetCells.find((target) => target.cellId === cellId)?.label ?? cellId.replace('cell-', 'Cell ');
 }
 
-function getApiModelOptions(selectedModel: string, models: string[]): string[] {
-  return selectedModel && !models.includes(selectedModel) ? [selectedModel, ...models] : models;
+function getGroupedApiModelOptions(selectedModel: string, models: string[]): Array<{ provider: string; label: string; models: string[] }> {
+  const allModels = selectedModel && !models.includes(selectedModel) ? [selectedModel, ...models] : models;
+  const groups = new Map<string, string[]>();
+
+  allModels.forEach((model) => {
+    const provider = getModelProvider(model);
+    groups.set(provider, [...(groups.get(provider) ?? []), model]);
+  });
+
+  return [...groups.entries()].map(([provider, providerModels]) => ({
+    provider,
+    label: getProviderLabel(provider),
+    models: providerModels,
+  }));
+}
+
+function getModelProvider(model: string): string {
+  return model.split('/')[0] || 'Other';
+}
+
+function getProviderLabel(provider: string): string {
+  const labels: Record<string, string> = {
+    openrouter: 'OpenRouter',
+    openai: 'OpenAI',
+    anthropic: 'Anthropic',
+    google: 'Google',
+    deepseek: 'DeepSeek',
+    'x-ai': 'xAI',
+    qwen: 'Qwen',
+    moonshotai: 'Moonshot',
+    'z-ai': 'Z.ai',
+    'meta-llama': 'Meta',
+    mistralai: 'Mistral',
+  };
+  return labels[provider.toLowerCase()] ?? provider;
+}
+
+function getModelDisplayName(model: string): string {
+  return model.includes('/') ? model.split('/').slice(1).join('/') : model;
 }
 
 function safeHost(url: string, emptyLabel: string): string {

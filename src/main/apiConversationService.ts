@@ -1,6 +1,7 @@
 import { safeStorage } from 'electron';
 import {
   ApiConversationConfig,
+  ApiConversationDeltaPayload,
   ApiConversationModelResult,
   ApiConversationResult,
   CELL_IDS,
@@ -10,10 +11,61 @@ import {
 import { BrowserStore } from './windowManager';
 
 const CONFIG_KEY = 'apiConversation.config';
-const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
-const DEFAULT_MODELS = ['gpt-4o-mini'];
+const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
+const DEFAULT_MODELS: string[] = [];
 const REQUEST_TIMEOUT_MS = 60000;
-
+const MODEL_LIST_TIMEOUT_MS = 15000;
+const MAINSTREAM_MODEL_PROVIDER_ORDER = [
+  'openrouter',
+  'openai',
+  'anthropic',
+  'google',
+  'deepseek',
+  'x-ai',
+  'qwen',
+  'moonshotai',
+  'z-ai',
+  'meta-llama',
+  'mistralai',
+];
+const MAINSTREAM_MODEL_PROVIDERS = new Set(MAINSTREAM_MODEL_PROVIDER_ORDER);
+const MODEL_PROVIDER_LIMITS: Record<string, number> = {
+  openrouter: 2,
+  openai: 3,
+  anthropic: 3,
+  google: 3,
+  deepseek: 3,
+  'x-ai': 2,
+  qwen: 2,
+  moonshotai: 2,
+  'z-ai': 2,
+  'meta-llama': 2,
+  mistralai: 2,
+};
+const PROVIDER_PREFERRED_MODEL_PATTERNS: Record<string, RegExp[]> = {
+  openrouter: [/^openrouter\/auto(?:-beta)?$/i, /^openrouter\/fusion$/i],
+  openai: [/^openai\/gpt-chat-latest$/i, /^openai\/gpt-5\./i],
+  anthropic: [/^anthropic\/claude-sonnet/i, /^anthropic\/claude-opus/i],
+  google: [/^google\/gemini-.*(?:pro|flash)(?!.*image)/i],
+  deepseek: [/^deepseek\/deepseek-(?:chat|reasoner|r1|v3)/i],
+  'x-ai': [/^x-ai\/grok/i],
+  qwen: [/^qwen\/qwen/i],
+  moonshotai: [/^moonshotai\/kimi/i],
+  'z-ai': [/^z-ai\/glm/i],
+  'meta-llama': [/^meta-llama\/llama/i],
+  mistralai: [/^mistralai\/mistral/i],
+};
+const EXCLUDED_MODEL_PATTERNS = [
+  /(?:^|[-/:])image(?:[-/:]|$)/i,
+  /(?:^|[-/:])audio(?:[-/:]|$)/i,
+  /(?:^|[-/:])tts(?:[-/:]|$)/i,
+  /(?:^|[-/:])embedding(?:s)?(?:[-/:]|$)/i,
+  /(?:^|[-/:])moderation(?:[-/:]|$)/i,
+  /(?:^|[-/:])safety(?:[-/:]|$)/i,
+  /(?:^|[-/:])guard(?:[-/:]|$)/i,
+  /(?:^|[-/:])coder?(?:[-/:]|$)/i,
+  /(?:^|[-/:])code(?:[-/:]|$)/i,
+];
 interface StoredApiConversationConfig {
   baseUrl?: string;
   models?: string[];
@@ -34,6 +86,8 @@ interface ChatCompletionResponse {
   };
 }
 
+type ApiConversationDeltaHandler = (payload: ApiConversationDeltaPayload) => void;
+
 export class ApiConversationService {
   constructor(private readonly store: BrowserStore) {}
 
@@ -47,13 +101,23 @@ export class ApiConversationService {
     };
   }
 
-  saveConfig(payload: SaveApiConversationConfigPayload): ApiConversationConfig {
+  async saveConfig(payload: SaveApiConversationConfigPayload): Promise<ApiConversationConfig> {
     const current = this.getStoredConfig();
+    const baseUrl = normalizeBaseUrl(payload.baseUrl);
+    const previousBaseUrl = normalizeBaseUrl(current.baseUrl || DEFAULT_BASE_URL);
+    const previousApiKey = decryptApiKey(current);
+    const nextApiKey = payload.apiKey?.trim() || previousApiKey;
+    const explicitModels = payload.models ? normalizeModels(payload.models) : null;
+    const shouldRefreshModels = Boolean(nextApiKey) || baseUrl !== previousBaseUrl || !current.models?.length;
+    const discoveredModels = shouldRefreshModels ? await fetchModelIds(baseUrl, nextApiKey) : [];
+    const models = discoveredModels.length
+      ? discoveredModels
+      : explicitModels ?? normalizeModels(current.models);
     const next: StoredApiConversationConfig = {
       ...current,
-      baseUrl: normalizeBaseUrl(payload.baseUrl),
-      models: normalizeModels(payload.models),
-      cellModels: normalizeCellModels(payload.cellModels, payload.models),
+      baseUrl,
+      models,
+      cellModels: normalizeCellModels(payload.cellModels ?? current.cellModels, models, Boolean(discoveredModels.length)),
     };
 
     if (payload.apiKey?.trim()) {
@@ -66,7 +130,25 @@ export class ApiConversationService {
     return this.getConfig();
   }
 
-  async runConversation(payload: RunApiConversationPayload): Promise<ApiConversationResult> {
+  async refreshModels(): Promise<ApiConversationConfig> {
+    const current = this.getStoredConfig();
+    const baseUrl = normalizeBaseUrl(current.baseUrl || DEFAULT_BASE_URL);
+    const apiKey = decryptApiKey(current);
+    const discoveredModels = await fetchModelIds(baseUrl, apiKey);
+    if (!discoveredModels.length) {
+      return this.getConfig();
+    }
+
+    this.store.set(CONFIG_KEY, {
+      ...current,
+      baseUrl,
+      models: discoveredModels,
+      cellModels: normalizeCellModels(current.cellModels, discoveredModels, true),
+    });
+    return this.getConfig();
+  }
+
+  async runConversation(payload: RunApiConversationPayload, onDelta?: ApiConversationDeltaHandler): Promise<ApiConversationResult> {
     const prompt = payload.prompt.trim();
     if (!prompt) {
       throw new Error('Prompt is required.');
@@ -84,7 +166,7 @@ export class ApiConversationService {
       throw new Error('At least one model is required.');
     }
 
-    const results = await Promise.all(models.map((model) => callModel(baseUrl, apiKey, model, prompt)));
+    const results = await Promise.all(models.map((model) => callModel(baseUrl, apiKey, model, prompt, payload.requestId, onDelta)));
     return {
       prompt,
       results,
@@ -101,10 +183,18 @@ export class ApiConversationService {
   }
 }
 
-async function callModel(baseUrl: string, apiKey: string, model: string, prompt: string): Promise<ApiConversationModelResult> {
+async function callModel(
+  baseUrl: string,
+  apiKey: string,
+  model: string,
+  prompt: string,
+  requestId?: string,
+  onDelta?: ApiConversationDeltaHandler,
+): Promise<ApiConversationModelResult> {
   const startedAt = Date.now();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let content = '';
 
   try {
     const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -117,25 +207,85 @@ async function callModel(baseUrl: string, apiKey: string, model: string, prompt:
         model,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.7,
-        stream: false,
+        stream: true,
       }),
       signal: controller.signal,
     });
-    const json = await response.json().catch(() => ({})) as ChatCompletionResponse;
-    const content = json.choices?.[0]?.message?.content ?? json.choices?.[0]?.text ?? '';
-    const error = json.error?.message || (!response.ok ? `HTTP ${response.status}` : '');
+    const contentType = response.headers.get('content-type') ?? '';
+    if (!contentType.includes('text/event-stream') || !response.body) {
+      const json = await response.json().catch(() => ({})) as ChatCompletionResponse;
+      content = (json.choices?.[0]?.message?.content ?? json.choices?.[0]?.text ?? '').trim();
+      const error = json.error?.message || (!response.ok ? `HTTP ${response.status}` : '');
+      emitApiDelta(onDelta, {
+        requestId,
+        model,
+        content,
+        done: true,
+        ...(error ? { error } : {}),
+        elapsedMs: Date.now() - startedAt,
+      });
+      return {
+        model,
+        content,
+        ...(error ? { error } : {}),
+        elapsedMs: Date.now() - startedAt,
+      };
+    }
 
+    if (!response.ok) {
+      const error = `HTTP ${response.status}`;
+      emitApiDelta(onDelta, {
+        requestId,
+        model,
+        content: '',
+        done: true,
+        error,
+        elapsedMs: Date.now() - startedAt,
+      });
+      return {
+        model,
+        content: '',
+        error,
+        elapsedMs: Date.now() - startedAt,
+      };
+    }
+
+    content = await readStreamingContent(response.body, (delta) => {
+      content += delta;
+      emitApiDelta(onDelta, {
+        requestId,
+        model,
+        delta,
+        content,
+        done: false,
+      });
+    });
+    emitApiDelta(onDelta, {
+      requestId,
+      model,
+      content,
+      done: true,
+      elapsedMs: Date.now() - startedAt,
+    });
     return {
       model,
       content: content.trim(),
-      ...(error ? { error } : {}),
       elapsedMs: Date.now() - startedAt,
     };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    emitApiDelta(onDelta, {
+      requestId,
+      model,
+      content,
+      done: true,
+      error: message,
+      elapsedMs: Date.now() - startedAt,
+    });
     return {
       model,
-      content: '',
-      error: error instanceof Error ? error.message : String(error),
+      content,
+      error: message,
       elapsedMs: Date.now() - startedAt,
     };
   } finally {
@@ -143,22 +293,213 @@ async function callModel(baseUrl: string, apiKey: string, model: string, prompt:
   }
 }
 
+async function fetchModelIds(baseUrl: string, apiKey?: string): Promise<string[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), MODEL_LIST_TIMEOUT_MS);
+
+  try {
+    const headers: Record<string, string> = {};
+    if (apiKey) {
+      headers.Authorization = `Bearer ${apiKey}`;
+    }
+    const response = await fetch(`${baseUrl}/models`, {
+      method: 'GET',
+      headers,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const json = await response.json().catch(() => ({})) as {
+      data?: Array<{
+        id?: unknown;
+        name?: unknown;
+        type?: unknown;
+        object?: unknown;
+      }>;
+    };
+
+    const chatModels = (json.data ?? [])
+      .filter((item) => isUsableChatModel(item))
+      .map((item) => (typeof item.id === 'string' ? item.id.trim() : ''))
+      .filter(Boolean);
+    return filterModelCatalog(normalizeModels(chatModels));
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function isUsableChatModel(model: { type?: unknown; object?: unknown }): boolean {
+  const type = typeof model.type === 'string' ? model.type.toLowerCase() : '';
+  const object = typeof model.object === 'string' ? model.object.toLowerCase() : '';
+  return !type || type === 'chat' || type === 'language' || type === 'text' || object === 'model';
+}
+
+function filterModelCatalog(models: string[]): string[] {
+  const mainstream = models
+    .filter((model) => MAINSTREAM_MODEL_PROVIDERS.has(model.split('/')[0]?.toLowerCase() ?? ''))
+    .filter((model) => !isDatedSnapshotModel(model))
+    .filter((model) => !EXCLUDED_MODEL_PATTERNS.some((pattern) => pattern.test(model)));
+  const selected: string[] = [];
+
+  for (const provider of MAINSTREAM_MODEL_PROVIDER_ORDER) {
+    const providerModels = mainstream.filter((model) => getModelProvider(model) === provider);
+    selected.push(...selectProviderModels(provider, providerModels));
+  }
+
+  return normalizeModels(selected);
+}
+
+function selectProviderModels(provider: string, providerModels: string[]): string[] {
+  const limit = MODEL_PROVIDER_LIMITS[provider] ?? 2;
+  const patterns = PROVIDER_PREFERRED_MODEL_PATTERNS[provider] ?? [];
+  const preferred = normalizeModels(
+    patterns.flatMap((pattern) => providerModels.filter((model) => pattern.test(model))),
+  );
+  const candidates = preferred.length ? preferred : providerModels;
+  return candidates.sort(compareModelIds).slice(0, limit);
+}
+
+function getModelProvider(model: string): string {
+  return model.split('/')[0]?.toLowerCase() ?? '';
+}
+
+function isDatedSnapshotModel(model: string): boolean {
+  return /-\d{4}-\d{2}-\d{2}(?:$|[-/:])/.test(model);
+}
+
+function compareModelIds(a: string, b: string): number {
+  return modelScore(b) - modelScore(a) || a.localeCompare(b);
+}
+
+function modelScore(model: string): number {
+  const id = model.toLowerCase();
+  let score = 0;
+  if (id.includes('latest')) score += 80;
+  if (id.includes('auto')) score += 75;
+  if (id.includes('sonnet')) score += 70;
+  if (id.includes('opus')) score += 68;
+  if (id.includes('gpt-')) score += 66;
+  if (id.includes('gemini')) score += 64;
+  if (id.includes('deepseek')) score += 62;
+  if (id.includes('grok')) score += 60;
+  if (id.includes('kimi')) score += 58;
+  if (id.includes('qwen')) score += 56;
+  if (id.includes('llama')) score += 54;
+  if (id.includes('mistral')) score += 52;
+  if (id.includes('free')) score -= 20;
+  if (id.includes('mini') || id.includes('lite')) score -= 12;
+  return score;
+}
+
+async function readStreamingContent(body: ReadableStream<Uint8Array>, onChunk: (delta: string) => void): Promise<string> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let content = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split(/\n\n/);
+    buffer = events.pop() ?? '';
+    for (const event of events) {
+      const delta = parseSseDelta(event);
+      if (delta === null) {
+        continue;
+      }
+      content += delta;
+      onChunk(delta);
+    }
+  }
+
+  buffer += decoder.decode();
+  const delta = parseSseDelta(buffer);
+  if (delta) {
+    content += delta;
+    onChunk(delta);
+  }
+
+  return content;
+}
+
+function parseSseDelta(event: string): string | null {
+  const dataLines = event
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice(5).trim())
+    .filter(Boolean);
+
+  if (!dataLines.length) {
+    return null;
+  }
+
+  let delta = '';
+  for (const data of dataLines) {
+    if (data === '[DONE]') {
+      continue;
+    }
+    try {
+      const json = JSON.parse(data) as ChatCompletionResponse & {
+        choices?: Array<{
+          delta?: {
+            content?: string;
+          };
+          message?: {
+            content?: string;
+          };
+          text?: string;
+        }>;
+      };
+      delta += json.choices?.[0]?.delta?.content ?? json.choices?.[0]?.message?.content ?? json.choices?.[0]?.text ?? '';
+    } catch {
+      continue;
+    }
+  }
+
+  return delta || null;
+}
+
+function emitApiDelta(onDelta: ApiConversationDeltaHandler | undefined, payload: ApiConversationDeltaPayload): void {
+  onDelta?.(payload);
+}
+
 function normalizeBaseUrl(value: string): string {
   const trimmed = value.trim() || DEFAULT_BASE_URL;
-  return trimmed.replace(/\/+$/, '');
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  const withoutTrailingSlash = withProtocol.replace(/\/+$/, '');
+  return withoutTrailingSlash
+    .replace(/\/chat\/completions$/i, '')
+    .replace(/\/models$/i, '');
 }
 
 function normalizeModels(models: string[] | undefined): string[] {
   const normalized = (models ?? DEFAULT_MODELS)
     .map((model) => model.trim())
     .filter(Boolean);
-  return [...new Set(normalized)].slice(0, 4);
+  return [...new Set(normalized)];
 }
 
-function normalizeCellModels(cellModels: Record<string, string> | undefined, fallbackModels: string[] | undefined): Record<string, string> {
+function normalizeCellModels(
+  cellModels: Record<string, string> | undefined,
+  fallbackModels: string[] | undefined,
+  requireListedModel = false,
+): Record<string, string> {
   const fallback = normalizeModels(fallbackModels);
   return CELL_IDS.reduce<Record<string, string>>((next, cellId, index) => {
-    next[cellId] = cellModels?.[cellId]?.trim() || fallback[index] || '';
+    const currentModel = cellModels?.[cellId]?.trim() ?? '';
+    next[cellId] = currentModel && (!requireListedModel || fallback.includes(currentModel))
+      ? currentModel
+      : fallback[index] || '';
     return next;
   }, {});
 }

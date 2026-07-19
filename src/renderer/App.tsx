@@ -61,10 +61,10 @@ const INITIAL_MUTED_CELLS = CELL_IDS.reduce<Record<string, boolean>>((mutedCells
 }, {});
 
 const DEFAULT_API_CONFIG: ApiConversationConfig = {
-  baseUrl: 'https://api.openai.com/v1',
-  models: ['gpt-4o-mini'],
+  baseUrl: 'https://openrouter.ai/api/v1',
+  models: [],
   cellModels: {
-    'cell-0': 'gpt-4o-mini',
+    'cell-0': '',
     'cell-1': '',
     'cell-2': '',
     'cell-3': '',
@@ -116,6 +116,9 @@ export default function App() {
     ]).then(([browserState, nextApiConfig]) => {
       applyBrowserState(browserState);
       setApiConfig(nextApiConfig);
+      if (browserState.conversationEntryMode === 'api') {
+        void refreshApiModels();
+      }
     });
   }, []);
 
@@ -155,6 +158,30 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    return window.electronAPI.onApiConversationDelta((payload) => {
+      const cellId = payload.requestId;
+      if (!cellId || !CELL_IDS.some((knownCellId) => knownCellId === cellId)) {
+        return;
+      }
+
+      setApiCellStates((current) => {
+        const currentState = current[cellId];
+        const content = payload.content || (currentState?.content ?? '') + (payload.delta ?? '');
+        return {
+          ...current,
+          [cellId]: {
+            model: payload.model,
+            content,
+            error: payload.error,
+            elapsedMs: payload.elapsedMs ?? currentState?.elapsedMs,
+            status: payload.error ? 'error' : payload.done ? 'completed' : 'running',
+          },
+        };
+      });
+    });
+  }, []);
+
   function handleFocusCell(cellId: string, nextUrl: string) {
     setFocusedCellId(cellId);
     setCellUrls((current) => ({
@@ -185,6 +212,7 @@ export default function App() {
     setLayoutMode(mode);
     setMaximizedCellId(null);
     await window.electronAPI.setMaximizedCell({ cellId: null });
+    await window.electronAPI.setLayout(mode);
     setCellUrls((current) => fillDefaultUrlsForLayout(current, mode));
     const firstCell = 'cell-0';
     setFocusedCellId(firstCell);
@@ -265,10 +293,20 @@ export default function App() {
     if (mode === 'api') {
       setMaximizedCellId(null);
       await window.electronAPI.setMaximizedCell({ cellId: null });
+      await refreshApiModels();
     }
   }
 
-  async function handleSaveApiConfig(payload: { baseUrl: string; apiKey?: string; models: string[]; cellModels?: Record<string, string> }) {
+  async function refreshApiModels() {
+    const nextConfig = typeof window.electronAPI.refreshApiConversationModels === 'function'
+      ? await window.electronAPI.refreshApiConversationModels()
+      : await window.electronAPI.getApiConversationConfig();
+    setApiConfig(nextConfig);
+    setApiCellStates((current) => buildApiCellStates(nextConfig.cellModels ?? {}, current));
+    return nextConfig;
+  }
+
+  async function handleSaveApiConfig(payload: { baseUrl: string; apiKey?: string; models?: string[]; cellModels?: Record<string, string> }) {
     const nextConfig = await window.electronAPI.saveApiConversationConfig(payload);
     setApiConfig(nextConfig);
     setApiCellStates((current) => buildApiCellStates(nextConfig.cellModels ?? {}, current));
@@ -280,12 +318,8 @@ export default function App() {
       ...apiConfig.cellModels,
       [cellId]: model,
     };
-    const nextModels = apiConfig.models.includes(model) || !model
-      ? apiConfig.models
-      : [...apiConfig.models, model].slice(0, 4);
     const nextConfig = await handleSaveApiConfig({
       baseUrl: apiConfig.baseUrl,
-      models: nextModels,
       cellModels: nextCellModels,
     });
     setApiCellStates((current) => buildApiCellStates(nextConfig.cellModels ?? {}, current));
@@ -302,6 +336,7 @@ export default function App() {
     const result = await window.electronAPI.runApiConversation({
       prompt: buildApiForwardPrompt(source.model, source.content),
       models: [targetModel],
+      requestId: targetCellId,
     });
     const modelResult = result.results[0];
     setApiCellStates((current) => ({
@@ -337,18 +372,21 @@ export default function App() {
     }
 
     setApiCellStates((current) => markApiCells(targets, current, 'running'));
-    const result = await window.electronAPI.runApiConversation({
-      prompt: text,
-      models: targets.map((target) => target.model),
-    });
+    const results = await Promise.all(targets.map((target) =>
+      window.electronAPI.runApiConversation({
+        prompt: text,
+        models: [target.model],
+        requestId: target.cellId,
+      }),
+    ));
 
     setApiCellStates((current) => {
       const next = { ...current };
-      targets.forEach((target) => {
-        const modelResult = result.results.find((item) => item.model === target.model);
+      targets.forEach((target, index) => {
+        const modelResult = results[index].results[0];
         next[target.cellId] = {
           model: target.model,
-          content: modelResult?.content ?? '',
+          content: modelResult?.content ?? next[target.cellId]?.content ?? '',
           error: modelResult?.error,
           elapsedMs: modelResult?.elapsedMs,
           status: modelResult?.error ? 'error' : 'completed',
@@ -381,6 +419,17 @@ export default function App() {
 
     const state = await window.electronAPI.startNewDiscussion();
     applyBrowserState(state);
+  }
+
+  function handleClearApiCell(cellId: string) {
+    setApiCellStates((current) => ({
+      ...current,
+      [cellId]: {
+        model: current[cellId]?.model ?? apiConfig.cellModels?.[cellId] ?? '',
+        content: '',
+        status: 'idle',
+      },
+    }));
   }
 
   async function handleOpenDocumentSummary() {
@@ -428,6 +477,7 @@ export default function App() {
     const result = await window.electronAPI.runApiConversation({
       prompt,
       models: [model],
+      requestId: summarizerCellId,
     });
     const modelResult = result.results[0];
     setApiCellStates((current) => ({
@@ -568,9 +618,10 @@ export default function App() {
           onToggleCell={handleToggleCell}
           onApiCellModelChange={(cellId, model) => void handleApiCellModelChange(cellId, model)}
           onApiForward={handleApiForward}
+          onClearApiCell={handleClearApiCell}
         />
       </main>
-      {!maximizedCellId && (
+      {(!maximizedCellId || conversationEntryMode === 'api') && (
         <BottomInput
           activeCells={activeCells}
           availableCells={getAvailableCells(conversationEntryMode, layoutMode, cellUrls, apiConfig.cellModels ?? {})}

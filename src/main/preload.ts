@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import {
   ApplyTemplatePayload,
   AppLanguage,
+  ApiConversationDeltaPayload,
   BrowserState,
   CellTabPayload,
   CellFaviconChangedPayload,
@@ -53,8 +54,14 @@ const api: ElectronAPI = {
   disableMemoryDocument: (payload: DisableMemoryDocumentPayload) => ipcRenderer.invoke(IPC.DISABLE_MEMORY_DOCUMENT, payload),
   recallMemoryForAgentTask: (payload: RecallMemoryForAgentTaskPayload) => ipcRenderer.invoke(IPC.RECALL_MEMORY_FOR_AGENT_TASK, payload),
   getApiConversationConfig: () => ipcRenderer.invoke(IPC.GET_API_CONVERSATION_CONFIG),
+  refreshApiConversationModels: () => ipcRenderer.invoke(IPC.REFRESH_API_CONVERSATION_MODELS),
   saveApiConversationConfig: (payload: SaveApiConversationConfigPayload) => ipcRenderer.invoke(IPC.SAVE_API_CONVERSATION_CONFIG, payload),
   runApiConversation: (payload: RunApiConversationPayload) => ipcRenderer.invoke(IPC.RUN_API_CONVERSATION, payload),
+  onApiConversationDelta: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: ApiConversationDeltaPayload) => callback(payload);
+    ipcRenderer.on(IPC.API_CONVERSATION_DELTA, listener);
+    return () => ipcRenderer.removeListener(IPC.API_CONVERSATION_DELTA, listener);
+  },
   setLayout: (mode) => ipcRenderer.invoke(IPC.SET_LAYOUT, mode),
   setThemeMode: (mode: ThemeMode) => ipcRenderer.invoke(IPC.SET_THEME_MODE, mode),
   setLanguage: (language: AppLanguage) => ipcRenderer.invoke(IPC.SET_LANGUAGE, language),

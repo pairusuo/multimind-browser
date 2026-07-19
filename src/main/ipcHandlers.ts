@@ -114,12 +114,18 @@ export function registerIpcHandlers(
     return apiConversationService.getConfig();
   });
 
+  registerHandler(IPC.REFRESH_API_CONVERSATION_MODELS, () => {
+    return apiConversationService.refreshModels();
+  });
+
   registerHandler(IPC.SAVE_API_CONVERSATION_CONFIG, (_event, payload: SaveApiConversationConfigPayload) => {
     return apiConversationService.saveConfig(payload);
   });
 
   registerHandler(IPC.RUN_API_CONVERSATION, (_event, payload: RunApiConversationPayload) => {
-    return apiConversationService.runConversation(payload);
+    return apiConversationService.runConversation(payload, (delta) => {
+      _event.sender.send(IPC.API_CONVERSATION_DELTA, delta);
+    });
   });
 
   registerHandler(IPC.SET_THEME_MODE, (_event, mode: ThemeMode) => {

@@ -21,7 +21,7 @@ interface CellConfigPanelProps {
   onForwardControlsEnabledChange: (enabled: boolean) => void;
   onThemeModeChange: (mode: ThemeMode) => void;
   onOpenMemory: () => void;
-  onSaveApiConfig: (payload: { baseUrl: string; apiKey?: string; models: string[]; cellModels?: Record<string, string> }) => void;
+  onSaveApiConfig: (payload: { baseUrl: string; apiKey?: string; cellModels?: Record<string, string> }) => void;
   onSave: (
     nextUrls: Record<string, string>,
     nextModes: Record<string, CellMode>,
@@ -58,12 +58,7 @@ export default function CellConfigPanel({
   }));
   const [draftApiBaseUrl, setDraftApiBaseUrl] = useState(apiConfig.baseUrl);
   const [draftApiKey, setDraftApiKey] = useState('');
-  const [draftApiModels, setDraftApiModels] = useState(apiConfig.models.join(', '));
-  const [draftApiCellModels, setDraftApiCellModels] = useState<Record<string, string>>(() => ({
-    ...(apiConfig.cellModels ?? {}),
-  }));
   const [appVersion, setAppVersion] = useState('');
-  const apiModelOptions = splitModels(draftApiModels);
 
   useEffect(() => {
     void window.electronAPI.getAppVersion().then(setAppVersion);
@@ -118,8 +113,6 @@ export default function CellConfigPanel({
     onSaveApiConfig({
       baseUrl: draftApiBaseUrl,
       apiKey: draftApiKey,
-      models: apiModelOptions,
-      cellModels: draftApiCellModels,
     });
     onSave(draftUrls, draftModes, draftSearchTemplates);
   }
@@ -201,7 +194,7 @@ export default function CellConfigPanel({
                 className="settings-text-input"
                 value={draftApiBaseUrl}
                 onChange={(event) => setDraftApiBaseUrl(event.target.value)}
-                placeholder="https://api.openai.com/v1"
+                placeholder="https://openrouter.ai/api/v1"
               />
               <span className="settings-section-label">{t('settings.apiConversation.apiKey')}</span>
               <input
@@ -212,13 +205,6 @@ export default function CellConfigPanel({
                 placeholder={apiConfig.apiKeyConfigured
                   ? t('settings.apiConversation.apiKeyConfigured')
                   : t('settings.apiConversation.apiKeyPlaceholder')}
-              />
-              <span className="settings-section-label">{t('settings.apiConversation.models')}</span>
-              <input
-                className="settings-text-input"
-                value={draftApiModels}
-                onChange={(event) => setDraftApiModels(event.target.value)}
-                placeholder="gpt-4o-mini, gpt-4.1-mini"
               />
             </>
           )}
@@ -245,55 +231,41 @@ export default function CellConfigPanel({
             {appVersion ? t('settings.version.value', { version: appVersion }) : t('settings.version.loading')}
           </span>
         </section>
-        <div className="cell-config-list">
-          {conversationEntryMode === 'api'
-            ? visibleCells.map((cellId, index) => (
-                <ApiCellConfigRow
-                  key={cellId}
-                  cellId={cellId}
-                  index={index}
-                  model={draftApiCellModels[cellId] ?? apiModelOptions[index] ?? ''}
-                  modelOptions={apiModelOptions}
-                  onModelChange={(model) =>
-                    setDraftApiCellModels((current) => ({
-                      ...current,
-                      [cellId]: model,
-                    }))
-                  }
-                />
-              ))
-            : visibleCells.map((cellId, index) => (
-                <CellConfigRow
-                  key={cellId}
-                  cellId={cellId}
-                  index={index}
-                  draftUrl={draftUrls[cellId] ?? ''}
-                  draftMode={draftModes[cellId] ?? 'chat'}
-                  draftSearchTemplate={draftSearchTemplates[cellId] ?? ''}
-                  selectedPresetId={getSelectedPresetId(cellId)}
-                  showSearchModeToggle={shouldShowSearchModeToggle(cellId)}
-                  onDraftUrlChange={updateDraftUrl}
-                  onDraftModeChange={(nextMode) => {
-                    setDraftModes((current) => ({
-                      ...current,
-                      [cellId]: nextMode,
-                    }));
-                    if (nextMode === 'search' && !draftSearchTemplates[cellId]) {
-                      setDraftSearchTemplates((current) => ({
-                        ...current,
-                        [cellId]: 'https://www.google.com/search?q={query}',
-                      }));
-                    }
-                  }}
-                  onSearchTemplateChange={(nextTemplate) =>
+        {conversationEntryMode !== 'api' && (
+          <div className="cell-config-list">
+            {visibleCells.map((cellId, index) => (
+              <CellConfigRow
+                key={cellId}
+                cellId={cellId}
+                index={index}
+                draftUrl={draftUrls[cellId] ?? ''}
+                draftMode={draftModes[cellId] ?? 'chat'}
+                draftSearchTemplate={draftSearchTemplates[cellId] ?? ''}
+                selectedPresetId={getSelectedPresetId(cellId)}
+                showSearchModeToggle={shouldShowSearchModeToggle(cellId)}
+                onDraftUrlChange={updateDraftUrl}
+                onDraftModeChange={(nextMode) => {
+                  setDraftModes((current) => ({
+                    ...current,
+                    [cellId]: nextMode,
+                  }));
+                  if (nextMode === 'search' && !draftSearchTemplates[cellId]) {
                     setDraftSearchTemplates((current) => ({
                       ...current,
-                      [cellId]: nextTemplate,
-                    }))
+                      [cellId]: 'https://www.google.com/search?q={query}',
+                    }));
                   }
-                />
-              ))}
-        </div>
+                }}
+                onSearchTemplateChange={(nextTemplate) =>
+                  setDraftSearchTemplates((current) => ({
+                    ...current,
+                    [cellId]: nextTemplate,
+                  }))
+                }
+              />
+            ))}
+          </div>
+        )}
         <footer className="panel-actions">
           <button type="button" onClick={onClose}>
             {t('cellConfig.actions.cancel')}
@@ -303,14 +275,6 @@ export default function CellConfigPanel({
       </form>
     </div>
   );
-}
-
-function splitModels(value: string): string[] {
-  const models = value
-    .split(',')
-    .map((model) => model.trim())
-    .filter(Boolean);
-  return [...new Set(models)].slice(0, 4);
 }
 
 const LAYOUT_OPTIONS: Array<{ mode: LayoutMode; label: string; titleKey: string }> = [
@@ -329,39 +293,6 @@ function MemoryIcon() {
       <path d="M8.25 12h7.5" />
       <path d="M8.25 15.5h5.5" />
     </svg>
-  );
-}
-
-interface ApiCellConfigRowProps {
-  cellId: string;
-  index: number;
-  model: string;
-  modelOptions: string[];
-  onModelChange: (model: string) => void;
-}
-
-function ApiCellConfigRow({ cellId, index, model, modelOptions, onModelChange }: ApiCellConfigRowProps) {
-  const { t } = useTranslation();
-  const options = model && !modelOptions.includes(model) ? [model, ...modelOptions] : modelOptions;
-
-  return (
-    <section className="cell-config-row api-cell-config-row">
-      <label htmlFor={`${cellId}-api-model`}>{t('cellConfig.cell.label', { index: index + 1 })}</label>
-      <select
-        id={`${cellId}-api-model`}
-        className="preset-select"
-        value={model}
-        onChange={(event) => onModelChange(event.target.value)}
-      >
-        <option value="">{t('gridCell.api.emptyModel')}</option>
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-      <span className="api-cell-config-hint">{t('settings.apiConversation.cellModelHint')}</span>
-    </section>
   );
 }
 
