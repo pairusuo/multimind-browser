@@ -304,10 +304,6 @@
       "missingModel": "Choose a model for this cell first"
     },
     "prompts": {
-      "documentIntro": "Create a reliable structured summary document based on the following answers from multiple AI models to the same question.",
-      "documentInstruction": "Extract consensus, identify disagreements and uncertainty, preserve actionable conclusions, and do not describe the comparison process.",
-      "modelAnswersHeader": "# Model Answers",
-      "cellAnswerLabel": "Cell {{index}} - {{model}}",
       "forwardIntro": "Below is an answer from another AI model.",
       "aiAnswerHeader": "# AI Answer",
       "modelLine": "Model: {{model}}",

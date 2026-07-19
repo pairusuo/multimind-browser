@@ -304,10 +304,6 @@
       "missingModel": "请先为这个格子选择模型"
     },
     "prompts": {
-      "documentIntro": "请基于下面多个 AI 模型对同一问题的回答，生成一份可靠的结构化总结文档。",
-      "documentInstruction": "要求：提炼共识、指出分歧和不确定性、保留可执行结论，不要描述比较过程。",
-      "modelAnswersHeader": "# 模型回答",
-      "cellAnswerLabel": "格子 {{index}} - {{model}}",
       "forwardIntro": "下面是一段另一个 AI 模型的回答。",
       "aiAnswerHeader": "# AI 回答",
       "modelLine": "模型：{{model}}",

@@ -527,3 +527,10 @@ function decryptApiKey(config: StoredApiConversationConfig): string {
     return '';
   }
 }
+
+export const __apiConversationTestHooks = {
+  filterModelCatalog,
+  normalizeBaseUrl,
+  normalizeCellModels,
+  normalizeModels,
+};

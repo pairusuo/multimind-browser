@@ -22,6 +22,7 @@ import {
   LayoutMode,
   ThemeMode,
 } from '../shared/types';
+import { buildDocumentPrompt, detectContentLanguage } from '../shared/documentPrompt';
 import { LayoutTemplate } from '../shared/presetTemplates';
 import { PRESET_SITES } from '../shared/presetSites';
 
@@ -745,30 +746,21 @@ function getApiDocumentCandidates(
 }
 
 function buildApiDocumentPrompt(layoutMode: LayoutMode, apiCellStates: Record<string, ApiConversationCellState>): string {
-  const promptLanguage = detectApiPromptLanguage(
-    LAYOUT_CELLS[layoutMode]
-      .map((cellId) => apiCellStates[cellId]?.content ?? '')
-      .join('\n'),
-  );
-  const fixedT = i18n.getFixedT(promptLanguage);
-  const answerBlocks = LAYOUT_CELLS[layoutMode]
+  const sourceBlocks = LAYOUT_CELLS[layoutMode]
     .map((cellId, index) => {
       const state = apiCellStates[cellId];
       if (!state?.model || !state.content.trim()) {
-        return '';
+        return null;
       }
-      return `## ${fixedT('apiConversation.prompts.cellAnswerLabel', { index: index + 1, model: state.model })}\n${state.content.trim()}`;
+      return {
+        index: index + 1,
+        model: state.model,
+        content: state.content.trim(),
+      };
     })
-    .filter(Boolean)
-    .join('\n\n');
-
-  return [
-    fixedT('apiConversation.prompts.documentIntro'),
-    fixedT('apiConversation.prompts.documentInstruction'),
-    '',
-    fixedT('apiConversation.prompts.modelAnswersHeader'),
-    answerBlocks,
-  ].join('\n');
+    .filter((block): block is { index: number; model: string; content: string } => Boolean(block));
+  const promptLanguage = detectContentLanguage(sourceBlocks.map((block) => block.content).join('\n'));
+  return buildDocumentPrompt(promptLanguage, sourceBlocks);
 }
 
 function buildApiForwardPrompt(sourceModel: string, sourceContent: string): string {
