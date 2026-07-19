@@ -135,9 +135,19 @@ async function main() {
       tags: ['饮食', '旅行'],
       contentMarkdown: '# 用户饮食与生活习惯约束\n\n用户不能吃辣，不喝酒，不抽烟。餐厅、旅行、聚餐建议应避开辣、酒、烟。',
     });
-    const travelFoodRecall = store.recallForAgentTask('我计划去重庆玩，推荐一下吃喝玩乐');
+    const travelFoodRecall = store.recallForAgentTask('我计划去重庆玩几天，吃喝玩乐推荐一下');
     assert(travelFoodRecall.items.some((item) => item.id === foodMemory.id), 'Expected travel food task to recall dietary constraints.');
     assert(!travelFoodRecall.items.some((item) => item.id === imported.id), 'Expected travel food task not to recall unrelated investment rules.');
+
+    const unrelatedReference = await store.importDocument({
+      title: '普通城市旅行清单',
+      memoryType: 'reference',
+      memoryScope: 'global',
+      tags: ['旅行'],
+      contentMarkdown: '# 普通城市旅行清单\n\n计划行程时可以查看天气，推荐提前确认交通时间。',
+    });
+    const unrelatedReferenceRecall = store.recallForAgentTask('我计划去重庆玩几天，吃喝玩乐推荐一下');
+    assert(!unrelatedReferenceRecall.items.some((item) => item.id === unrelatedReference.id), 'Expected unrelated reference memory not to recall from generic CJK character overlap.');
 
     const unrelatedProfile = await store.importDocument({
       title: '用户阅读偏好',
@@ -146,7 +156,7 @@ async function main() {
       tags: ['阅读'],
       contentMarkdown: '# 用户阅读偏好\n\n用户偏好纸质书和长篇非虚构作品。',
     });
-    const unrelatedProfileRecall = store.recallForAgentTask('我计划去重庆玩，推荐一下吃喝玩乐');
+    const unrelatedProfileRecall = store.recallForAgentTask('我计划去重庆玩几天，吃喝玩乐推荐一下');
     assert(!unrelatedProfileRecall.items.some((item) => item.id === unrelatedProfile.id), 'Expected profile/type priority not to recall unrelated user profile memory.');
 
     store.disableDocument(imported.id);

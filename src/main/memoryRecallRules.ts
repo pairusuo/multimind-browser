@@ -134,7 +134,7 @@ export function scoreRecallCandidate(document: MemoryDocument, query: string): {
       .map(normalizeForRecallMatch)
       .filter((term) => body.includes(term));
     const matchedBodyCjkChars = cjkChars.filter((char) => body.includes(char));
-    if (hasMeaningfulBodyMatch(matchedBodyTerms, matchedBodyCjkChars, normalizedQuery, body)) {
+    if (hasMeaningfulBodyMatch(document.memoryType, matchedBodyTerms, matchedBodyCjkChars, normalizedQuery, body)) {
       score += Math.min(60, 25 + matchedBodyTerms.length * 5 + Math.min(10, matchedBodyCjkChars.length * 3));
       matchReasons.push('body');
     }
@@ -204,12 +204,13 @@ export function normalizeForRecallMatch(text: string): string {
 }
 
 function hasMeaningfulBodyMatch(
+  memoryType: MemoryDocumentType,
   matchedTerms: string[],
   matchedCjkChars: string[],
   normalizedQuery: string,
   body: string,
 ): boolean {
-  if (!matchedTerms.length && matchedCjkChars.length < 2) {
+  if (!matchedTerms.length && (memoryType !== 'profile' || matchedCjkChars.length < 2)) {
     return false;
   }
 
@@ -218,7 +219,7 @@ function hasMeaningfulBodyMatch(
   }
 
   const strongTerms = matchedTerms.filter((term) => term.length >= 2 && !isWeakRecallTerm(term));
-  return strongTerms.length >= 2 || strongTerms.some((term) => term.length >= 4) || matchedCjkChars.length >= 2;
+  return strongTerms.length >= 2 || strongTerms.some((term) => term.length >= 4) || (memoryType === 'profile' && matchedCjkChars.length >= 2);
 }
 
 function querySuggestsPersonalization(query: string): boolean {
