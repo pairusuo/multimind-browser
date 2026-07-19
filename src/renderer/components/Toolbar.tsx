@@ -1,9 +1,10 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getRiskySiteReasonKey } from '../../shared/riskySites';
-import { CellTab, LayoutMode } from '../../shared/types';
+import { CellTab, ConversationEntryMode, LayoutMode } from '../../shared/types';
 
 interface ToolbarProps {
+  conversationEntryMode: ConversationEntryMode;
   currentUrl: string;
   focusedCellId: string;
   tabs: CellTab[];
@@ -17,6 +18,7 @@ interface ToolbarProps {
 }
 
 export default function Toolbar({
+  conversationEntryMode,
   currentUrl,
   focusedCellId,
   tabs,
@@ -33,7 +35,8 @@ export default function Toolbar({
   const tabRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const addressRiskReasonKey = layoutMode === 'single' ? getRiskySiteReasonKey(draftUrl) : null;
   const addressRiskReason = addressRiskReasonKey ? t(addressRiskReasonKey) : null;
-  const showTabs = layoutMode === 'single';
+  const isApiMode = conversationEntryMode === 'api';
+  const showTabs = layoutMode === 'single' && !isApiMode;
 
   useEffect(() => {
     setDraftUrl(currentUrl);
@@ -57,7 +60,7 @@ export default function Toolbar({
   }
 
   return (
-    <header className={`toolbar${showTabs ? ' toolbar-single' : ''}`}>
+    <header className={`toolbar${showTabs ? ' toolbar-single' : ''}${isApiMode ? ' toolbar-api-mode' : ''}`}>
       <div className="toolbar-brand" title="MultiMind Flow" aria-label="MultiMind Flow">
         <MultiMindLogo />
       </div>
@@ -100,35 +103,41 @@ export default function Toolbar({
         </button>
         </div>
       )}
-      <nav className="navigation-controls" aria-label={t('toolbar.navigation.label')}>
-        <button type="button" aria-label={t('toolbar.navigation.back')} onClick={() => window.electronAPI.navigateBack(focusedCellId)}>
-          ←
-        </button>
-        <button type="button" aria-label={t('toolbar.navigation.forward')} onClick={() => window.electronAPI.navigateForward(focusedCellId)}>
-          →
-        </button>
-        <button type="button" aria-label={t('toolbar.navigation.reload')} onClick={() => window.electronAPI.reload(focusedCellId)}>
-          ↻
-        </button>
-      </nav>
-      <form className={`address-form${addressRiskReason ? ' has-risk' : ''}`} onSubmit={handleSubmit}>
-        <label className="sr-only" htmlFor="address-input">
-          {t('toolbar.address.label')}
-        </label>
-        <input
-          id="address-input"
-          value={draftUrl}
-          onChange={(event) => setDraftUrl(event.target.value)}
-          placeholder={t('toolbar.address.placeholder')}
-          autoComplete="off"
-          spellCheck={false}
-        />
-        {addressRiskReason && (
-          <p className="address-risk-warning" title={addressRiskReason}>
-            {t('toolbar.address.geminiRestricted')}
-          </p>
-        )}
-      </form>
+      {isApiMode ? (
+        <div className="toolbar-mode-title">{t('toolbar.apiMode.title')}</div>
+      ) : (
+        <>
+          <nav className="navigation-controls" aria-label={t('toolbar.navigation.label')}>
+            <button type="button" aria-label={t('toolbar.navigation.back')} onClick={() => window.electronAPI.navigateBack(focusedCellId)}>
+              ←
+            </button>
+            <button type="button" aria-label={t('toolbar.navigation.forward')} onClick={() => window.electronAPI.navigateForward(focusedCellId)}>
+              →
+            </button>
+            <button type="button" aria-label={t('toolbar.navigation.reload')} onClick={() => window.electronAPI.reload(focusedCellId)}>
+              ↻
+            </button>
+          </nav>
+          <form className={`address-form${addressRiskReason ? ' has-risk' : ''}`} onSubmit={handleSubmit}>
+            <label className="sr-only" htmlFor="address-input">
+              {t('toolbar.address.label')}
+            </label>
+            <input
+              id="address-input"
+              value={draftUrl}
+              onChange={(event) => setDraftUrl(event.target.value)}
+              placeholder={t('toolbar.address.placeholder')}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            {addressRiskReason && (
+              <p className="address-risk-warning" title={addressRiskReason}>
+                {t('toolbar.address.geminiRestricted')}
+              </p>
+            )}
+          </form>
+        </>
+      )}
       <div className="toolbar-actions" role="group" aria-label={t('toolbar.actions.label')}>
         <button type="button" className="toolbar-icon-button toolbar-settings-button" title={t('toolbar.actions.editCells')} aria-label={t('toolbar.actions.editCells')} onClick={onOpenConfig}>
           <SettingsIcon />

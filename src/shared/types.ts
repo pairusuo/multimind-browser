@@ -4,6 +4,7 @@ export type LayoutMode = 'single' | 'horizontal' | 'vertical' | 'triple' | 'quad
 export type CellMode = 'chat' | 'search';
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type AppLanguage = 'zh' | 'en';
+export type ConversationEntryMode = 'embedded' | 'api';
 
 export interface CellConfig {
   id: string;
@@ -46,11 +47,13 @@ export const IPC = {
   GET_MEMORY_DOCUMENT: 'get-memory-document',
   DISABLE_MEMORY_DOCUMENT: 'disable-memory-document',
   RECALL_MEMORY_FOR_AGENT_TASK: 'recall-memory-for-agent-task',
+  GET_API_CONVERSATION_CONFIG: 'get-api-conversation-config',
+  SAVE_API_CONVERSATION_CONFIG: 'save-api-conversation-config',
+  RUN_API_CONVERSATION: 'run-api-conversation',
   APPLY_TEMPLATE: 'apply-template',
   SET_LAYOUT: 'set-layout',
   SET_OVERLAY_OPEN: 'set-overlay-open',
   SET_MAXIMIZED_CELL: 'set-maximized-cell',
-  SET_SPLIT_RATIOS: 'set-split-ratios',
   NAVIGATE: 'navigate',
   NAVIGATE_BACK: 'navigate-back',
   NAVIGATE_FORWARD: 'navigate-forward',
@@ -63,6 +66,7 @@ export const IPC = {
   SWITCH_TAB: 'switch-tab',
   SET_THEME_MODE: 'set-theme-mode',
   SET_LANGUAGE: 'set-language',
+  SET_CONVERSATION_ENTRY_MODE: 'set-conversation-entry-mode',
   SET_FORWARD_CONTROLS_ENABLED: 'set-forward-controls-enabled',
   CELL_FOCUSED: 'cell-focused',
   FORWARD_COMPLETED: 'forward-completed',
@@ -229,6 +233,48 @@ export interface MemoryRecallContext {
   agentContext: string;
 }
 
+export interface ApiConversationConfig {
+  baseUrl: string;
+  models: string[];
+  cellModels?: Record<string, string>;
+  apiKeyConfigured: boolean;
+}
+
+export interface SaveApiConversationConfigPayload {
+  baseUrl: string;
+  models: string[];
+  cellModels?: Record<string, string>;
+  apiKey?: string;
+}
+
+export interface RunApiConversationPayload {
+  prompt: string;
+  models?: string[];
+}
+
+export interface ApiConversationModelResult {
+  model: string;
+  content: string;
+  error?: string;
+  elapsedMs: number;
+}
+
+export type ApiConversationCellStatus = 'idle' | 'running' | 'completed' | 'error';
+
+export interface ApiConversationCellState {
+  model: string;
+  content: string;
+  error?: string;
+  elapsedMs?: number;
+  status: ApiConversationCellStatus;
+}
+
+export interface ApiConversationResult {
+  prompt: string;
+  results: ApiConversationModelResult[];
+  createdAt: number;
+}
+
 export interface ExtractedConversationEntry {
   role: 'user' | 'assistant';
   content: string;
@@ -288,11 +334,6 @@ export interface CellNoticePayload {
   messageKey: string;
 }
 
-export interface SplitRatiosPayload {
-  horizontalRatio?: number;
-  verticalRatio?: number;
-}
-
 export interface SetMaximizedCellPayload {
   cellId: string | null;
 }
@@ -308,6 +349,7 @@ export interface BrowserState {
   activeTabIds: Record<string, string>;
   themeMode: ThemeMode;
   language: AppLanguage;
+  conversationEntryMode: ConversationEntryMode;
   forwardControlsEnabled: boolean;
   focusedCellId: string;
   maximizedCellId: string | null;
@@ -356,13 +398,16 @@ export interface ElectronAPI {
   getMemoryDocument: (payload: GetMemoryDocumentPayload) => Promise<MemoryDocument | null>;
   disableMemoryDocument: (payload: DisableMemoryDocumentPayload) => Promise<void>;
   recallMemoryForAgentTask: (payload: RecallMemoryForAgentTaskPayload) => Promise<MemoryRecallContext>;
+  getApiConversationConfig: () => Promise<ApiConversationConfig>;
+  saveApiConversationConfig: (payload: SaveApiConversationConfigPayload) => Promise<ApiConversationConfig>;
+  runApiConversation: (payload: RunApiConversationPayload) => Promise<ApiConversationResult>;
   setLayout: (mode: LayoutMode) => Promise<void>;
   setThemeMode: (mode: ThemeMode) => Promise<BrowserState>;
   setLanguage: (language: AppLanguage) => Promise<BrowserState>;
+  setConversationEntryMode: (mode: ConversationEntryMode) => Promise<BrowserState>;
   setForwardControlsEnabled: (enabled: boolean) => Promise<BrowserState>;
   setOverlayOpen: (open: boolean) => Promise<void>;
   setMaximizedCell: (payload: SetMaximizedCellPayload) => Promise<void>;
-  setSplitRatios: (payload: SplitRatiosPayload) => Promise<void>;
   navigate: (payload: NavigatePayload) => Promise<BrowserState>;
   navigateBack: (cellId: string) => Promise<void>;
   navigateForward: (cellId: string) => Promise<void>;

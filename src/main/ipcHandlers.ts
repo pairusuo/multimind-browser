@@ -3,6 +3,7 @@ import {
   ApplyTemplatePayload,
   AppLanguage,
   CellTabPayload,
+  ConversationEntryMode,
   DisableMemoryDocumentPayload,
   ForwardResponsePayload,
   GetMemoryDocumentPayload,
@@ -18,14 +19,20 @@ import {
   SendToAllPayload,
   SetMaximizedCellPayload,
   SetCellUrlPayload,
-  SplitRatiosPayload,
+  RunApiConversationPayload,
+  SaveApiConversationConfigPayload,
   ThemeMode,
   ToggleCellPayload,
 } from '../shared/types';
+import { ApiConversationService } from './apiConversationService';
 import { MemoryStore } from './memoryStore';
 import { WindowManager } from './windowManager';
 
-export function registerIpcHandlers(windowManager: WindowManager, memoryStore: MemoryStore): void {
+export function registerIpcHandlers(
+  windowManager: WindowManager,
+  memoryStore: MemoryStore,
+  apiConversationService: ApiConversationService,
+): void {
   registerHandler(IPC.GET_BROWSER_STATE, () => windowManager.getBrowserState());
 
   registerHandler(IPC.GET_APP_VERSION, () => app.getVersion());
@@ -103,12 +110,28 @@ export function registerIpcHandlers(windowManager: WindowManager, memoryStore: M
     return memoryStore.recallForAgentTask(payload.query);
   });
 
+  registerHandler(IPC.GET_API_CONVERSATION_CONFIG, () => {
+    return apiConversationService.getConfig();
+  });
+
+  registerHandler(IPC.SAVE_API_CONVERSATION_CONFIG, (_event, payload: SaveApiConversationConfigPayload) => {
+    return apiConversationService.saveConfig(payload);
+  });
+
+  registerHandler(IPC.RUN_API_CONVERSATION, (_event, payload: RunApiConversationPayload) => {
+    return apiConversationService.runConversation(payload);
+  });
+
   registerHandler(IPC.SET_THEME_MODE, (_event, mode: ThemeMode) => {
     return windowManager.setThemeMode(mode);
   });
 
   registerHandler(IPC.SET_LANGUAGE, (_event, language: AppLanguage) => {
     return windowManager.setLanguage(language);
+  });
+
+  registerHandler(IPC.SET_CONVERSATION_ENTRY_MODE, (_event, mode: ConversationEntryMode) => {
+    return windowManager.setConversationEntryMode(mode);
   });
 
   registerHandler(IPC.SET_FORWARD_CONTROLS_ENABLED, (_event, enabled: boolean) => {
@@ -157,10 +180,6 @@ export function registerIpcHandlers(windowManager: WindowManager, memoryStore: M
 
   registerHandler(IPC.SET_MAXIMIZED_CELL, (_event, payload: SetMaximizedCellPayload) => {
     windowManager.setMaximizedCell(payload.cellId);
-  });
-
-  registerHandler(IPC.SET_SPLIT_RATIOS, (_event, payload: SplitRatiosPayload) => {
-    windowManager.setSplitRatios(payload);
   });
 
   registerHandler(IPC.SET_CELL_URL, (_event, payload: SetCellUrlPayload) => {

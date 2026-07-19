@@ -2,6 +2,7 @@ import { app, BrowserWindow, nativeImage } from 'electron';
 import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { ApiConversationService } from './apiConversationService';
 import { registerIpcHandlers } from './ipcHandlers';
 import { MemoryStore } from './memoryStore';
 import { createBrowserStore, WindowManager } from './windowManager';
@@ -9,6 +10,7 @@ import { createBrowserStore, WindowManager } from './windowManager';
 let mainWindow: BrowserWindow | null = null;
 let windowManager: WindowManager | null = null;
 let memoryStore: MemoryStore | null = null;
+let apiConversationService: ApiConversationService | null = null;
 
 configureAppIdentity();
 bindProcessExceptionHandlers();
@@ -31,8 +33,9 @@ async function createWindow(): Promise<void> {
 
   const store = await createBrowserStore();
   memoryStore = memoryStore ?? new MemoryStore(path.join(app.getPath('userData'), 'memory.sqlite'));
+  apiConversationService = apiConversationService ?? new ApiConversationService(store);
   windowManager = new WindowManager(mainWindow, store);
-  registerIpcHandlers(windowManager, memoryStore);
+  registerIpcHandlers(windowManager, memoryStore, apiConversationService);
 
   mainWindow.on('resize', () => windowManager?.layout());
   mainWindow.on('close', () => {
@@ -43,6 +46,7 @@ async function createWindow(): Promise<void> {
     windowManager = null;
     mainWindow = null;
   });
+  bindRendererDiagnostics(mainWindow);
 
   if (!app.isPackaged) {
     await loadDevRenderer(mainWindow);
@@ -52,6 +56,18 @@ async function createWindow(): Promise<void> {
 
   windowManager.createInitialView();
   scheduleDevCapture(mainWindow);
+}
+
+function bindRendererDiagnostics(window: BrowserWindow): void {
+  window.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.error('Renderer failed to load:', { errorCode, errorDescription, url: validatedURL });
+  });
+
+  window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    if (level >= 2) {
+      console.warn('Renderer console:', { level, message, line, sourceId });
+    }
+  });
 }
 
 app.whenReady().then(() => {

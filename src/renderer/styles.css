@@ -58,6 +58,17 @@ textarea {
   grid-template-columns: 40px minmax(180px, 320px) max-content minmax(160px, 1fr) max-content;
 }
 
+.toolbar-api-mode {
+  grid-template-columns: 40px minmax(0, 1fr) max-content;
+}
+
+.toolbar-mode-title {
+  min-width: 0;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 800;
+}
+
 .multimind-logo {
   display: block;
   width: 32px;
@@ -292,7 +303,11 @@ textarea {
   height: calc(100% - 108px);
 }
 
-.browser-stage-maximized {
+.browser-stage-api-mode {
+  height: calc(100% - 108px);
+}
+
+.browser-stage-maximized:not(.browser-stage-api-mode) {
   height: calc(100% - 52px);
 }
 
@@ -302,6 +317,20 @@ textarea {
   display: grid;
   gap: 0;
   overflow: hidden;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+
+.split-view-horizontal,
+.split-view-triple,
+.split-view-quad {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.split-view-vertical,
+.split-view-triple,
+.split-view-quad {
+  grid-template-rows: repeat(2, minmax(0, 1fr));
 }
 
 .grid-cell {
@@ -321,66 +350,43 @@ textarea {
 }
 
 .cell-b {
-  grid-column: 3;
+  grid-column: 2;
   grid-row: 1;
 }
 
 .split-view-vertical .cell-b {
   grid-column: 1;
-  grid-row: 3;
+  grid-row: 2;
 }
 
 .cell-c {
   grid-column: 1;
-  grid-row: 3;
+  grid-row: 2;
 }
 
 .split-view-triple .cell-a {
   grid-column: 1;
-  grid-row: 1 / 4;
+  grid-row: 1 / 3;
 }
 
 .split-view-triple .cell-b {
-  grid-column: 3;
+  grid-column: 2;
   grid-row: 1;
 }
 
 .split-view-triple .cell-c {
-  grid-column: 3;
-  grid-row: 3;
+  grid-column: 2;
+  grid-row: 2;
 }
 
 .cell-d {
-  grid-column: 3;
-  grid-row: 3;
+  grid-column: 2;
+  grid-row: 2;
 }
 
 .split-view.split-view-maximized .grid-cell {
   grid-column: 1;
   grid-row: 1;
-}
-
-.splitter {
-  position: relative;
-  z-index: 8;
-  background: #cbd5e1;
-  pointer-events: auto;
-}
-
-.splitter:hover {
-  background: #1a56db;
-}
-
-.splitter-vertical {
-  grid-column: 2;
-  grid-row: 1 / 4;
-  cursor: col-resize;
-}
-
-.splitter-horizontal {
-  grid-column: 1 / 4;
-  grid-row: 2;
-  cursor: row-resize;
 }
 
 .cell-header {
@@ -435,6 +441,32 @@ textarea {
   background: #1a56db;
 }
 
+.api-favicon-placeholder {
+  background: linear-gradient(135deg, #2563eb, #14b8a6);
+}
+
+.api-model-select {
+  min-width: 0;
+  max-width: min(260px, calc(100vw - 120px));
+  height: 28px;
+  appearance: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 24px 0 0;
+  background:
+    linear-gradient(45deg, transparent 50%, #64748b 50%) calc(100% - 11px) 11px / 5px 5px no-repeat,
+    linear-gradient(135deg, #64748b 50%, transparent 50%) calc(100% - 7px) 11px / 5px 5px no-repeat;
+  color: #1f2937;
+  font: inherit;
+  font-weight: 650;
+  outline: none;
+  pointer-events: auto;
+}
+
+.api-model-select:focus {
+  box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.14);
+}
+
 .cell-menu {
   position: absolute;
   top: 5px;
@@ -446,6 +478,10 @@ textarea {
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease;
+}
+
+.api-grid-cell .cell-menu {
+  grid-template-columns: repeat(2, 32px);
 }
 
 .forward-picker-inline {
@@ -460,6 +496,55 @@ textarea {
   color: #1e3a8a;
   font-size: 13px;
   animation: fadeInHeader 150ms ease;
+}
+
+.api-cell-body {
+  position: absolute;
+  inset: 42px 0 0;
+  overflow: auto;
+  padding: 18px 20px;
+  background: #ffffff;
+  color: #111827;
+}
+
+.api-cell-body pre {
+  margin: 0;
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.api-cell-empty {
+  display: grid;
+  place-items: center;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 650;
+  text-align: center;
+}
+
+.api-cell-empty p,
+.api-cell-error {
+  margin: 0;
+}
+
+.api-cell-error {
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.api-cell-meta {
+  margin-bottom: 10px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 @keyframes fadeInHeader {
@@ -1671,6 +1756,11 @@ textarea {
   width: var(--settings-control-width);
 }
 
+.settings-segmented-control.settings-entry-control {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: var(--settings-control-width);
+}
+
 .settings-segmented-control label {
   position: relative;
   display: grid;
@@ -1698,11 +1788,44 @@ textarea {
   pointer-events: none;
 }
 
+.settings-text-input {
+  width: var(--settings-control-width);
+  height: 34px;
+  min-width: 0;
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  border-radius: 7px;
+  padding: 0 10px;
+  background: #ffffff;
+  color: #111827;
+  outline: none;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+
+.settings-text-input:hover {
+  border-color: rgba(37, 99, 235, 0.28);
+}
+
+.settings-text-input:focus {
+  border-color: #1a56db;
+  box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.12);
+}
+
 .cell-config-row {
   display: grid;
   grid-template-columns: var(--settings-label-width) minmax(150px, var(--settings-picker-width)) minmax(220px, 1fr);
   align-items: center;
   gap: 10px;
+}
+
+.api-cell-config-row {
+  grid-template-columns: var(--settings-label-width) minmax(220px, var(--settings-control-width)) minmax(0, 1fr);
+}
+
+.api-cell-config-hint {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .risk-warning {
@@ -2019,8 +2142,6 @@ textarea {
     grid-row: 2;
     height: 34px;
   }
-
-
   .template-grid {
     grid-template-columns: 1fr;
   }
@@ -2096,6 +2217,10 @@ textarea {
     color: #f9fafb;
   }
 
+  .toolbar-mode-title {
+    color: #f9fafb;
+  }
+
   .toolbar-actions button.active,
   .cell-menu button.active {
     border-color: #60a5fa;
@@ -2110,6 +2235,22 @@ textarea {
 
   .cell-overlay {
     color: #f9fafb;
+  }
+
+  .api-cell-body {
+    background: #101317;
+    color: #e5e7eb;
+  }
+
+  .api-cell-empty,
+  .api-cell-meta {
+    color: #94a3b8;
+  }
+
+  .api-cell-error {
+    border-color: rgba(248, 113, 113, 0.24);
+    background: rgba(127, 29, 29, 0.26);
+    color: #fecaca;
   }
 
   .forward-picker-inline {
@@ -2181,6 +2322,7 @@ textarea {
   .memory-recall-form textarea,
   .memory-form-grid input,
   .memory-form-grid select,
+  .settings-text-input,
   .memory-choice-grid,
   .cell-config-row select,
   .cell-config-row input {
@@ -2430,13 +2572,13 @@ textarea {
     border-color: rgba(255, 255, 255, 0.16);
   }
 
-  .splitter {
-    background: #334155;
-  }
-
   .cell-overlay {
     border-color: rgba(255, 255, 255, 0.14);
     background: rgba(18, 22, 28, 0.88);
+    color: #f9fafb;
+  }
+
+  .api-model-select {
     color: #f9fafb;
   }
 

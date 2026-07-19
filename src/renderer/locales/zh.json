@@ -17,6 +17,9 @@
       "placeholder": "输入网址或搜索",
       "geminiRestricted": "Gemini 登录受限"
     },
+    "apiMode": {
+      "title": "API 模型会谈"
+    },
     "layout": {
       "label": "布局",
       "single": "单格视图",
@@ -43,6 +46,7 @@
     "empty": "空格子",
     "aria": {
       "browserCell": "{{host}} 浏览器格子",
+      "apiCell": "{{host}} API 模型格子",
       "controls": "{{host}} 格子控制"
     },
     "mode": {
@@ -67,6 +71,15 @@
         "completedTruncated": "已转发到 {{target}}（内容超长已裁剪）",
         "failed": "转发到 {{target}} 未完成"
       }
+    },
+    "api": {
+      "emptyModel": "未配置模型",
+      "noModel": "在设置里为这个格子配置模型。",
+      "placeholder": "输入问题后，这里会显示模型回答。",
+      "running": "模型正在回答...",
+      "failed": "模型请求失败",
+      "elapsed": "{{seconds}} 秒",
+      "modelSelect": "选择模型"
     }
   },
   "bottomInput": {
@@ -80,7 +93,8 @@
     "cellToggle": {
       "title": "切换格子 {{index}}",
       "aria": "切换格子 {{index}}",
-      "noUrl": "格子 {{index}} 没有 URL"
+      "noUrl": "格子 {{index}} 没有 URL",
+      "noModel": "格子 {{index}} 没有配置模型"
     }
   },
   "documentSummary": {
@@ -98,6 +112,22 @@
     "errors": {
       "noCandidates": "当前布局中没有可用于总结的讨论格子。",
       "generateFailed": "总结指令发送失败，请确认总结者格子已登录并支持统一发送。"
+    }
+  },
+  "templateChooser": {
+    "title": "选择初始布局",
+    "aria": {
+      "panel": "选择布局模板"
+    },
+    "cellCount": "{{count}} 个格子",
+    "templates": {
+      "big-four": "中美四强",
+      "china-two": "国产双雄",
+      "us-two": "美国双雄"
+    },
+    "custom": {
+      "name": "自定义",
+      "description": "手动选择网站"
     }
   },
   "memory": {
@@ -264,6 +294,23 @@
   "riskySites": {
     "geminiGoogleLogin": "该网站仅支持 Google 账号登录，Google 已限制嵌入式浏览器登录，可能无法正常使用"
   },
+  "apiConversation": {
+    "errors": {
+      "missingKey": "请先在设置中保存 API Key",
+      "missingModel": "请先为这个格子选择模型"
+    },
+    "prompts": {
+      "documentIntro": "请基于下面多个 AI 模型对同一问题的回答，生成一份可靠的结构化总结文档。",
+      "documentInstruction": "要求：提炼共识、指出分歧和不确定性、保留可执行结论，不要描述比较过程。",
+      "modelAnswersHeader": "# 模型回答",
+      "cellAnswerLabel": "格子 {{index}} - {{model}}",
+      "forwardIntro": "下面是一段另一个 AI 模型的回答。",
+      "aiAnswerHeader": "# AI 回答",
+      "modelLine": "模型：{{model}}",
+      "evaluateHeader": "# 请你评价",
+      "evaluateInstruction": "请评价这份回答：有没有遗漏、错误、需要补充或反驳的地方？请给出更可靠的结论。"
+    }
+  },
   "settings": {
     "title": "设置",
     "layout": {
@@ -291,9 +338,24 @@
         "en": "English"
       }
     },
+    "conversationEntry": {
+      "label": "会谈入口",
+      "options": {
+        "embedded": "内嵌官网",
+        "api": "API 模型"
+      }
+    },
     "memory": {
       "label": "长期记忆",
       "open": "打开记忆库"
+    },
+    "apiConversation": {
+      "baseUrl": "API 地址",
+      "apiKey": "API Key",
+      "apiKeyPlaceholder": "输入 API Key",
+      "apiKeyConfigured": "已保存，留空不修改",
+      "models": "可选模型",
+      "cellModelHint": "也可以在格子标题栏直接切换"
     },
     "forward": {
       "label": "转发",

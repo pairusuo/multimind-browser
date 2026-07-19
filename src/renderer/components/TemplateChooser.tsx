@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { LAYOUT_TEMPLATES, LayoutTemplate } from '../../shared/presetTemplates';
 
 interface TemplateChooserProps {
@@ -5,17 +6,19 @@ interface TemplateChooserProps {
 }
 
 export default function TemplateChooser({ onApplyTemplate }: TemplateChooserProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="modal-backdrop">
-      <section className="template-panel" aria-label="Choose layout template">
+      <section className="template-panel" aria-label={t('templateChooser.aria.panel')}>
         <header>
-          <h1>选择初始布局</h1>
+          <h1>{t('templateChooser.title')}</h1>
         </header>
         <div className="template-grid">
           {LAYOUT_TEMPLATES.map((template) => (
             <button key={template.id} type="button" className="template-card" onClick={() => onApplyTemplate(template)}>
-              <span>{template.name}</span>
-              <small>{template.siteIds.length} 个格子</small>
+              <span>{t(`templateChooser.templates.${template.id}`, { defaultValue: template.name })}</span>
+              <small>{t('templateChooser.cellCount', { count: template.siteIds.length })}</small>
             </button>
           ))}
           <button
@@ -24,14 +27,14 @@ export default function TemplateChooser({ onApplyTemplate }: TemplateChooserProp
             onClick={() =>
               onApplyTemplate({
                 id: 'custom',
-                name: '自定义',
+                name: t('templateChooser.custom.name'),
                 layout: 'triple',
                 siteIds: [],
               })
             }
           >
-            <span>自定义</span>
-            <small>手动选择网站</small>
+            <span>{t('templateChooser.custom.name')}</span>
+            <small>{t('templateChooser.custom.description')}</small>
           </button>
         </div>
       </section>

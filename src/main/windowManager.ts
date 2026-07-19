@@ -8,6 +8,7 @@ import {
   CELL_IDS,
   CellTab,
   CellMode,
+  ConversationEntryMode,
   DEFAULT_URLS,
   DocumentCandidate,
   ExtractedConversation,
@@ -19,7 +20,6 @@ import {
   LAYOUT_CELLS,
   LayoutMode,
   NoticeType,
-  SplitRatiosPayload,
   ThemeMode,
 } from '../shared/types';
 import { getAdapterForUrl, type SiteNativeInjection } from './adapters';
@@ -38,7 +38,7 @@ const BOTTOM_INPUT_HEIGHT = 56;
 const CELL_BORDER_SIZE = 1;
 const FOCUSED_CELL_BORDER_SIZE = 2;
 const CELL_HEADER_HEIGHT = 42;
-const SPLITTER_SIZE = 4;
+const SPLITTER_SIZE = 0;
 const LOAD_TIMEOUT_MS = 10000;
 const NOTICE_REPLAY_DELAY_MS = 500;
 const RESPONSE_POLL_INTERVAL_MS = 800;
@@ -99,6 +99,7 @@ export class WindowManager {
   private activeTabIds: Record<string, string>;
   private themeMode: ThemeMode;
   private language: AppLanguage;
+  private conversationEntryMode: ConversationEntryMode;
   private forwardControlsEnabled: boolean;
   private activeCells: Record<string, boolean> = {
     'cell-0': true,
@@ -106,8 +107,6 @@ export class WindowManager {
     'cell-2': true,
     'cell-3': true,
   };
-  private horizontalRatio = 0.5;
-  private verticalRatio = 0.5;
   private focusedCellId: string;
   private maximizedCellId: string | null = null;
   private overlayOpen = false;
@@ -132,6 +131,7 @@ export class WindowManager {
     this.activeTabIds = this.getStoredActiveTabIds();
     this.themeMode = this.getStoredThemeMode();
     this.language = this.getStoredLanguage();
+    this.conversationEntryMode = this.getStoredConversationEntryMode();
     this.forwardControlsEnabled = this.getStoredForwardControlsEnabled();
     nativeTheme.themeSource = this.themeMode;
     this.cellStates = this.createCellStates();
@@ -155,6 +155,13 @@ export class WindowManager {
 
     const [width, height] = this.window.getContentSize();
     const cells = LAYOUT_CELLS[this.layoutMode];
+    if (this.overlayOpen || this.conversationEntryMode === 'api') {
+      this.detachAllViews();
+      return;
+    }
+
+    this.syncAttachedViews(cells);
+
     const contentHeight = Math.max(
       0,
       height - TOOLBAR_HEIGHT - (this.layoutMode === 'single' || this.maximizedCellId ? 0 : BOTTOM_INPUT_HEIGHT),
@@ -172,8 +179,7 @@ export class WindowManager {
       if (view.webContents.isDestroyed()) {
         return;
       }
-
-      if (this.overlayOpen || (this.maximizedCellId ? cellId !== this.maximizedCellId : !cells.includes(cellId))) {
+      if (this.maximizedCellId ? cellId !== this.maximizedCellId : !cells.includes(cellId)) {
         safeSetBounds(view, { x: -10000, y: -10000, width: 0, height: 0 });
         return;
       }
@@ -215,22 +221,6 @@ export class WindowManager {
         this.attachedViews.delete(cellId);
       }
     });
-
-    this.layout();
-  }
-
-  setSplitRatios(payload: SplitRatiosPayload): void {
-    if (this.isDestroyed()) {
-      return;
-    }
-
-    if (typeof payload.horizontalRatio === 'number') {
-      this.horizontalRatio = clampRatio(payload.horizontalRatio);
-    }
-
-    if (typeof payload.verticalRatio === 'number') {
-      this.verticalRatio = clampRatio(payload.verticalRatio);
-    }
 
     this.layout();
   }
@@ -382,6 +372,21 @@ export class WindowManager {
     this.language = language;
     this.store.set('app.language', language);
     this.reloadEmptyStateViews();
+    return this.getBrowserState();
+  }
+
+  setConversationEntryMode(mode: ConversationEntryMode): BrowserState {
+    if (this.isDestroyed()) {
+      return this.getBrowserState();
+    }
+
+    if (!isConversationEntryMode(mode)) {
+      return this.getBrowserState();
+    }
+
+    this.conversationEntryMode = mode;
+    this.store.set('conversation.entryMode', mode);
+    this.layout();
     return this.getBrowserState();
   }
 
@@ -1336,6 +1341,7 @@ export class WindowManager {
       activeTabIds: { ...this.activeTabIds },
       themeMode: this.themeMode,
       language: this.language,
+      conversationEntryMode: this.conversationEntryMode,
       forwardControlsEnabled: this.forwardControlsEnabled,
       focusedCellId: this.focusedCellId,
       maximizedCellId: this.maximizedCellId,
@@ -1740,7 +1746,7 @@ export class WindowManager {
     }
 
     if (this.layoutMode === 'horizontal') {
-      const leftWidth = splitSize(width, this.horizontalRatio);
+      const leftWidth = splitSize(width);
       return {
         'cell-0': { x: 0, y, width: leftWidth, height: contentHeight },
         'cell-1': {
@@ -1755,7 +1761,7 @@ export class WindowManager {
     }
 
     if (this.layoutMode === 'vertical') {
-      const topHeight = splitSize(contentHeight, this.verticalRatio);
+      const topHeight = splitSize(contentHeight);
       return {
         'cell-0': { x: 0, y, width, height: topHeight },
         'cell-1': {
@@ -1770,9 +1776,9 @@ export class WindowManager {
     }
 
     if (this.layoutMode === 'triple') {
-      const leftWidth = splitSize(width, this.horizontalRatio);
+      const leftWidth = splitSize(width);
       const rightWidth = Math.max(0, width - leftWidth - SPLITTER_SIZE);
-      const topHeight = splitSize(contentHeight, this.verticalRatio);
+      const topHeight = splitSize(contentHeight);
 
       return {
         'cell-0': { x: 0, y, width: leftWidth, height: contentHeight },
@@ -1787,9 +1793,9 @@ export class WindowManager {
       };
     }
 
-    const leftWidth = splitSize(width, this.horizontalRatio);
+    const leftWidth = splitSize(width);
     const rightWidth = Math.max(0, width - leftWidth - SPLITTER_SIZE);
-    const topHeight = splitSize(contentHeight, this.verticalRatio);
+    const topHeight = splitSize(contentHeight);
     const bottomHeight = Math.max(0, contentHeight - topHeight - SPLITTER_SIZE);
 
     return {
@@ -2023,6 +2029,11 @@ export class WindowManager {
     return isAppLanguage(storedLanguage) ? storedLanguage : getSystemLanguage();
   }
 
+  private getStoredConversationEntryMode(): ConversationEntryMode {
+    const storedMode = this.store.get('conversation.entryMode');
+    return isConversationEntryMode(storedMode) ? storedMode : 'embedded';
+  }
+
   private getStoredForwardControlsEnabled(): boolean {
     return Boolean(this.store.get('features.forwardControlsEnabled', false));
   }
@@ -2092,6 +2103,34 @@ export class WindowManager {
     }
   }
 
+  private syncAttachedViews(visibleCells: string[]): void {
+    visibleCells.forEach((cellId) => {
+      const view = this.ensureView(cellId);
+      if (!this.attachedViews.has(cellId)) {
+        this.addChildView(view);
+        this.attachedViews.add(cellId);
+      }
+    });
+
+    [...this.attachedViews].forEach((cellId) => {
+      const view = this.views.get(cellId);
+      if (view && !visibleCells.includes(cellId)) {
+        this.removeChildView(view);
+        this.attachedViews.delete(cellId);
+      }
+    });
+  }
+
+  private detachAllViews(): void {
+    [...this.attachedViews].forEach((cellId) => {
+      const view = this.views.get(cellId);
+      if (view) {
+        this.removeChildView(view);
+      }
+      this.attachedViews.delete(cellId);
+    });
+  }
+
   private removeChildView(view: WebContentsView): void {
     if (this.isDestroyed() || view.webContents.isDestroyed()) {
       return;
@@ -2148,16 +2187,12 @@ export class WindowManager {
   }
 }
 
-function splitSize(total: number, ratio: number): number {
+function splitSize(total: number): number {
   if (total <= SPLITTER_SIZE) {
     return 0;
   }
 
-  return Math.round((total - SPLITTER_SIZE) * clampRatio(ratio));
-}
-
-function clampRatio(ratio: number): number {
-  return Math.min(0.8, Math.max(0.2, ratio));
+  return Math.round((total - SPLITTER_SIZE) * 0.5);
 }
 
 function delay(ms: number): Promise<void> {
@@ -2196,6 +2231,10 @@ function isThemeMode(value: unknown): value is ThemeMode {
 
 function isAppLanguage(value: unknown): value is AppLanguage {
   return value === 'zh' || value === 'en';
+}
+
+function isConversationEntryMode(value: unknown): value is ConversationEntryMode {
+  return value === 'embedded' || value === 'api';
 }
 
 function getNewDiscussionUrl(rawUrl: string): string {

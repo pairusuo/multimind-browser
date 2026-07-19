@@ -8,11 +8,14 @@ import DocumentSummaryModal from './components/DocumentSummaryModal';
 import MemoryPanel from './components/MemoryPanel';
 import TemplateChooser from './components/TemplateChooser';
 import {
+  ApiConversationCellState,
+  ApiConversationConfig,
   BrowserState,
   CELL_IDS,
   AppLanguage,
   CellMode,
   CellTab,
+  ConversationEntryMode,
   DEFAULT_URLS,
   DocumentCandidate,
   LAYOUT_CELLS,
@@ -57,6 +60,18 @@ const INITIAL_MUTED_CELLS = CELL_IDS.reduce<Record<string, boolean>>((mutedCells
   return mutedCells;
 }, {});
 
+const DEFAULT_API_CONFIG: ApiConversationConfig = {
+  baseUrl: 'https://api.openai.com/v1',
+  models: ['gpt-4o-mini'],
+  cellModels: {
+    'cell-0': 'gpt-4o-mini',
+    'cell-1': '',
+    'cell-2': '',
+    'cell-3': '',
+  },
+  apiKeyConfigured: false,
+};
+
 export default function App() {
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('single');
   const [cellUrls, setCellUrls] = useState<Record<string, string>>(INITIAL_URLS);
@@ -69,6 +84,9 @@ export default function App() {
   const activeTabIdsRef = useRef<Record<string, string>>(INITIAL_ACTIVE_TAB_IDS);
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
   const [language, setLanguage] = useState<AppLanguage>('zh');
+  const [conversationEntryMode, setConversationEntryMode] = useState<ConversationEntryMode>('embedded');
+  const [apiConfig, setApiConfig] = useState<ApiConversationConfig>(DEFAULT_API_CONFIG);
+  const [apiCellStates, setApiCellStates] = useState<Record<string, ApiConversationCellState>>({});
   const [forwardControlsEnabled, setForwardControlsEnabled] = useState(false);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [showConfigPanel, setShowConfigPanel] = useState(false);
@@ -92,11 +110,19 @@ export default function App() {
       return;
     }
 
-    void window.electronAPI.getBrowserState().then(applyBrowserState);
+    void Promise.all([
+      window.electronAPI.getBrowserState(),
+      window.electronAPI.getApiConversationConfig(),
+    ]).then(([browserState, nextApiConfig]) => {
+      applyBrowserState(browserState);
+      setApiConfig(nextApiConfig);
+    });
   }, []);
 
   useEffect(() => {
-    void window.electronAPI.setOverlayOpen(showConfigPanel || showDocumentSummary || showMemoryPanel || !hasCompletedOnboarding);
+    void window.electronAPI.setOverlayOpen(
+      showConfigPanel || showDocumentSummary || showMemoryPanel || !hasCompletedOnboarding,
+    );
   }, [hasCompletedOnboarding, showConfigPanel, showDocumentSummary, showMemoryPanel]);
 
   useEffect(() => {
@@ -233,6 +259,105 @@ export default function App() {
     applyBrowserState(state);
   }
 
+  async function handleConversationEntryModeChange(mode: ConversationEntryMode) {
+    const state = await window.electronAPI.setConversationEntryMode(mode);
+    applyBrowserState(state);
+    if (mode === 'api') {
+      setMaximizedCellId(null);
+      await window.electronAPI.setMaximizedCell({ cellId: null });
+    }
+  }
+
+  async function handleSaveApiConfig(payload: { baseUrl: string; apiKey?: string; models: string[]; cellModels?: Record<string, string> }) {
+    const nextConfig = await window.electronAPI.saveApiConversationConfig(payload);
+    setApiConfig(nextConfig);
+    setApiCellStates((current) => buildApiCellStates(nextConfig.cellModels ?? {}, current));
+    return nextConfig;
+  }
+
+  async function handleApiCellModelChange(cellId: string, model: string) {
+    const nextCellModels = {
+      ...apiConfig.cellModels,
+      [cellId]: model,
+    };
+    const nextModels = apiConfig.models.includes(model) || !model
+      ? apiConfig.models
+      : [...apiConfig.models, model].slice(0, 4);
+    const nextConfig = await handleSaveApiConfig({
+      baseUrl: apiConfig.baseUrl,
+      models: nextModels,
+      cellModels: nextCellModels,
+    });
+    setApiCellStates((current) => buildApiCellStates(nextConfig.cellModels ?? {}, current));
+  }
+
+  async function handleApiForward(sourceCellId: string, targetCellId: string) {
+    const source = apiCellStates[sourceCellId];
+    const targetModel = apiConfig.cellModels?.[targetCellId] ?? '';
+    if (!source?.content.trim() || !targetModel || !apiConfig.apiKeyConfigured) {
+      return;
+    }
+
+    setApiCellStates((current) => markApiCells([{ cellId: targetCellId, model: targetModel }], current, 'running'));
+    const result = await window.electronAPI.runApiConversation({
+      prompt: buildApiForwardPrompt(source.model, source.content),
+      models: [targetModel],
+    });
+    const modelResult = result.results[0];
+    setApiCellStates((current) => ({
+      ...current,
+      [targetCellId]: {
+        model: targetModel,
+        content: modelResult?.content ?? '',
+        error: modelResult?.error,
+        elapsedMs: modelResult?.elapsedMs,
+        status: modelResult?.error ? 'error' : 'completed',
+      },
+    }));
+  }
+
+  async function handleSendUnifiedInput(text: string) {
+    if (conversationEntryMode === 'embedded') {
+      await window.electronAPI.sendToAll({ text });
+      return;
+    }
+
+    const visibleCells = getVisibleCells(layoutMode);
+    const targets = visibleCells
+      .map((cellId) => ({ cellId, model: apiConfig.cellModels?.[cellId] ?? '' }))
+      .filter((target) => target.model && activeCells[target.cellId]);
+
+    if (!apiConfig.apiKeyConfigured) {
+      setApiCellStates((current) => markApiCells(targets, current, 'error', i18n.t('apiConversation.errors.missingKey')));
+      return;
+    }
+
+    if (!targets.length) {
+      return;
+    }
+
+    setApiCellStates((current) => markApiCells(targets, current, 'running'));
+    const result = await window.electronAPI.runApiConversation({
+      prompt: text,
+      models: targets.map((target) => target.model),
+    });
+
+    setApiCellStates((current) => {
+      const next = { ...current };
+      targets.forEach((target) => {
+        const modelResult = result.results.find((item) => item.model === target.model);
+        next[target.cellId] = {
+          model: target.model,
+          content: modelResult?.content ?? '',
+          error: modelResult?.error,
+          elapsedMs: modelResult?.elapsedMs,
+          status: modelResult?.error ? 'error' : 'completed',
+        };
+      });
+      return next;
+    });
+  }
+
   async function handleNewTab(cellId: string, url?: string) {
     const state = await window.electronAPI.newTab({ cellId, url });
     applyBrowserState(state);
@@ -249,6 +374,11 @@ export default function App() {
   }
 
   async function handleStartNewDiscussion() {
+    if (conversationEntryMode === 'api') {
+      setApiCellStates((current) => buildApiCellStates(apiConfig.cellModels ?? {}, current, true));
+      return;
+    }
+
     const state = await window.electronAPI.startNewDiscussion();
     applyBrowserState(state);
   }
@@ -256,6 +386,11 @@ export default function App() {
   async function handleOpenDocumentSummary() {
     setDocumentError(null);
     setShowDocumentSummary(true);
+    if (conversationEntryMode === 'api') {
+      setDocumentCandidates(getApiDocumentCandidates(layoutMode, activeCells, apiCellStates));
+      return;
+    }
+
     const candidates = await window.electronAPI.getDocumentCandidates();
     setDocumentCandidates(candidates);
   }
@@ -264,6 +399,12 @@ export default function App() {
     setIsGeneratingDocument(true);
     setDocumentError(null);
     try {
+      if (conversationEntryMode === 'api') {
+        await generateApiDocument(summarizerCellId);
+        setShowDocumentSummary(false);
+        return;
+      }
+
       await window.electronAPI.generateDocument({ summarizerCellId });
       setShowDocumentSummary(false);
     } catch {
@@ -271,6 +412,34 @@ export default function App() {
     } finally {
       setIsGeneratingDocument(false);
     }
+  }
+
+  async function generateApiDocument(summarizerCellId: string) {
+    const model = apiConfig.cellModels?.[summarizerCellId] ?? '';
+    if (!model) {
+      throw new Error(i18n.t('apiConversation.errors.missingModel'));
+    }
+    if (!apiConfig.apiKeyConfigured) {
+      throw new Error(i18n.t('apiConversation.errors.missingKey'));
+    }
+
+    const prompt = buildApiDocumentPrompt(layoutMode, apiCellStates);
+    setApiCellStates((current) => markApiCells([{ cellId: summarizerCellId, model }], current, 'running'));
+    const result = await window.electronAPI.runApiConversation({
+      prompt,
+      models: [model],
+    });
+    const modelResult = result.results[0];
+    setApiCellStates((current) => ({
+      ...current,
+      [summarizerCellId]: {
+        model,
+        content: modelResult?.content ?? '',
+        error: modelResult?.error,
+        elapsedMs: modelResult?.elapsedMs,
+        status: modelResult?.error ? 'error' : 'completed',
+      },
+    }));
   }
 
   function handleToggleMaximizedCell(cellId: string) {
@@ -318,6 +487,7 @@ export default function App() {
     };
     setThemeMode(state.themeMode);
     setLanguage(state.language);
+    setConversationEntryMode(state.conversationEntryMode);
     setForwardControlsEnabled(state.forwardControlsEnabled);
     if (i18n.language !== state.language) {
       void i18n.changeLanguage(state.language);
@@ -365,6 +535,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <Toolbar
+        conversationEntryMode={conversationEntryMode}
         currentUrl={url}
         focusedCellId={focusedCellId}
         tabs={tabs[focusedCellId] ?? []}
@@ -377,13 +548,16 @@ export default function App() {
         onNavigate={(url) => void handleNavigate(url)}
       />
       <main
-        className={`browser-stage browser-stage-${layoutMode}${maximizedCellId ? ' browser-stage-maximized' : ''}`}
+        className={`browser-stage browser-stage-${layoutMode}${conversationEntryMode === 'api' ? ' browser-stage-api-mode' : ''}${maximizedCellId ? ' browser-stage-maximized' : ''}`}
         aria-label="Browser content"
       >
         <SplitView
           activeCells={activeCells}
+          apiCellStates={buildApiCellStates(apiConfig.cellModels ?? {}, apiCellStates)}
+          apiModels={apiConfig.models}
           cellModes={cellModes}
           cellUrls={cellUrls}
+          conversationEntryMode={conversationEntryMode}
           focusedCellId={focusedCellId}
           forwardControlsEnabled={forwardControlsEnabled}
           layoutMode={layoutMode}
@@ -392,14 +566,18 @@ export default function App() {
           onToggleMaximized={handleToggleMaximizedCell}
           onNewTab={(cellId, url) => void handleNewTab(cellId, url)}
           onToggleCell={handleToggleCell}
+          onApiCellModelChange={(cellId, model) => void handleApiCellModelChange(cellId, model)}
+          onApiForward={handleApiForward}
         />
       </main>
       {!maximizedCellId && (
         <BottomInput
           activeCells={activeCells}
-          cellUrls={cellUrls}
+          availableCells={getAvailableCells(conversationEntryMode, layoutMode, cellUrls, apiConfig.cellModels ?? {})}
+          conversationEntryMode={conversationEntryMode}
           layoutMode={layoutMode}
           onGenerateDocument={() => void handleOpenDocumentSummary()}
+          onSend={(text) => handleSendUnifiedInput(text)}
           onStartNewDiscussion={() => void handleStartNewDiscussion()}
           onToggleCell={handleToggleCell}
         />
@@ -411,14 +589,18 @@ export default function App() {
           cellModes={cellModes}
           searchUrlTemplates={searchUrlTemplates}
           language={language}
+          conversationEntryMode={conversationEntryMode}
+          apiConfig={apiConfig}
           forwardControlsEnabled={forwardControlsEnabled}
           layoutMode={layoutMode}
           themeMode={themeMode}
           onClose={() => setShowConfigPanel(false)}
           onLayoutChange={(mode) => void handleLayoutChange(mode)}
           onLanguageChange={(nextLanguage) => void handleLanguageChange(nextLanguage)}
+          onConversationEntryModeChange={(mode) => void handleConversationEntryModeChange(mode)}
           onForwardControlsEnabledChange={(enabled) => void handleForwardControlsEnabledChange(enabled)}
           onThemeModeChange={(mode) => void handleThemeModeChange(mode)}
+          onSaveApiConfig={(payload) => void handleSaveApiConfig(payload)}
           onOpenMemory={() => {
             setShowConfigPanel(false);
             setShowMemoryPanel(true);
@@ -440,6 +622,121 @@ export default function App() {
       {showMemoryPanel && <MemoryPanel onClose={() => setShowMemoryPanel(false)} />}
     </div>
   );
+}
+
+function buildApiCellStates(
+  cellModels: Record<string, string>,
+  current: Record<string, ApiConversationCellState>,
+  clearContent = false,
+): Record<string, ApiConversationCellState> {
+  return CELL_IDS.reduce<Record<string, ApiConversationCellState>>((states, cellId) => {
+    const model = cellModels[cellId] ?? '';
+    const existing = current[cellId];
+    states[cellId] = {
+      model,
+      content: !clearContent && existing?.model === model ? existing.content : '',
+      error: !clearContent && existing?.model === model ? existing.error : undefined,
+      elapsedMs: !clearContent && existing?.model === model ? existing.elapsedMs : undefined,
+      status: !clearContent && existing?.model === model ? existing.status : 'idle',
+    };
+    return states;
+  }, {});
+}
+
+function markApiCells(
+  targets: Array<{ cellId: string; model: string }>,
+  current: Record<string, ApiConversationCellState>,
+  status: ApiConversationCellState['status'],
+  error?: string,
+): Record<string, ApiConversationCellState> {
+  const next = { ...current };
+  targets.forEach((target) => {
+    next[target.cellId] = {
+      model: target.model,
+      content: status === 'running' ? '' : current[target.cellId]?.content ?? '',
+      error,
+      status,
+    };
+  });
+  return next;
+}
+
+function getAvailableCells(
+  mode: ConversationEntryMode,
+  layoutMode: LayoutMode,
+  cellUrls: Record<string, string>,
+  apiCellModels: Record<string, string>,
+): Record<string, boolean> {
+  return CELL_IDS.reduce<Record<string, boolean>>((available, cellId) => {
+    available[cellId] = mode === 'api'
+      ? Boolean(apiCellModels[cellId]?.trim())
+      : Boolean(cellUrls[cellId]?.trim());
+    return available;
+  }, {});
+}
+
+function getApiDocumentCandidates(
+  layoutMode: LayoutMode,
+  activeCells: Record<string, boolean>,
+  apiCellStates: Record<string, ApiConversationCellState>,
+): DocumentCandidate[] {
+  return LAYOUT_CELLS[layoutMode]
+    .filter((cellId) => {
+      const state = apiCellStates[cellId];
+      return Boolean(activeCells[cellId] && state?.model && state.content.trim());
+    })
+    .map((cellId) => ({
+      cellId,
+      url: `api:${apiCellStates[cellId].model}`,
+      active: Boolean(activeCells[cellId]),
+      hasTimeline: true,
+    }));
+}
+
+function buildApiDocumentPrompt(layoutMode: LayoutMode, apiCellStates: Record<string, ApiConversationCellState>): string {
+  const promptLanguage = detectApiPromptLanguage(
+    LAYOUT_CELLS[layoutMode]
+      .map((cellId) => apiCellStates[cellId]?.content ?? '')
+      .join('\n'),
+  );
+  const fixedT = i18n.getFixedT(promptLanguage);
+  const answerBlocks = LAYOUT_CELLS[layoutMode]
+    .map((cellId, index) => {
+      const state = apiCellStates[cellId];
+      if (!state?.model || !state.content.trim()) {
+        return '';
+      }
+      return `## ${fixedT('apiConversation.prompts.cellAnswerLabel', { index: index + 1, model: state.model })}\n${state.content.trim()}`;
+    })
+    .filter(Boolean)
+    .join('\n\n');
+
+  return [
+    fixedT('apiConversation.prompts.documentIntro'),
+    fixedT('apiConversation.prompts.documentInstruction'),
+    '',
+    fixedT('apiConversation.prompts.modelAnswersHeader'),
+    answerBlocks,
+  ].join('\n');
+}
+
+function buildApiForwardPrompt(sourceModel: string, sourceContent: string): string {
+  const fixedT = i18n.getFixedT(detectApiPromptLanguage(sourceContent));
+  return [
+    fixedT('apiConversation.prompts.forwardIntro'),
+    '',
+    fixedT('apiConversation.prompts.aiAnswerHeader'),
+    fixedT('apiConversation.prompts.modelLine', { model: sourceModel }),
+    sourceContent.trim(),
+    '',
+    fixedT('apiConversation.prompts.evaluateHeader'),
+    fixedT('apiConversation.prompts.evaluateInstruction'),
+  ].join('\n');
+}
+
+function detectApiPromptLanguage(text: string): AppLanguage {
+  const chineseCharCount = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
+  return chineseCharCount / Math.max(text.length, 1) > 0.15 ? 'zh' : 'en';
 }
 
 function patchTabList(tabs: CellTab[], tabId: string, patch: Partial<CellTab>): CellTab[] {

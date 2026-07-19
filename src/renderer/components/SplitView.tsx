@@ -1,12 +1,15 @@
-import { PointerEvent, useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { findPresetSiteByUrl } from '../../shared/presetSites';
-import { CELL_IDS, CellMode, LAYOUT_CELLS, LayoutMode } from '../../shared/types';
+import { ApiConversationCellState, CELL_IDS, CellMode, ConversationEntryMode, LAYOUT_CELLS, LayoutMode } from '../../shared/types';
 import GridCell from './GridCell';
 
 interface SplitViewProps {
   activeCells: Record<string, boolean>;
+  apiCellStates: Record<string, ApiConversationCellState>;
+  apiModels: string[];
   cellModes: Record<string, CellMode>;
   cellUrls: Record<string, string>;
+  conversationEntryMode: ConversationEntryMode;
   focusedCellId: string;
   forwardControlsEnabled: boolean;
   layoutMode: LayoutMode;
@@ -15,6 +18,8 @@ interface SplitViewProps {
   onToggleMaximized: (cellId: string) => void;
   onNewTab: (cellId: string, url?: string) => void;
   onToggleCell: (cellId: string, active: boolean) => void;
+  onApiCellModelChange: (cellId: string, model: string) => void;
+  onApiForward: (sourceCellId: string, targetCellId: string) => Promise<void>;
 }
 
 type CellFavicons = Record<string, string | null>;
@@ -26,8 +31,11 @@ const INITIAL_FAVICONS = CELL_IDS.reduce<CellFavicons>((favicons, cellId) => {
 
 export default function SplitView({
   activeCells,
+  apiCellStates,
+  apiModels,
   cellModes,
   cellUrls,
+  conversationEntryMode,
   focusedCellId,
   forwardControlsEnabled,
   layoutMode,
@@ -36,13 +44,12 @@ export default function SplitView({
   onToggleMaximized,
   onNewTab,
   onToggleCell,
+  onApiCellModelChange,
+  onApiForward,
 }: SplitViewProps) {
   const [cellFavicons, setCellFavicons] = useState<CellFavicons>(INITIAL_FAVICONS);
-  const [horizontalRatio, setHorizontalRatio] = useState(0.5);
-  const [verticalRatio, setVerticalRatio] = useState(0.5);
   const layoutCells = LAYOUT_CELLS[layoutMode];
   const visibleCells = maximizedCellId && layoutCells.includes(maximizedCellId) ? [maximizedCellId] : layoutCells;
-  const showSplitters = !maximizedCellId;
 
   useEffect(() => {
     const removeFaviconListener = window.electronAPI.onCellFaviconChanged((payload) => {
@@ -57,60 +64,9 @@ export default function SplitView({
     };
   }, []);
 
-  const gridStyle = useMemo(
-    () => ({
-      gridTemplateColumns:
-        maximizedCellId
-          ? '1fr'
-          : layoutMode === 'horizontal' || layoutMode === 'triple' || layoutMode === 'quad'
-          ? `${horizontalRatio}fr 4px ${1 - horizontalRatio}fr`
-          : '1fr',
-      gridTemplateRows:
-        maximizedCellId
-          ? '1fr'
-          : layoutMode === 'vertical' || layoutMode === 'triple' || layoutMode === 'quad'
-          ? `${verticalRatio}fr 4px ${1 - verticalRatio}fr`
-          : '1fr',
-    }),
-    [horizontalRatio, layoutMode, maximizedCellId, verticalRatio],
-  );
-
-  function handleHorizontalDrag(event: PointerEvent<HTMLDivElement>) {
-    const rect = event.currentTarget.parentElement?.getBoundingClientRect();
-    if (!rect) {
-      return;
-    }
-
-    const nextRatio = clamp((event.clientX - rect.left) / rect.width);
-    setHorizontalRatio(nextRatio);
-    void window.electronAPI.setSplitRatios({ horizontalRatio: nextRatio });
-  }
-
-  function handleVerticalDrag(event: PointerEvent<HTMLDivElement>) {
-    const rect = event.currentTarget.parentElement?.getBoundingClientRect();
-    if (!rect) {
-      return;
-    }
-
-    const nextRatio = clamp((event.clientY - rect.top) / rect.height);
-    setVerticalRatio(nextRatio);
-    void window.electronAPI.setSplitRatios({ verticalRatio: nextRatio });
-  }
-
-  function startHorizontalDrag(event: PointerEvent<HTMLDivElement>) {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    handleHorizontalDrag(event);
-  }
-
-  function startVerticalDrag(event: PointerEvent<HTMLDivElement>) {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    handleVerticalDrag(event);
-  }
-
   return (
     <section
       className={`split-view split-view-${layoutMode}${maximizedCellId ? ' split-view-maximized' : ''}`}
-      style={gridStyle}
       aria-label="Split browser cells"
     >
       {visibleCells.includes('cell-0') && (
@@ -118,28 +74,20 @@ export default function SplitView({
           cellId="cell-0"
           className="cell-a"
           focused={focusedCellId === 'cell-0'}
+          conversationEntryMode={conversationEntryMode}
+          apiState={apiCellStates['cell-0']}
+          apiModels={apiModels}
           layoutMode={layoutMode}
           maximized={maximizedCellId === 'cell-0'}
           showForwardControl={forwardControlsEnabled}
-          targetCells={getTargetCells('cell-0', layoutCells, cellUrls)}
-          meta={getCellMeta('cell-0', cellUrls, cellModes, activeCells, cellFavicons)}
+          targetCells={getTargetCells('cell-0', layoutCells, cellUrls, conversationEntryMode, apiCellStates)}
+          meta={getCellMeta('cell-0', cellUrls, cellModes, activeCells, cellFavicons, conversationEntryMode)}
           onFocus={onFocusCell}
           onToggleMaximized={onToggleMaximized}
           onNewTab={onNewTab}
           onToggle={onToggleCell}
-        />
-      )}
-      {showSplitters && (layoutMode === 'horizontal' || layoutMode === 'triple' || layoutMode === 'quad') && (
-        <div
-          className="splitter splitter-vertical"
-          role="separator"
-          aria-orientation="vertical"
-          onPointerDown={startHorizontalDrag}
-          onPointerMove={(event) => {
-            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-              handleHorizontalDrag(event);
-            }
-          }}
+          onApiModelChange={onApiCellModelChange}
+          onApiForward={onApiForward}
         />
       )}
       {visibleCells.includes('cell-1') && (
@@ -147,28 +95,20 @@ export default function SplitView({
           cellId="cell-1"
           className="cell-b"
           focused={focusedCellId === 'cell-1'}
+          conversationEntryMode={conversationEntryMode}
+          apiState={apiCellStates['cell-1']}
+          apiModels={apiModels}
           layoutMode={layoutMode}
           maximized={maximizedCellId === 'cell-1'}
           showForwardControl={forwardControlsEnabled}
-          targetCells={getTargetCells('cell-1', layoutCells, cellUrls)}
-          meta={getCellMeta('cell-1', cellUrls, cellModes, activeCells, cellFavicons)}
+          targetCells={getTargetCells('cell-1', layoutCells, cellUrls, conversationEntryMode, apiCellStates)}
+          meta={getCellMeta('cell-1', cellUrls, cellModes, activeCells, cellFavicons, conversationEntryMode)}
           onFocus={onFocusCell}
           onToggleMaximized={onToggleMaximized}
           onNewTab={onNewTab}
           onToggle={onToggleCell}
-        />
-      )}
-      {showSplitters && (layoutMode === 'vertical' || layoutMode === 'triple' || layoutMode === 'quad') && (
-        <div
-          className="splitter splitter-horizontal"
-          role="separator"
-          aria-orientation="horizontal"
-          onPointerDown={startVerticalDrag}
-          onPointerMove={(event) => {
-            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-              handleVerticalDrag(event);
-            }
-          }}
+          onApiModelChange={onApiCellModelChange}
+          onApiForward={onApiForward}
         />
       )}
       {visibleCells.includes('cell-2') && (
@@ -176,15 +116,20 @@ export default function SplitView({
           cellId="cell-2"
           className="cell-c"
           focused={focusedCellId === 'cell-2'}
+          conversationEntryMode={conversationEntryMode}
+          apiState={apiCellStates['cell-2']}
+          apiModels={apiModels}
           layoutMode={layoutMode}
           maximized={maximizedCellId === 'cell-2'}
           showForwardControl={forwardControlsEnabled}
-          targetCells={getTargetCells('cell-2', layoutCells, cellUrls)}
-          meta={getCellMeta('cell-2', cellUrls, cellModes, activeCells, cellFavicons)}
+          targetCells={getTargetCells('cell-2', layoutCells, cellUrls, conversationEntryMode, apiCellStates)}
+          meta={getCellMeta('cell-2', cellUrls, cellModes, activeCells, cellFavicons, conversationEntryMode)}
           onFocus={onFocusCell}
           onToggleMaximized={onToggleMaximized}
           onNewTab={onNewTab}
           onToggle={onToggleCell}
+          onApiModelChange={onApiCellModelChange}
+          onApiForward={onApiForward}
         />
       )}
       {visibleCells.includes('cell-3') && (
@@ -192,15 +137,20 @@ export default function SplitView({
           cellId="cell-3"
           className="cell-d"
           focused={focusedCellId === 'cell-3'}
+          conversationEntryMode={conversationEntryMode}
+          apiState={apiCellStates['cell-3']}
+          apiModels={apiModels}
           layoutMode={layoutMode}
           maximized={maximizedCellId === 'cell-3'}
           showForwardControl={forwardControlsEnabled}
-          targetCells={getTargetCells('cell-3', layoutCells, cellUrls)}
-          meta={getCellMeta('cell-3', cellUrls, cellModes, activeCells, cellFavicons)}
+          targetCells={getTargetCells('cell-3', layoutCells, cellUrls, conversationEntryMode, apiCellStates)}
+          meta={getCellMeta('cell-3', cellUrls, cellModes, activeCells, cellFavicons, conversationEntryMode)}
           onFocus={onFocusCell}
           onToggleMaximized={onToggleMaximized}
           onNewTab={onNewTab}
           onToggle={onToggleCell}
+          onApiModelChange={onApiCellModelChange}
+          onApiForward={onApiForward}
         />
       )}
     </section>
@@ -213,16 +163,34 @@ function getCellMeta(
   cellModes: Record<string, CellMode>,
   activeCells: Record<string, boolean>,
   favicons: CellFavicons,
+  conversationEntryMode: ConversationEntryMode,
 ) {
   return {
     url: cellUrls[cellId] ?? '',
     mode: cellModes[cellId] ?? 'chat',
     favicon: favicons[cellId] ?? null,
-    active: Boolean(activeCells[cellId] && cellUrls[cellId]?.trim()),
+    active: conversationEntryMode === 'api'
+      ? Boolean(activeCells[cellId])
+      : Boolean(activeCells[cellId] && cellUrls[cellId]?.trim()),
   };
 }
 
-function getTargetCells(sourceCellId: string, visibleCells: string[], cellUrls: Record<string, string>) {
+function getTargetCells(
+  sourceCellId: string,
+  visibleCells: string[],
+  cellUrls: Record<string, string>,
+  conversationEntryMode: ConversationEntryMode,
+  apiCellStates: Record<string, ApiConversationCellState>,
+) {
+  if (conversationEntryMode === 'api') {
+    return visibleCells
+      .filter((cellId) => cellId !== sourceCellId && Boolean(apiCellStates[cellId]?.model))
+      .map((cellId) => ({
+        cellId,
+        label: apiCellStates[cellId].model,
+      }));
+  }
+
   return visibleCells
     .filter((cellId) => cellId !== sourceCellId && Boolean(cellUrls[cellId]?.trim()))
     .map((cellId) => ({
@@ -242,8 +210,4 @@ function getCellLabel(url: string, cellId: string): string {
   } catch {
     return url || cellId.replace('cell-', 'Cell ');
   }
-}
-
-function clamp(value: number): number {
-  return Math.min(0.8, Math.max(0.2, value));
 }

@@ -17,6 +17,9 @@
       "placeholder": "Enter a URL or search",
       "geminiRestricted": "Gemini login restricted"
     },
+    "apiMode": {
+      "title": "API Model Conversation"
+    },
     "layout": {
       "label": "Layout",
       "single": "Single view",
@@ -43,6 +46,7 @@
     "empty": "Empty cell",
     "aria": {
       "browserCell": "{{host}} browser cell",
+      "apiCell": "{{host}} API model cell",
       "controls": "{{host}} cell controls"
     },
     "mode": {
@@ -67,6 +71,15 @@
         "completedTruncated": "Forwarded to {{target}} (long content truncated)",
         "failed": "Forward to {{target}} did not complete"
       }
+    },
+    "api": {
+      "emptyModel": "No model configured",
+      "noModel": "Configure a model for this cell in Settings.",
+      "placeholder": "Ask a question to show this model's response here.",
+      "running": "Model is responding...",
+      "failed": "Model request failed",
+      "elapsed": "{{seconds}}s",
+      "modelSelect": "Select model"
     }
   },
   "bottomInput": {
@@ -80,7 +93,8 @@
     "cellToggle": {
       "title": "Toggle cell {{index}}",
       "aria": "Toggle cell {{index}}",
-      "noUrl": "Cell {{index}} has no URL"
+      "noUrl": "Cell {{index}} has no URL",
+      "noModel": "Cell {{index}} has no model configured"
     }
   },
   "documentSummary": {
@@ -98,6 +112,22 @@
     "errors": {
       "noCandidates": "No discussion cells are available for summarization in the current layout.",
       "generateFailed": "Could not send the summary instruction. Confirm the summarizer cell is logged in and supports batch sending."
+    }
+  },
+  "templateChooser": {
+    "title": "Choose Initial Layout",
+    "aria": {
+      "panel": "Choose layout template"
+    },
+    "cellCount": "{{count}} cells",
+    "templates": {
+      "big-four": "China and US Leaders",
+      "china-two": "China Duo",
+      "us-two": "US Duo"
+    },
+    "custom": {
+      "name": "Custom",
+      "description": "Choose sites manually"
     }
   },
   "memory": {
@@ -264,6 +294,23 @@
   "riskySites": {
     "geminiGoogleLogin": "This site only supports Google account login. Google restricts login in embedded browsers, so it may not work properly."
   },
+  "apiConversation": {
+    "errors": {
+      "missingKey": "Save an API Key in Settings first",
+      "missingModel": "Choose a model for this cell first"
+    },
+    "prompts": {
+      "documentIntro": "Create a reliable structured summary document based on the following answers from multiple AI models to the same question.",
+      "documentInstruction": "Extract consensus, identify disagreements and uncertainty, preserve actionable conclusions, and do not describe the comparison process.",
+      "modelAnswersHeader": "# Model Answers",
+      "cellAnswerLabel": "Cell {{index}} - {{model}}",
+      "forwardIntro": "Below is an answer from another AI model.",
+      "aiAnswerHeader": "# AI Answer",
+      "modelLine": "Model: {{model}}",
+      "evaluateHeader": "# Your Evaluation",
+      "evaluateInstruction": "Evaluate this answer: are there omissions, errors, or points that need elaboration or rebuttal? Provide a more reliable conclusion."
+    }
+  },
   "settings": {
     "title": "Settings",
     "layout": {
@@ -291,9 +338,24 @@
         "en": "English"
       }
     },
+    "conversationEntry": {
+      "label": "Entry",
+      "options": {
+        "embedded": "Embedded sites",
+        "api": "API models"
+      }
+    },
     "memory": {
       "label": "Long-term memory",
       "open": "Open memory library"
+    },
+    "apiConversation": {
+      "baseUrl": "API URL",
+      "apiKey": "API Key",
+      "apiKeyPlaceholder": "Enter API Key",
+      "apiKeyConfigured": "Saved. Leave blank to keep it",
+      "models": "Available models",
+      "cellModelHint": "You can also switch this in the cell header"
     },
     "forward": {
       "label": "Forward",

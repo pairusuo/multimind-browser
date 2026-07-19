@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { CellMode, CellNoticePayload, LayoutMode } from '../../shared/types';
+import type { ApiConversationCellState, CellMode, CellNoticePayload, ConversationEntryMode, LayoutMode } from '../../shared/types';
 import CellNotice from './CellNotice';
 
 const shownNoticeKeys = new Set<string>();
@@ -10,6 +10,9 @@ interface GridCellProps {
   cellId: string;
   className: string;
   focused: boolean;
+  conversationEntryMode: ConversationEntryMode;
+  apiState: ApiConversationCellState | undefined;
+  apiModels: string[];
   layoutMode: LayoutMode;
   maximized: boolean;
   showForwardControl: boolean;
@@ -24,12 +27,17 @@ interface GridCellProps {
   onToggleMaximized: (cellId: string) => void;
   onNewTab: (cellId: string, url?: string) => void;
   onToggle: (cellId: string, active: boolean) => void;
+  onApiModelChange: (cellId: string, model: string) => void;
+  onApiForward: (sourceCellId: string, targetCellId: string) => Promise<void>;
 }
 
 export default function GridCell({
   cellId,
   className,
   focused,
+  conversationEntryMode,
+  apiState,
+  apiModels,
   layoutMode,
   maximized,
   showForwardControl,
@@ -39,9 +47,12 @@ export default function GridCell({
   onToggleMaximized,
   onNewTab,
   onToggle,
+  onApiModelChange,
+  onApiForward,
 }: GridCellProps) {
   const { t } = useTranslation();
-  const host = safeHost(meta.url, t('gridCell.empty'));
+  const isApiMode = conversationEntryMode === 'api';
+  const host = isApiMode ? apiState?.model || t('gridCell.api.emptyModel') : safeHost(meta.url, t('gridCell.empty'));
   const [notice, setNotice] = useState<CellNoticePayload | null>(null);
   const [targetPickerOpen, setTargetPickerOpen] = useState(false);
   const [forwardingTargetId, setForwardingTargetId] = useState<string | null>(null);
@@ -73,10 +84,15 @@ export default function GridCell({
     setForwardStatus(t('gridCell.forward.status.forwarding', { target: targetLabel }));
 
     try {
-      const record = await window.electronAPI.forwardResponse({ sourceCellId: cellId, targetCellId });
-      setForwardStatus(record.sourceTruncated
-        ? t('gridCell.forward.status.completedTruncated', { target: targetLabel })
-        : t('gridCell.forward.status.completed', { target: targetLabel }));
+      if (isApiMode) {
+        await onApiForward(cellId, targetCellId);
+        setForwardStatus(t('gridCell.forward.status.completed', { target: targetLabel }));
+      } else {
+        const record = await window.electronAPI.forwardResponse({ sourceCellId: cellId, targetCellId });
+        setForwardStatus(record.sourceTruncated
+          ? t('gridCell.forward.status.completedTruncated', { target: targetLabel })
+          : t('gridCell.forward.status.completed', { target: targetLabel }));
+      }
     } catch (error) {
       console.error('Forward response failed:', error);
       setForwardStatus(t('gridCell.forward.status.failed', { target: targetLabel }));
@@ -87,8 +103,8 @@ export default function GridCell({
 
   return (
     <article
-      className={`grid-cell ${className}${focused ? ' focused' : ''}${maximized ? ' maximized' : ''}`}
-      aria-label={t('gridCell.aria.browserCell', { host })}
+      className={`grid-cell ${className}${isApiMode ? ' api-grid-cell' : ''}${focused ? ' focused' : ''}${maximized ? ' maximized' : ''}`}
+      aria-label={t(isApiMode ? 'gridCell.aria.apiCell' : 'gridCell.aria.browserCell', { host })}
       onClick={() => onFocus(cellId, meta.url)}
     >
       <div className="cell-header">
@@ -131,13 +147,30 @@ export default function GridCell({
         ) : (
           <>
             <div className="cell-overlay" aria-live="polite">
-              {meta.favicon ? <img src={meta.favicon} alt="" /> : <span className="favicon-placeholder" />}
-              {meta.mode === 'search' && <span className="cell-mode-badge" title={t('gridCell.mode.search')}>⌕</span>}
-              <span>{host}</span>
+              {isApiMode ? <span className="favicon-placeholder api-favicon-placeholder" /> : meta.favicon ? <img src={meta.favicon} alt="" /> : <span className="favicon-placeholder" />}
+              {!isApiMode && meta.mode === 'search' && <span className="cell-mode-badge" title={t('gridCell.mode.search')}>⌕</span>}
+              {isApiMode ? (
+                <select
+                  className="api-model-select"
+                  value={apiState?.model ?? ''}
+                  aria-label={t('gridCell.api.modelSelect')}
+                  onClick={(event) => event.stopPropagation()}
+                  onChange={(event) => onApiModelChange(cellId, event.target.value)}
+                >
+                  <option value="">{t('gridCell.api.emptyModel')}</option>
+                  {getApiModelOptions(apiState?.model ?? '', apiModels).map((model) => (
+                    <option key={model} value={model}>
+                      {model}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span>{host}</span>
+              )}
             </div>
-            {showCellMenu && (
+            {(isApiMode || showCellMenu) && (
               <div className="cell-menu" aria-label={t('gridCell.aria.controls', { host })}>
-              {showForwardControl && targetCells.length > 0 && (
+              {showForwardControl && targetCells.length > 0 && (!isApiMode || Boolean(apiState?.content.trim())) && (
                 <button
                   type="button"
                   title={t('gridCell.actions.forwardTo')}
@@ -164,12 +197,16 @@ export default function GridCell({
               >
                 {maximized ? '▣' : '□'}
               </button>
-              <button type="button" title={t('gridCell.actions.reload')} aria-label={t('gridCell.actions.reloadCell')} onClick={() => window.electronAPI.reload(cellId)}>
-                ↻
-              </button>
-              <button type="button" title={t('gridCell.actions.newTab')} aria-label={t('gridCell.actions.newTab')} onClick={() => onNewTab(cellId)}>
-                +
-              </button>
+              {!isApiMode && (
+                <>
+                  <button type="button" title={t('gridCell.actions.reload')} aria-label={t('gridCell.actions.reloadCell')} onClick={() => window.electronAPI.reload(cellId)}>
+                    ↻
+                  </button>
+                  <button type="button" title={t('gridCell.actions.newTab')} aria-label={t('gridCell.actions.newTab')} onClick={() => onNewTab(cellId)}>
+                    +
+                  </button>
+                </>
+              )}
               <button
                 type="button"
                 className={meta.active ? 'active' : ''}
@@ -185,13 +222,63 @@ export default function GridCell({
           </>
         )}
       </div>
+      {isApiMode && <ApiCellBody state={apiState} />}
       {notice && <CellNotice notice={notice} onClose={() => setNotice(null)} />}
     </article>
   );
 }
 
+function ApiCellBody({ state }: { state: ApiConversationCellState | undefined }) {
+  const { t } = useTranslation();
+
+  if (!state?.model) {
+    return (
+      <div className="api-cell-body api-cell-empty">
+        <p>{t('gridCell.api.noModel')}</p>
+      </div>
+    );
+  }
+
+  if (state.status === 'running') {
+    return (
+      <div className="api-cell-body api-cell-empty" role="status">
+        <p>{t('gridCell.api.running')}</p>
+      </div>
+    );
+  }
+
+  if (state.status === 'error') {
+    return (
+      <div className="api-cell-body">
+        <p className="api-cell-error">{state.error || t('gridCell.api.failed')}</p>
+      </div>
+    );
+  }
+
+  if (!state.content) {
+    return (
+      <div className="api-cell-body api-cell-empty">
+        <p>{t('gridCell.api.placeholder')}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="api-cell-body">
+      {typeof state.elapsedMs === 'number' && (
+        <div className="api-cell-meta">{t('gridCell.api.elapsed', { seconds: (state.elapsedMs / 1000).toFixed(1) })}</div>
+      )}
+      <pre>{state.content}</pre>
+    </div>
+  );
+}
+
 function getTargetLabel(targetCells: Array<{ cellId: string; label: string }>, cellId: string): string {
   return targetCells.find((target) => target.cellId === cellId)?.label ?? cellId.replace('cell-', 'Cell ');
+}
+
+function getApiModelOptions(selectedModel: string, models: string[]): string[] {
+  return selectedModel && !models.includes(selectedModel) ? [selectedModel, ...models] : models;
 }
 
 function safeHost(url: string, emptyLabel: string): string {

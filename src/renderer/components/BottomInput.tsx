@@ -1,23 +1,27 @@
 import { KeyboardEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { LAYOUT_CELLS, LayoutMode } from '../../shared/types';
+import { ConversationEntryMode, LAYOUT_CELLS, LayoutMode } from '../../shared/types';
 
 const newConversationIconUrl = new URL('../assets/new-conversation.svg', import.meta.url).href;
 
 interface BottomInputProps {
   activeCells: Record<string, boolean>;
-  cellUrls: Record<string, string>;
+  availableCells: Record<string, boolean>;
+  conversationEntryMode: ConversationEntryMode;
   layoutMode: LayoutMode;
   onGenerateDocument: () => void;
+  onSend: (text: string) => Promise<void>;
   onStartNewDiscussion: () => void;
   onToggleCell: (cellId: string, active: boolean) => void;
 }
 
 export default function BottomInput({
   activeCells,
-  cellUrls,
+  availableCells,
+  conversationEntryMode,
   layoutMode,
   onGenerateDocument,
+  onSend,
   onStartNewDiscussion,
   onToggleCell,
 }: BottomInputProps) {
@@ -27,7 +31,7 @@ export default function BottomInput({
   const [isSending, setIsSending] = useState(false);
   const visibleCells = LAYOUT_CELLS[layoutMode];
 
-  if (layoutMode === 'single') {
+  if (layoutMode === 'single' && conversationEntryMode === 'embedded') {
     return null;
   }
 
@@ -39,7 +43,7 @@ export default function BottomInput({
 
     setIsSending(true);
     try {
-      await window.electronAPI.sendToAll({ text: nextText });
+      await onSend(nextText);
       setLastSentText(nextText);
       setText('');
     } finally {
@@ -61,20 +65,20 @@ export default function BottomInput({
   }
 
   return (
-    <aside className="bottom-input-shell" aria-label={t('bottomInput.label')}>
+    <aside className={`bottom-input-shell${conversationEntryMode === 'api' ? ' bottom-input-api-mode' : ''}`} aria-label={t('bottomInput.label')}>
       <div className="sync-cell-toggles" aria-label={t('bottomInput.syncCells')}>
         {visibleCells.map((cellId, index) => {
-          const hasUrl = Boolean(cellUrls[cellId]?.trim());
-          const active = Boolean(activeCells[cellId] && hasUrl);
+          const available = Boolean(availableCells[cellId]);
+          const active = Boolean(activeCells[cellId] && available);
           return (
             <button
               key={cellId}
               type="button"
               className={active ? 'active' : ''}
-              disabled={!hasUrl || isSending}
-              title={hasUrl
+              disabled={!available || isSending}
+              title={available
                 ? t('bottomInput.cellToggle.title', { index: index + 1 })
-                : t('bottomInput.cellToggle.noUrl', { index: index + 1 })}
+                : t(conversationEntryMode === 'api' ? 'bottomInput.cellToggle.noModel' : 'bottomInput.cellToggle.noUrl', { index: index + 1 })}
               aria-label={t('bottomInput.cellToggle.aria', { index: index + 1 })}
               aria-pressed={active}
               onClick={() => onToggleCell(cellId, !active)}
@@ -89,6 +93,7 @@ export default function BottomInput({
         className="new-discussion-button"
         title={t('bottomInput.newDiscussion')}
         aria-label={t('bottomInput.newDiscussion')}
+        disabled={isSending}
         onClick={onStartNewDiscussion}
       >
         <img src={newConversationIconUrl} alt="" />

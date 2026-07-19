@@ -53,6 +53,10 @@ export default function DocumentSummaryModal({
 }
 
 function getCandidateLabel(candidate: DocumentCandidate, index: number, formatCellLabel: (index: number) => string): string {
+  if (candidate.url.startsWith('api:')) {
+    return `${formatCellLabel(index + 1)} - ${candidate.url.slice(4)}`;
+  }
+
   const site = findPresetSiteByUrl(candidate.url);
   if (site) {
     return `${formatCellLabel(index + 1)} - ${site.name}`;
