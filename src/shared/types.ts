@@ -139,6 +139,7 @@ export interface MemoryInboxDocument {
   item: MemoryInboxItem;
   contentMarkdown: string;
   suggestedTitle: string;
+  suggestedTags: string[];
 }
 
 export interface ImportMemoryDocumentPayload {
@@ -203,7 +204,14 @@ export interface MemoryRecallItem {
   tags: string[];
   score: number;
   matchReasons: MemoryRecallReason[];
+  scoreDetails: MemoryRecallScoreDetail[];
   excerpt: string;
+}
+
+export interface MemoryRecallScoreDetail {
+  reason: MemoryRecallReason;
+  score: number;
+  matches?: string[];
 }
 
 export type MemoryRecallReason =

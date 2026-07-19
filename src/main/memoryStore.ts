@@ -8,6 +8,7 @@ import {
   extractMeaningfulCjkChars,
   extractRecallTerms,
   inferMemoryType,
+  inferMemoryTags,
   memoryScopeWeight,
   memoryTypeWeight,
   normalizeMemoryDocumentType,
@@ -155,10 +156,12 @@ export class MemoryStore {
     }
 
     const { content: contentMarkdown } = await readFileSnapshot(filePath);
+    const suggestedTitle = extractMarkdownTitle(contentMarkdown, item.fileName);
     return {
       item,
       contentMarkdown,
-      suggestedTitle: extractMarkdownTitle(contentMarkdown, item.fileName),
+      suggestedTitle,
+      suggestedTags: inferMemoryTags(suggestedTitle, contentMarkdown),
     };
   }
 
@@ -177,7 +180,8 @@ export class MemoryStore {
     }
 
     const title = (payload.title || extractMarkdownTitle(contentMarkdown, filePath ? path.basename(filePath) : 'Untitled')).trim();
-    const memoryType = payload.memoryType ?? inferMemoryType(title, payload.tags ?? [], contentMarkdown);
+    const tags = inferMemoryTags(title, contentMarkdown, payload.tags ?? []);
+    const memoryType = payload.memoryType ?? inferMemoryType(title, tags, contentMarkdown);
     const memoryScope = normalizeMemoryScope(payload.memoryScope);
     const sourceHash = fileSnapshot?.hash ?? hashText(contentMarkdown);
     const existingByHash = this.findDocumentByHash(sourceHash);
@@ -191,6 +195,7 @@ export class MemoryStore {
     const documentToUpdate = existingByPath ?? disabledByPath ?? disabledByHash;
     if (documentToUpdate) {
       const nextVersion = documentToUpdate.version + (documentToUpdate.source_hash === sourceHash ? 0 : 1);
+      const updatedTags = inferMemoryTags(title, contentMarkdown, payload.tags ?? parseJsonArray(documentToUpdate.tags_json));
       const updated = {
         id: documentToUpdate.id,
         title,
@@ -199,7 +204,7 @@ export class MemoryStore {
         original_question: payload.originalQuestion?.trim() ?? documentToUpdate.original_question,
         participant_sites_json: JSON.stringify(payload.participantSites ?? parseJsonArray(documentToUpdate.participant_sites_json)),
         content_markdown: contentMarkdown,
-        tags_json: JSON.stringify(payload.tags ?? parseJsonArray(documentToUpdate.tags_json)),
+        tags_json: JSON.stringify(updatedTags),
         source_type: filePath ? 'directory-import' : documentToUpdate.source_type,
         source_path: filePath ?? documentToUpdate.source_path,
         source_hash: sourceHash,
@@ -244,7 +249,7 @@ export class MemoryStore {
       original_question: payload.originalQuestion?.trim() ?? '',
       participant_sites_json: JSON.stringify(payload.participantSites ?? []),
       content_markdown: contentMarkdown,
-      tags_json: JSON.stringify(payload.tags ?? []),
+      tags_json: JSON.stringify(tags),
       source_type: filePath ? 'directory-import' : 'manual-paste',
       source_path: filePath,
       source_hash: sourceHash,
@@ -345,6 +350,7 @@ export class MemoryStore {
           tags: document.tags,
           score: ranking.score,
           matchReasons: ranking.matchReasons,
+          scoreDetails: ranking.scoreDetails,
           excerpt,
         };
       })

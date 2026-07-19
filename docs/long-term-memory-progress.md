@@ -58,6 +58,21 @@ The current UI should be used to collect stable, user-confirmed conclusions:
 
 It should not be used as a high-weight store for raw AI answer dumps, full intermediate debate logs, temporary task status, or unreviewed automatic summaries.
 
+## Recall Strategy Boundaries
+
+Current recall is still a conservative local keyword strategy, not semantic memory. It should be treated as an inspectable first version:
+
+- title, tags, original question, and body text are the primary relevance signals;
+- memory type, scope, and recency can only boost a document after textual relevance is already present;
+- generic task words such as "plan", "recommend", "analyze", or "how" must not create relevance by themselves;
+- CJK single-character fallback is only a temporary weak signal for user-profile memories, mainly to catch short personal constraints such as "吃/喝" matching "不吃辣/不喝酒";
+- reference, project, and decision-rule memories must not be recalled from scattered CJK character overlap alone;
+- domain-specific synonym expansion must not be added to core recall logic.
+
+Good recall quality depends on confirmed metadata. Import should encourage useful tags such as `饮食`, `旅行`, `不吃辣`, `不喝酒`, `投资`, `风险厌恶`, `本金安全`, and project names. These tags are not a replacement for semantic retrieval, but they make the current local recall less brittle and easier to inspect.
+
+The recall debug UI should show both the recalled documents and why they scored: matched title/tag/body signals, score increments, CJK fallback markers, type/scope boosts, and the final hidden Agent context. This keeps the system debuggable while vector retrieval is not yet implemented.
+
 ## Agent Recall Direction
 
 The next major product step is not more library management. The next step is making memory available to the built-in Agent.
@@ -163,6 +178,14 @@ Long-term architecture should use hybrid retrieval:
 
 An external vector database service is not required for the next version. A local SQLite-compatible vector extension or local vector store can be evaluated later after the product loop proves useful.
 
+Vector-search PoC should be planned but not rushed into production:
+
+1. Split each confirmed memory into stable snippets with document id, type, scope, tags, and source metadata.
+2. Generate embeddings locally if practical; if an external embedding API is used, make the privacy tradeoff explicit.
+3. Compare keyword-only recall, vector-only recall, and hybrid recall in the debug UI for the same Agent task.
+4. Keep current user instruction priority and disabled-memory exclusion as hard rules.
+5. Promote vector retrieval only after it reduces real false negatives without increasing unrelated recalls.
+
 ## Progress Log
 
 - 2026-07-14: Confirmed architecture and updated `MultiMind_设计文档_v0.2.md` and `AGENTS.md`.
@@ -195,6 +218,7 @@ An external vector database service is not required for the next version. A loca
 - 2026-07-19: Tightened recall relevance after manual testing. Generic words such as "plan" and "recommend" no longer create enough body-match score by themselves. Domain-specific synonym expansion was removed from core recall logic; recall now requires real title, tag, original-question, or body relevance before applying type, scope, or recency boosts.
 - 2026-07-19: Clarified that API-based multi-model answering is a parallel memory-production entry alongside embedded website discussions. Both routes should produce candidate Markdown memories and reuse the same confirmation, storage, and Agent recall pipeline.
 - 2026-07-19: Split long-term-memory rules from storage orchestration. `memoryStore.ts` now delegates recall/type heuristics to `memoryRecallRules.ts` and Agent hidden-context text to `agentMemoryContext.ts`, so Chinese retrieval rules and Agent templates are no longer mixed into the SQLite store implementation.
+- 2026-07-19: Added import metadata suggestions and recall score details. Inbox preview now proposes conservative tags, import preserves/merges metadata tags, and recall debug results expose per-reason score increments plus matched words or CJK fallback markers.
 
 ## Implementation Checklist
 

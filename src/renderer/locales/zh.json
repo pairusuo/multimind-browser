@@ -185,6 +185,7 @@
       "resultTitle": "召回测试结果",
       "resultSubtitle": "召回 {{count}} 条记忆。以下内容只用于调试，不会发送给内嵌 AI 网站。",
       "score": "得分 {{score}}",
+      "scoreDetails": "得分明细",
       "contextTitle": "将注入 Agent 的隐藏上下文",
       "lowQuality": "最高得分偏低，任务描述可能太泛或记忆库缺少相关内容。",
       "emptyTitle": "没有召回相关记忆",

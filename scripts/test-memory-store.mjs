@@ -48,6 +48,8 @@ async function main() {
     const inboxDocument = await store.getInboxDocument(financialItems[0].filePath);
     const fencedInboxDocument = await store.getInboxDocument(fileC);
     assert(fencedInboxDocument.contentMarkdown === financialMarkdown, 'Expected markdown code-fence wrapper to be stripped during preview.');
+    assert(inboxDocument.suggestedTags.includes('投资'), 'Expected inbox preview to suggest investment metadata tags.');
+    assert(inboxDocument.suggestedTags.includes('决策准则'), 'Expected inbox preview to suggest decision-rule metadata tags.');
     const duplicatedTitle = [
       '# 重复标题测试',
       '',
@@ -93,6 +95,7 @@ async function main() {
     const recalledFinancialRule = recall.items.find((item) => item.id === imported.id);
     assert(recalledFinancialRule?.score > 0, 'Expected recalled memory to include a positive recall score.');
     assert(recalledFinancialRule?.matchReasons.includes('body'), 'Expected recalled memory to explain body matching.');
+    assert(recalledFinancialRule?.scoreDetails.some((detail) => detail.reason === 'body' && detail.score > 0), 'Expected recalled memory to include body score details.');
     assert(recalledFinancialRule?.matchReasons.includes('decision_rule_priority'), 'Expected decision task to explain decision-rule priority.');
     assert(recall.agentContext.includes('用户长期记忆'), 'Expected agent context to include the memory header.');
     assert(recall.agentContext.includes('相关决策准则'), 'Expected agent context to group decision rules separately.');
@@ -138,6 +141,8 @@ async function main() {
     const travelFoodRecall = store.recallForAgentTask('我计划去重庆玩几天，吃喝玩乐推荐一下');
     assert(travelFoodRecall.items.some((item) => item.id === foodMemory.id), 'Expected travel food task to recall dietary constraints.');
     assert(!travelFoodRecall.items.some((item) => item.id === imported.id), 'Expected travel food task not to recall unrelated investment rules.');
+    const recalledFood = travelFoodRecall.items.find((item) => item.id === foodMemory.id);
+    assert(recalledFood?.scoreDetails.some((detail) => detail.matches?.some((match) => match.endsWith('*'))), 'Expected dietary profile recall to expose CJK fallback matches in score details.');
 
     const unrelatedReference = await store.importDocument({
       title: '普通城市旅行清单',

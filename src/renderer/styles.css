@@ -1397,6 +1397,51 @@ textarea {
   line-height: 1.2;
 }
 
+.memory-recall-score-details {
+  margin-top: 8px;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #f8fafc;
+}
+
+.memory-recall-score-details h3 {
+  margin: 0 0 6px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.memory-recall-score-details ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memory-recall-score-details li {
+  display: grid;
+  grid-template-columns: max-content max-content 1fr;
+  gap: 8px;
+  align-items: baseline;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.memory-recall-score-details strong {
+  color: #166534;
+  font-weight: 800;
+}
+
+.memory-recall-score-details em {
+  overflow: hidden;
+  color: #64748b;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .memory-empty-detail {
   display: grid;
   place-content: center;
@@ -2295,6 +2340,20 @@ textarea {
     border-color: rgba(96, 165, 250, 0.22);
     background: #173356;
     color: #bfdbfe;
+  }
+
+  .memory-recall-score-details {
+    background: #111827;
+  }
+
+  .memory-recall-score-details h3,
+  .memory-recall-score-details li,
+  .memory-recall-score-details em {
+    color: #94a3b8;
+  }
+
+  .memory-recall-score-details strong {
+    color: #86efac;
   }
 
   .memory-recall-warning {

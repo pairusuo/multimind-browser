@@ -185,6 +185,7 @@
       "resultTitle": "Recall Test Result",
       "resultSubtitle": "Recalled {{count}} memories. This is only for debugging and will not be sent to embedded AI websites.",
       "score": "Score {{score}}",
+      "scoreDetails": "Score details",
       "contextTitle": "Hidden Context For Agent",
       "lowQuality": "The top score is low. The task may be too broad or the memory library may not contain enough relevant content.",
       "emptyTitle": "No relevant memories recalled",

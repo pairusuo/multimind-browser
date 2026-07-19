@@ -157,7 +157,7 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
       setDraftMemoryType('auto');
       setDraftMemoryScope('global');
       setDraftOriginalQuestion('');
-      setDraftTags('');
+      setDraftTags(document.suggestedTags.join(', '));
       setDraftParticipants('');
       setDraftMarkdown(document.contentMarkdown);
     } catch {
@@ -531,6 +531,22 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
                               <span key={reason}>{t(`memory.recall.reasons.${reason}`)}</span>
                             ))}
                           </div>
+                          {item.scoreDetails.length > 0 && (
+                            <div className="memory-recall-score-details">
+                              <h3>{t('memory.recall.scoreDetails')}</h3>
+                              <ul>
+                                {item.scoreDetails.map((detail, index) => (
+                                  <li key={`${detail.reason}-${index}`}>
+                                    <span>{t(`memory.recall.reasons.${detail.reason}`)}</span>
+                                    <strong>{`+${detail.score}`}</strong>
+                                    {detail.matches?.length ? (
+                                      <em>{detail.matches.join(', ')}</em>
+                                    ) : null}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
                           <blockquote>{item.excerpt}</blockquote>
                         </section>
                       ))}
