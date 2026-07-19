@@ -115,6 +115,8 @@
       "removeDirectory": "Remove folder",
       "scan": "Scan",
       "search": "Search",
+      "testRecall": "Test recall",
+      "copyContext": "Copy context",
       "import": "Confirm import",
       "restore": "Restore memory",
       "disable": "Disable memory"
@@ -152,7 +154,8 @@
       "scanCompletedWithItems": "Scan complete. Found {{count}} Markdown files waiting for confirmation.",
       "imported": "Saved to local memory",
       "restored": "Restored to long-term memory",
-      "disabled": "Memory document disabled"
+      "disabled": "Memory document disabled",
+      "contextCopied": "Agent context copied"
     },
     "search": {
       "placeholder": "Search titles, questions, or body",
@@ -176,6 +179,27 @@
       "detailInbox": "Add an authorized folder and scan it, then select a Markdown candidate to preview and import.",
       "detailLibrary": "Search or select an imported document to view its local memory snapshot."
     },
+    "recall": {
+      "title": "Agent Task Recall Test",
+      "placeholder": "Enter a future Agent task and inspect which long-term memories would be recalled",
+      "resultTitle": "Recall Test Result",
+      "resultSubtitle": "Recalled {{count}} memories. This is only for debugging and will not be sent to embedded AI websites.",
+      "score": "Score {{score}}",
+      "contextTitle": "Hidden Context For Agent",
+      "lowQuality": "The top score is low. The task may be too broad or the memory library may not contain enough relevant content.",
+      "emptyTitle": "No relevant memories recalled",
+      "emptyBody": "Try a more specific task description, or import related long-term memories first.",
+      "reasons": {
+        "title": "Title match",
+        "tag": "Tag match",
+        "body": "Body match",
+        "profile_priority": "User profile priority",
+        "decision_rule_priority": "Decision rule priority",
+        "project_scope": "Project scope match",
+        "global_scope": "Global memory",
+        "recent": "Recent record"
+      }
+    },
     "errors": {
       "scanFailed": "Could not scan authorized folders",
       "directoryFailed": "Could not add authorized folder",
@@ -184,7 +208,9 @@
       "importFailed": "Could not import memory document",
       "searchFailed": "Could not search memory",
       "openFailed": "Could not open memory document",
-      "disableFailed": "Could not disable memory document"
+      "disableFailed": "Could not disable memory document",
+      "copyFailed": "Could not copy context",
+      "recallFailed": "Could not test memory recall"
     }
   },
   "cellConfig": {

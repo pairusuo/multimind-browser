@@ -12,6 +12,7 @@ import {
   CellFocusedPayload,
   LayoutMode,
   NavigatePayload,
+  RecallMemoryForAgentTaskPayload,
   RemoveMemorySourcePayload,
   SearchMemoryDocumentsPayload,
   SendToAllPayload,
@@ -96,6 +97,10 @@ export function registerIpcHandlers(windowManager: WindowManager, memoryStore: M
 
   registerHandler(IPC.DISABLE_MEMORY_DOCUMENT, (_event, payload: DisableMemoryDocumentPayload) => {
     return memoryStore.disableDocument(payload.id);
+  });
+
+  registerHandler(IPC.RECALL_MEMORY_FOR_AGENT_TASK, (_event, payload: RecallMemoryForAgentTaskPayload) => {
+    return memoryStore.recallForAgentTask(payload.query);
   });
 
   registerHandler(IPC.SET_THEME_MODE, (_event, mode: ThemeMode) => {

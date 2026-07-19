@@ -45,6 +45,7 @@ export const IPC = {
   SEARCH_MEMORY_DOCUMENTS: 'search-memory-documents',
   GET_MEMORY_DOCUMENT: 'get-memory-document',
   DISABLE_MEMORY_DOCUMENT: 'disable-memory-document',
+  RECALL_MEMORY_FOR_AGENT_TASK: 'recall-memory-for-agent-task',
   APPLY_TEMPLATE: 'apply-template',
   SET_LAYOUT: 'set-layout',
   SET_OVERLAY_OPEN: 'set-overlay-open',
@@ -157,6 +158,10 @@ export interface SearchMemoryDocumentsPayload {
   query: string;
 }
 
+export interface RecallMemoryForAgentTaskPayload {
+  query: string;
+}
+
 export interface GetMemoryDocumentPayload {
   id: string;
 }
@@ -196,8 +201,20 @@ export interface MemoryRecallItem {
   memoryType: MemoryDocumentType;
   memoryScope: MemoryScope;
   tags: string[];
+  score: number;
+  matchReasons: MemoryRecallReason[];
   excerpt: string;
 }
+
+export type MemoryRecallReason =
+  | 'title'
+  | 'tag'
+  | 'body'
+  | 'profile_priority'
+  | 'decision_rule_priority'
+  | 'project_scope'
+  | 'global_scope'
+  | 'recent';
 
 export interface MemoryRecallContext {
   items: MemoryRecallItem[];
@@ -330,6 +347,7 @@ export interface ElectronAPI {
   searchMemoryDocuments: (payload: SearchMemoryDocumentsPayload) => Promise<MemoryDocumentSummary[]>;
   getMemoryDocument: (payload: GetMemoryDocumentPayload) => Promise<MemoryDocument | null>;
   disableMemoryDocument: (payload: DisableMemoryDocumentPayload) => Promise<void>;
+  recallMemoryForAgentTask: (payload: RecallMemoryForAgentTaskPayload) => Promise<MemoryRecallContext>;
   setLayout: (mode: LayoutMode) => Promise<void>;
   setThemeMode: (mode: ThemeMode) => Promise<BrowserState>;
   setLanguage: (language: AppLanguage) => Promise<BrowserState>;

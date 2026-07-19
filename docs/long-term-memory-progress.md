@@ -187,6 +187,9 @@ An external vector database service is not required for the next version. A loca
 - 2026-07-17: Added memory document types for user profile, project background, decision rules, event memories, and reference material. Import can auto-classify or accept a manual type.
 - 2026-07-17: Updated Agent recall context to group recalled memories by type, so future Agent prompts can distinguish stable user background from decision rules and supporting references.
 - 2026-07-17: Split memory content type from applicability metadata. Added the first `memory_scope` plan and implementation target, with current user instruction taking priority over recalled memories.
+- 2026-07-19: Added a local Agent recall test entry in the memory library. It lets the user inspect recalled memories and the hidden Agent context without sending anything to embedded AI websites.
+- 2026-07-19: Added explainable recall ranking. Recall items now include a score and structured match reasons such as title match, tag match, body match, type priority, and scope match.
+- 2026-07-19: Improved recall debugging usability: recalled items can open the source memory, Agent context can be copied, and low-score recall results show a quality warning.
 
 ## Implementation Checklist
 
@@ -203,6 +206,9 @@ An external vector database service is not required for the next version. A loca
 - [x] Add memory document type metadata and auto-classification.
 - [x] Group Agent recall context by memory type.
 - [x] Add memory scope metadata for global/project applicability.
+- [x] Add a local Agent recall debug entry for inspecting recalled memories and context.
+- [x] Add recall scores and match reasons for ranking inspection.
+- [x] Add recall result open/copy actions and low-quality recall warning.
 - [x] Run TypeScript/build verification.
 
 ## Verification
@@ -215,7 +221,9 @@ An external vector database service is not required for the next version. A loca
 - `npm run test:memory` covers duplicate leading H1 normalization.
 - `npm run test:memory` covers memory type inference, manually assigned profile memories, and grouped Agent recall context.
 - `npm run test:memory` covers default global scope, manually assigned project scope, and scope metadata in Agent recall context.
+- `npm run test:memory` covers recall scores, match reasons, decision-rule priority, profile priority, and project-scoped ranking.
 - `npm run build` passes after memory scope implementation.
+- `npm test` covers shared preset logic, forward prompt text/cropping, and the memory store workflow.
 - Manual UI workflow has been validated with a real Markdown directory: add folder, scan, preview, import, search, disable, restore, remove source, source-missing recovery, and restart persistence.
 - macOS packaged-app smoke test has been validated locally. Packaging does not include the developer's app data; development and installed builds only appeared to share data because they use the same Electron app data directory on this machine.
 

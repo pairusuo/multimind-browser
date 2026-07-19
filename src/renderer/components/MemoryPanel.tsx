@@ -7,6 +7,7 @@ import {
   MemoryImportSource,
   MemoryInboxDocument,
   MemoryInboxItem,
+  MemoryRecallContext,
   MemoryScope,
 } from '../../shared/types';
 
@@ -19,6 +20,7 @@ type DraftMemoryType = MemoryDocumentType | 'auto';
 
 const MEMORY_TYPE_OPTIONS: DraftMemoryType[] = ['auto', 'profile', 'project', 'decision_rule', 'event', 'reference'];
 const MEMORY_SCOPE_OPTIONS: MemoryScope[] = ['global', 'project'];
+const LOW_RECALL_SCORE_THRESHOLD = 60;
 
 export default function MemoryPanel({ onClose }: MemoryPanelProps) {
   const { t } = useTranslation();
@@ -29,6 +31,8 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
   const [selectedMemoryDocument, setSelectedMemoryDocument] = useState<MemoryDocument | null>(null);
   const [searchResults, setSearchResults] = useState<MemoryDocumentSummary[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [recallQuery, setRecallQuery] = useState('');
+  const [recallResult, setRecallResult] = useState<MemoryRecallContext | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
   const [draftMemoryType, setDraftMemoryType] = useState<DraftMemoryType>('auto');
   const [draftMemoryScope, setDraftMemoryScope] = useState<MemoryScope>('global');
@@ -148,6 +152,7 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
       const document = await window.electronAPI.getMemoryInboxDocument(item.filePath);
       setSelectedInboxDocument(document);
       setSelectedMemoryDocument(null);
+      setRecallResult(null);
       setDraftTitle(document.suggestedTitle);
       setDraftMemoryType('auto');
       setDraftMemoryScope('global');
@@ -219,6 +224,28 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
     }
   }
 
+  async function submitRecall(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    const query = recallQuery.trim();
+    if (!query) {
+      setRecallResult(null);
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await window.electronAPI.recallMemoryForAgentTask({ query });
+      setRecallResult(result);
+      setSelectedInboxDocument(null);
+      setSelectedMemoryDocument(null);
+    } catch {
+      setError(t('memory.errors.recallFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function selectMemoryDocument(summary: MemoryDocumentSummary) {
     setBusy(true);
     setStatus(null);
@@ -227,10 +254,41 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
       const document = await window.electronAPI.getMemoryDocument({ id: summary.id });
       setSelectedMemoryDocument(document);
       setSelectedInboxDocument(null);
+      setRecallResult(null);
     } catch {
       setError(t('memory.errors.openFailed'));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function openRecalledMemoryDocument(id: string) {
+    setBusy(true);
+    setStatus(null);
+    setError(null);
+    try {
+      const document = await window.electronAPI.getMemoryDocument({ id });
+      setSelectedMemoryDocument(document);
+      setSelectedInboxDocument(null);
+      setRecallResult(null);
+    } catch {
+      setError(t('memory.errors.openFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyAgentContext() {
+    if (!recallResult?.agentContext) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(recallResult.agentContext);
+      setStatus(t('memory.status.contextCopied'));
+      setError(null);
+    } catch {
+      setError(t('memory.errors.copyFailed'));
     }
   }
 
@@ -336,6 +394,19 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
                   />
                   <button type="submit" disabled={busy}>{t('memory.actions.search')}</button>
                 </form>
+                <form className="memory-recall-form" onSubmit={(event) => void submitRecall(event)}>
+                  <label>
+                    <span>{t('memory.recall.title')}</span>
+                    <textarea
+                      value={recallQuery}
+                      onChange={(event) => setRecallQuery(event.target.value)}
+                      placeholder={t('memory.recall.placeholder')}
+                    />
+                  </label>
+                  <button type="submit" disabled={busy || !recallQuery.trim()}>
+                    {t('memory.actions.testRecall')}
+                  </button>
+                </form>
                 <div className="memory-item-list">
                   {searchResults.map((result) => (
                     <button
@@ -420,6 +491,62 @@ export default function MemoryPanel({ onClose }: MemoryPanelProps) {
                   </button>
                 </div>
               </div>
+            ) : recallResult ? (
+              <article className="memory-recall-view">
+                <header>
+                  <div>
+                    <h2>{t('memory.recall.resultTitle')}</h2>
+                    <p>{t('memory.recall.resultSubtitle', { count: recallResult.items.length })}</p>
+                  </div>
+                  {recallResult.agentContext && (
+                    <button type="button" onClick={() => void copyAgentContext()}>
+                      {t('memory.actions.copyContext')}
+                    </button>
+                  )}
+                </header>
+                {recallResult.items.length ? (
+                  <>
+                    {Math.max(...recallResult.items.map((item) => item.score)) < LOW_RECALL_SCORE_THRESHOLD && (
+                      <p className="memory-recall-warning">{t('memory.recall.lowQuality')}</p>
+                    )}
+                    <div className="memory-recall-items">
+                      {recallResult.items.map((item) => (
+                        <section key={item.id}>
+                          <button
+                            type="button"
+                            className="memory-recall-open"
+                            onClick={() => void openRecalledMemoryDocument(item.id)}
+                            disabled={busy}
+                          >
+                            {item.title}
+                          </button>
+                          <p>
+                            {t(`memory.types.${item.memoryType}`)}
+                            {` · ${t(`memory.scopes.${item.memoryScope}`)}`}
+                            {` · ${t('memory.recall.score', { score: item.score })}`}
+                            {item.tags.length ? ` · ${item.tags.join(', ')}` : ''}
+                          </p>
+                          <div className="memory-recall-reasons">
+                            {item.matchReasons.map((reason) => (
+                              <span key={reason}>{t(`memory.recall.reasons.${reason}`)}</span>
+                            ))}
+                          </div>
+                          <blockquote>{item.excerpt}</blockquote>
+                        </section>
+                      ))}
+                    </div>
+                    <section>
+                      <h3>{t('memory.recall.contextTitle')}</h3>
+                      <pre>{recallResult.agentContext}</pre>
+                    </section>
+                  </>
+                ) : (
+                  <div className="memory-empty-detail">
+                    <h2>{t('memory.recall.emptyTitle')}</h2>
+                    <p>{t('memory.recall.emptyBody')}</p>
+                  </div>
+                )}
+              </article>
             ) : selectedMemoryDocument ? (
               <article className="memory-document-view">
                 <header>

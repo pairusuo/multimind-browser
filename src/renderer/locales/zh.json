@@ -115,6 +115,8 @@
       "removeDirectory": "移除目录",
       "scan": "扫描",
       "search": "搜索",
+      "testRecall": "测试召回",
+      "copyContext": "复制上下文",
       "import": "确认导入",
       "restore": "恢复记忆",
       "disable": "停用记忆"
@@ -152,7 +154,8 @@
       "scanCompletedWithItems": "扫描完成，发现 {{count}} 个待确认 Markdown。",
       "imported": "已保存到本地记忆库",
       "restored": "已恢复到长期记忆",
-      "disabled": "已停用该记忆文档"
+      "disabled": "已停用该记忆文档",
+      "contextCopied": "已复制 Agent 上下文"
     },
     "search": {
       "placeholder": "搜索标题、问题或正文",
@@ -176,6 +179,27 @@
       "detailInbox": "添加授权目录并扫描后，选择候选 Markdown 预览和确认导入。",
       "detailLibrary": "搜索或选择已入库文档，查看本地记忆快照。"
     },
+    "recall": {
+      "title": "Agent 任务召回测试",
+      "placeholder": "输入一段未来 Agent 任务描述，查看会自动召回哪些长期记忆",
+      "resultTitle": "召回测试结果",
+      "resultSubtitle": "召回 {{count}} 条记忆。以下内容只用于调试，不会发送给内嵌 AI 网站。",
+      "score": "得分 {{score}}",
+      "contextTitle": "将注入 Agent 的隐藏上下文",
+      "lowQuality": "最高得分偏低，任务描述可能太泛或记忆库缺少相关内容。",
+      "emptyTitle": "没有召回相关记忆",
+      "emptyBody": "可以换一个更具体的任务描述，或先导入相关长期记忆。",
+      "reasons": {
+        "title": "标题命中",
+        "tag": "标签命中",
+        "body": "正文命中",
+        "profile_priority": "用户档案优先",
+        "decision_rule_priority": "决策准则优先",
+        "project_scope": "项目范围匹配",
+        "global_scope": "全局记忆",
+        "recent": "较新记录"
+      }
+    },
     "errors": {
       "scanFailed": "扫描授权目录失败",
       "directoryFailed": "添加授权目录失败",
@@ -184,7 +208,9 @@
       "importFailed": "导入记忆文档失败",
       "searchFailed": "搜索记忆库失败",
       "openFailed": "打开记忆文档失败",
-      "disableFailed": "停用记忆文档失败"
+      "disableFailed": "停用记忆文档失败",
+      "copyFailed": "复制上下文失败",
+      "recallFailed": "测试记忆召回失败"
     }
   },
   "cellConfig": {

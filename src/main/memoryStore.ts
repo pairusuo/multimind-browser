@@ -8,6 +8,7 @@ import {
   MemoryDocument,
   MemoryDocumentSummary,
   MemoryDocumentType,
+  MemoryRecallReason,
   MemoryScope,
   MemoryImportSource,
   MemoryInboxDocument,
@@ -314,8 +315,7 @@ export class MemoryStore {
       return { items: [], agentContext: '' };
     }
 
-    const items = prioritizeRecallCandidates(this.findRecallCandidates(trimmed))
-      .slice(0, MEMORY_RECALL_LIMIT)
+    const items = this.findRecallCandidates(trimmed)
       .map((summary): MemoryRecallItem | null => {
         const document = this.getDocument(summary.id);
         if (!document) {
@@ -325,16 +325,33 @@ export class MemoryStore {
         if (!excerpt) {
           return null;
         }
+        const ranking = scoreRecallCandidate(document, trimmed);
+        if (ranking.score <= 0) {
+          return null;
+        }
         return {
           id: document.id,
           title: document.title,
           memoryType: document.memoryType,
           memoryScope: document.memoryScope,
           tags: document.tags,
+          score: ranking.score,
+          matchReasons: ranking.matchReasons,
           excerpt,
         };
       })
-      .filter((item): item is MemoryRecallItem => item !== null);
+      .filter((item): item is MemoryRecallItem => item !== null)
+      .sort((left, right) => {
+        if (left.score !== right.score) {
+          return right.score - left.score;
+        }
+        const typeDelta = memoryTypeWeight(left.memoryType) - memoryTypeWeight(right.memoryType);
+        if (typeDelta !== 0) {
+          return typeDelta;
+        }
+        return memoryScopeWeight(left.memoryScope) - memoryScopeWeight(right.memoryScope);
+      })
+      .slice(0, MEMORY_RECALL_LIMIT);
 
     if (!items.length) {
       return { items: [], agentContext: '' };
@@ -359,7 +376,7 @@ export class MemoryStore {
     addResults(this.searchDocuments(query));
 
     for (const term of extractRecallTerms(query)) {
-      if (byId.size >= MEMORY_RECALL_LIMIT) {
+      if (byId.size >= 40) {
         break;
       }
       addResults(this.searchDocuments(term));
@@ -697,20 +714,6 @@ function normalizeMemoryScope(value: string | null | undefined): MemoryScope {
   return MEMORY_SCOPE_PRIORITY.includes(value as MemoryScope) ? value as MemoryScope : 'global';
 }
 
-function prioritizeRecallCandidates(candidates: MemoryDocumentSummary[]): MemoryDocumentSummary[] {
-  return [...candidates].sort((left, right) => {
-    const typeDelta = memoryTypeWeight(left.memoryType) - memoryTypeWeight(right.memoryType);
-    if (typeDelta !== 0) {
-      return typeDelta;
-    }
-    const scopeDelta = memoryScopeWeight(left.memoryScope) - memoryScopeWeight(right.memoryScope);
-    if (scopeDelta !== 0) {
-      return scopeDelta;
-    }
-    return right.updatedAt - left.updatedAt;
-  });
-}
-
 function memoryTypeWeight(memoryType: MemoryDocumentType): number {
   return MEMORY_TYPE_PRIORITY.indexOf(memoryType);
 }
@@ -818,6 +821,72 @@ function buildAgentMemoryContext(items: MemoryRecallItem[], query: string): stri
   return truncateText(sections.join('\n').trim(), MEMORY_RECALL_CONTEXT_CHARS);
 }
 
+function scoreRecallCandidate(document: MemoryDocument, query: string): {
+  score: number;
+  matchReasons: MemoryRecallReason[];
+} {
+  const terms = extractRecallTerms(query);
+  const normalizedQuery = normalizeForRecallMatch(query);
+  const title = normalizeForRecallMatch(document.title);
+  const originalQuestion = normalizeForRecallMatch(document.originalQuestion);
+  const tags = document.tags.map(normalizeForRecallMatch);
+  const body = normalizeForRecallMatch(document.contentMarkdown);
+  const matchReasons: MemoryRecallReason[] = [];
+  let score = 0;
+
+  if (title.includes(normalizedQuery) || terms.some((term) => title.includes(normalizeForRecallMatch(term)))) {
+    score += 90;
+    matchReasons.push('title');
+  }
+
+  if (tags.some((tag) => tag.includes(normalizedQuery) || terms.some((term) => tag.includes(normalizeForRecallMatch(term))))) {
+    score += 80;
+    matchReasons.push('tag');
+  }
+
+  if (originalQuestion.includes(normalizedQuery)) {
+    score += 55;
+    matchReasons.push('body');
+  } else {
+    const matchedBodyTerms = terms.filter((term) => body.includes(normalizeForRecallMatch(term)));
+    if (matchedBodyTerms.length) {
+      score += Math.min(60, 25 + matchedBodyTerms.length * 5);
+      matchReasons.push('body');
+    }
+  }
+
+  if (document.memoryType === 'profile' && querySuggestsPersonalization(query)) {
+    score += 25;
+    matchReasons.push('profile_priority');
+  }
+
+  if (document.memoryType === 'decision_rule' && querySuggestsDecision(query)) {
+    score += 22;
+    matchReasons.push('decision_rule_priority');
+  }
+
+  if (document.memoryScope === 'project') {
+    const projectRelevant = matchReasons.includes('title') || matchReasons.includes('tag') || originalQuestion.includes(normalizedQuery);
+    if (projectRelevant) {
+      score += 16;
+      matchReasons.push('project_scope');
+    }
+  } else if (score > 0) {
+    score += 6;
+    matchReasons.push('global_scope');
+  }
+
+  if (score > 0) {
+    score += Math.max(0, 5 - Math.floor((Date.now() - document.updatedAt) / (30 * 24 * 60 * 60 * 1000)));
+    matchReasons.push('recent');
+  }
+
+  return {
+    score,
+    matchReasons: [...new Set(matchReasons)],
+  };
+}
+
 function groupRecallItems(items: MemoryRecallItem[]): Array<[MemoryDocumentType, MemoryRecallItem[]]> {
   const groups = new Map<MemoryDocumentType, MemoryRecallItem[]>();
   for (const item of items) {
@@ -891,6 +960,18 @@ function extractRecallTerms(query: string): string[] {
     .map((term) => term.trim())
     .filter((term) => !isWeakRecallTerm(term))
     .filter(Boolean);
+}
+
+function normalizeForRecallMatch(text: string): string {
+  return normalizeWhitespace(text).toLowerCase();
+}
+
+function querySuggestsPersonalization(query: string): boolean {
+  return /(我|我的|适合我|偏好|风险|经验|习惯|长期|稳健|should i|for me|my |risk tolerance|preference)/i.test(query);
+}
+
+function querySuggestsDecision(query: string): boolean {
+  return /(是否|应该|可以|怎么买|怎么卖|买入|卖出|持有|判断|建议|决策|规则|准则|should|buy|sell|hold|decide|criteria|rule)/i.test(query);
 }
 
 function isWeakRecallTerm(term: string): boolean {

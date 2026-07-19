@@ -90,6 +90,10 @@ async function main() {
     const recall = store.recallForAgentTask('这只股票最近下跌很多，可以抄底买入吗？');
     assert(recall.items.some((item) => item.id === imported.id), 'Expected stock-related agent task to recall imported memory.');
     assert(recall.items.some((item) => item.memoryType === 'decision_rule'), 'Expected recalled items to preserve memory type.');
+    const recalledFinancialRule = recall.items.find((item) => item.id === imported.id);
+    assert(recalledFinancialRule?.score > 0, 'Expected recalled memory to include a positive recall score.');
+    assert(recalledFinancialRule?.matchReasons.includes('body'), 'Expected recalled memory to explain body matching.');
+    assert(recalledFinancialRule?.matchReasons.includes('decision_rule_priority'), 'Expected decision task to explain decision-rule priority.');
     assert(recall.agentContext.includes('用户长期记忆'), 'Expected agent context to include the memory header.');
     assert(recall.agentContext.includes('相关决策准则'), 'Expected agent context to group decision rules separately.');
     assert(recall.agentContext.includes('当前用户指令优先于长期记忆'), 'Expected agent context to state current instruction priority.');
@@ -105,6 +109,8 @@ async function main() {
     });
     const profileRecall = store.recallForAgentTask('帮我判断这只股票是否适合长期持有');
     assert(profileRecall.items.some((item) => item.id === profileMemory.id && item.memoryType === 'profile'), 'Expected profile memory to participate in recall.');
+    const recalledProfile = profileRecall.items.find((item) => item.id === profileMemory.id);
+    assert(recalledProfile?.matchReasons.includes('profile_priority'), 'Expected personalized task to explain profile priority.');
     assert(profileRecall.agentContext.includes('稳定用户档案'), 'Expected agent context to group profile memories separately.');
 
     const projectMemory = await store.importDocument({
@@ -117,6 +123,9 @@ async function main() {
     assert(projectMemory.memoryScope === 'project', `Expected project memory to keep project scope, got ${projectMemory.memoryScope}.`);
     const projectRecall = store.recallForAgentTask('Alpha 项目的交易看板需要注意什么？');
     assert(projectRecall.items.some((item) => item.id === projectMemory.id && item.memoryScope === 'project'), 'Expected project-scoped memory to participate in recall.');
+    assert(projectRecall.items[0]?.id === projectMemory.id, 'Expected title/tag-matched project memory to rank first for project-specific task.');
+    const recalledProject = projectRecall.items.find((item) => item.id === projectMemory.id);
+    assert(recalledProject?.matchReasons.includes('project_scope'), 'Expected project-scoped recall to explain project scope matching.');
     assert(projectRecall.agentContext.includes('[项目'), 'Expected agent context to include project scope metadata.');
 
     store.disableDocument(imported.id);
