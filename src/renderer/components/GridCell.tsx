@@ -1,10 +1,31 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { getApiModelDisplayName, getApiModelProvider, getApiModelProviderLabel, getApiModelProviderMeta } from '../../shared/apiModelMetadata';
 import type { ApiConversationCellState, CellMode, CellNoticePayload, ConversationEntryMode, LayoutMode } from '../../shared/types';
+import claudeLogo from '../assets/model-logos/claude.svg';
+import deepseekLogo from '../assets/model-logos/deepseek.svg';
+import doubaoLogo from '../assets/model-logos/doubao.svg';
+import geminiLogo from '../assets/model-logos/gemini.svg';
+import grokLogo from '../assets/model-logos/grok.svg';
+import kimiLogo from '../assets/model-logos/kimi.svg';
+import openaiLogo from '../assets/model-logos/openai.svg';
+import qwenLogo from '../assets/model-logos/qwen.svg';
+import zaiLogo from '../assets/model-logos/z-ai.svg';
 import CellNotice from './CellNotice';
 
 const shownNoticeKeys = new Set<string>();
 const repeatableNoticeTypes = new Set<CellNoticePayload['type']>(['conversation-truncated', 'source-response-pending']);
+const API_MODEL_LOGOS: Record<string, string> = {
+  anthropic: claudeLogo,
+  'bytedance-seed': doubaoLogo,
+  deepseek: deepseekLogo,
+  google: geminiLogo,
+  moonshotai: kimiLogo,
+  openai: openaiLogo,
+  qwen: qwenLogo,
+  'x-ai': grokLogo,
+  'z-ai': zaiLogo,
+};
 
 interface CellMenuAction {
   id: string;
@@ -67,6 +88,8 @@ export default function GridCell({
   const { t } = useTranslation();
   const isApiMode = conversationEntryMode === 'api';
   const host = isApiMode ? apiState?.model || t('gridCell.api.emptyModel') : safeHost(meta.url, t('gridCell.empty'));
+  const apiModelMeta = getApiModelProviderMeta(apiState?.model ?? '');
+  const apiModelLogo = API_MODEL_LOGOS[apiModelMeta.id];
   const [notice, setNotice] = useState<CellNoticePayload | null>(null);
   const [targetPickerOpen, setTargetPickerOpen] = useState(false);
   const [forwardingTargetId, setForwardingTargetId] = useState<string | null>(null);
@@ -220,7 +243,25 @@ export default function GridCell({
         ) : (
           <>
             <div className="cell-overlay" aria-live="polite">
-              {isApiMode ? <span className="favicon-placeholder api-favicon-placeholder" /> : meta.favicon ? <img src={meta.favicon} alt="" /> : <span className="favicon-placeholder" />}
+              {isApiMode ? (
+                <span
+                  className={`api-model-logo api-model-logo-${apiModelMeta.id}`}
+                  title={apiModelMeta.label}
+                  aria-hidden="true"
+                >
+                  {apiModelLogo ? (
+                    <img
+                      src={apiModelLogo}
+                      alt=""
+                      loading="lazy"
+                      onError={(event) => {
+                        event.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  ) : null}
+                  <span className="api-model-logo-fallback">{apiModelMeta.badgeText}</span>
+                </span>
+              ) : meta.favicon ? <img src={meta.favicon} alt="" /> : <span className="favicon-placeholder" />}
               {!isApiMode && meta.mode === 'search' && <span className="cell-mode-badge" title={t('gridCell.mode.search')}>⌕</span>}
               {isApiMode ? (
                 <select
@@ -239,7 +280,7 @@ export default function GridCell({
                     <optgroup key={group.provider} label={group.label}>
                       {group.models.map((model) => (
                         <option key={model} value={model}>
-                          {getModelDisplayName(model)}
+                          {getApiModelDisplayName(model)}
                         </option>
                       ))}
                     </optgroup>
@@ -342,34 +383,13 @@ function getGroupedApiModelOptions(selectedModel: string, models: string[]): Arr
 
   return [...groups.entries()].map(([provider, providerModels]) => ({
     provider,
-    label: getProviderLabel(provider),
+    label: getApiModelProviderLabel(provider),
     models: providerModels,
   }));
 }
 
 function getModelProvider(model: string): string {
-  return model.split('/')[0] || 'Other';
-}
-
-function getProviderLabel(provider: string): string {
-  const labels: Record<string, string> = {
-    openrouter: 'OpenRouter',
-    openai: 'OpenAI',
-    anthropic: 'Anthropic',
-    google: 'Google',
-    deepseek: 'DeepSeek',
-    'x-ai': 'xAI',
-    qwen: 'Qwen',
-    moonshotai: 'Moonshot',
-    'z-ai': 'Z.ai',
-    'meta-llama': 'Meta',
-    mistralai: 'Mistral',
-  };
-  return labels[provider.toLowerCase()] ?? provider;
-}
-
-function getModelDisplayName(model: string): string {
-  return model.includes('/') ? model.split('/').slice(1).join('/') : model;
+  return getApiModelProvider(model);
 }
 
 function safeHost(url: string, emptyLabel: string): string {

@@ -16,44 +16,38 @@ const DEFAULT_MODELS: string[] = [];
 const REQUEST_TIMEOUT_MS = 60000;
 const MODEL_LIST_TIMEOUT_MS = 15000;
 const MAINSTREAM_MODEL_PROVIDER_ORDER = [
-  'openrouter',
   'openai',
   'anthropic',
   'google',
   'deepseek',
+  'bytedance-seed',
   'x-ai',
   'qwen',
   'moonshotai',
   'z-ai',
-  'meta-llama',
-  'mistralai',
 ];
 const MAINSTREAM_MODEL_PROVIDERS = new Set(MAINSTREAM_MODEL_PROVIDER_ORDER);
 const MODEL_PROVIDER_LIMITS: Record<string, number> = {
-  openrouter: 2,
   openai: 3,
   anthropic: 3,
   google: 3,
   deepseek: 3,
+  'bytedance-seed': 2,
   'x-ai': 2,
   qwen: 2,
   moonshotai: 2,
   'z-ai': 2,
-  'meta-llama': 2,
-  mistralai: 2,
 };
 const PROVIDER_PREFERRED_MODEL_PATTERNS: Record<string, RegExp[]> = {
-  openrouter: [/^openrouter\/auto(?:-beta)?$/i, /^openrouter\/fusion$/i],
   openai: [/^openai\/gpt-chat-latest$/i, /^openai\/gpt-5\./i],
   anthropic: [/^anthropic\/claude-sonnet/i, /^anthropic\/claude-opus/i],
   google: [/^google\/gemini-.*(?:pro|flash)(?!.*image)/i],
   deepseek: [/^deepseek\/deepseek-(?:chat|reasoner|r1|v3)/i],
+  'bytedance-seed': [/^bytedance-seed\/seed-\d+(?:\.\d+)?$/i, /^bytedance-seed\/seed-\d+(?:\.\d+)?-flash$/i],
   'x-ai': [/^x-ai\/grok/i],
   qwen: [/^qwen\/qwen/i],
   moonshotai: [/^moonshotai\/kimi/i],
   'z-ai': [/^z-ai\/glm/i],
-  'meta-llama': [/^meta-llama\/llama/i],
-  mistralai: [/^mistralai\/mistral/i],
 };
 const EXCLUDED_MODEL_PATTERNS = [
   /(?:^|[-/:])image(?:[-/:]|$)/i,
@@ -93,10 +87,11 @@ export class ApiConversationService {
 
   getConfig(): ApiConversationConfig {
     const stored = this.getStoredConfig();
+    const models = filterModelCatalog(normalizeModels(stored.models));
     return {
       baseUrl: stored.baseUrl || DEFAULT_BASE_URL,
-      models: normalizeModels(stored.models),
-      cellModels: normalizeCellModels(stored.cellModels, stored.models),
+      models,
+      cellModels: normalizeCellModels(stored.cellModels, models),
       apiKeyConfigured: Boolean(stored.apiKey),
     };
   }
@@ -112,7 +107,7 @@ export class ApiConversationService {
     const discoveredModels = shouldRefreshModels ? await fetchModelIds(baseUrl, nextApiKey) : [];
     const models = discoveredModels.length
       ? discoveredModels
-      : explicitModels ?? normalizeModels(current.models);
+      : filterModelCatalog(explicitModels ?? normalizeModels(current.models));
     const next: StoredApiConversationConfig = {
       ...current,
       baseUrl,
@@ -161,7 +156,7 @@ export class ApiConversationService {
     }
 
     const baseUrl = normalizeBaseUrl(stored.baseUrl || DEFAULT_BASE_URL);
-    const models = normalizeModels(payload.models?.length ? payload.models : stored.models);
+    const models = filterModelCatalog(normalizeModels(payload.models?.length ? payload.models : stored.models));
     if (!models.length) {
       throw new Error('At least one model is required.');
     }
@@ -386,11 +381,10 @@ function modelScore(model: string): number {
   if (id.includes('gpt-')) score += 66;
   if (id.includes('gemini')) score += 64;
   if (id.includes('deepseek')) score += 62;
+  if (id.includes('seed')) score += 61;
   if (id.includes('grok')) score += 60;
   if (id.includes('kimi')) score += 58;
   if (id.includes('qwen')) score += 56;
-  if (id.includes('llama')) score += 54;
-  if (id.includes('mistral')) score += 52;
   if (id.includes('free')) score -= 20;
   if (id.includes('mini') || id.includes('lite')) score -= 12;
   return score;

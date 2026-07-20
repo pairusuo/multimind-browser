@@ -1,8 +1,17 @@
 import assert from 'node:assert/strict';
+import { statSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
+const fromRoot = (path) => fileURLToPath(new URL(`../${path}`, import.meta.url));
 const { __apiConversationTestHooks } = require('../dist/main/apiConversationService.js');
+const {
+  getApiModelDisplayName,
+  getApiModelProvider,
+  getApiModelProviderLabel,
+  getApiModelProviderMeta,
+} = require('../dist/shared/apiModelMetadata.js');
 
 const {
   filterModelCatalog,
@@ -33,6 +42,32 @@ assert.deepEqual(
   'Model IDs should be trimmed, deduplicated, and empty values removed',
 );
 
+assert.equal(getApiModelProvider('gpt-5.1'), 'openai', 'Bare GPT model names should resolve to OpenAI');
+assert.equal(getApiModelProvider('gemini-2.5-flash'), 'google', 'Bare Gemini model names should resolve to Google');
+assert.equal(getApiModelProvider('anthropic/claude-sonnet-5'), 'anthropic', 'Provider-prefixed model names should keep their provider');
+assert.equal(getApiModelProvider('bytedance-seed/seed-1.6'), 'bytedance-seed', 'Seed model names should resolve to Doubao');
+assert.equal(getApiModelProviderLabel('google'), 'Gemini', 'Provider labels should use the model brand in the title and dropdown');
+assert.equal(getApiModelProviderLabel('anthropic'), 'Claude', 'Claude models should show the model brand instead of the company name');
+assert.equal(getApiModelProviderMeta('gemini-2.5-flash').badgeText, 'G', 'Gemini cells should use the Google model badge');
+assert.equal(getApiModelDisplayName('google/gemini-2.5-flash'), 'gemini-2.5-flash', 'Dropdown labels should hide provider prefixes');
+
+for (const logoFile of [
+  'claude.svg',
+  'deepseek.svg',
+  'doubao.svg',
+  'gemini.svg',
+  'grok.svg',
+  'kimi.svg',
+  'openai.svg',
+  'qwen.svg',
+  'z-ai.svg',
+]) {
+  assert.ok(
+    statSync(fromRoot(`src/renderer/assets/model-logos/${logoFile}`)).size > 100,
+    `${logoFile} should be available as a bundled local model logo`,
+  );
+}
+
 const rawCatalog = [
   'thinkingmachines/inkling',
   'openrouter/auto',
@@ -50,6 +85,11 @@ const rawCatalog = [
   'google/gemini-3.1-pro',
   'google/gemini-3.1-flash',
   'google/gemini-3-pro-image',
+  'bytedance-seed/seed-2.0-lite',
+  'bytedance-seed/seed-2.0-mini',
+  'bytedance-seed/seed-1.6-flash',
+  'bytedance-seed/seed-1.6',
+  'bytedance/ui-tars-1.5-7b',
   'deepseek/deepseek-chat',
   'deepseek/deepseek-r1',
   'deepseek/deepseek-v3.2',
@@ -66,24 +106,28 @@ const rawCatalog = [
 const filtered = filterModelCatalog(rawCatalog);
 
 for (const expected of [
-  'openrouter/auto',
   'openai/gpt-chat-latest',
   'openai/gpt-5.6-terra-pro',
   'anthropic/claude-sonnet-5',
   'google/gemini-3.1-pro',
+  'bytedance-seed/seed-1.6',
   'deepseek/deepseek-v3.2',
   'x-ai/grok-4.5',
   'qwen/qwen3.7-plus',
   'moonshotai/kimi-k3',
   'z-ai/glm-5.2',
-  'meta-llama/llama-4.1',
-  'mistralai/mistral-large-latest',
 ]) {
   assert.ok(filtered.includes(expected), `${expected} should remain in the mainstream model list`);
 }
 
 for (const excluded of [
   'thinkingmachines/inkling',
+  'openrouter/auto',
+  'openrouter/auto-beta',
+  'openrouter/fusion',
+  'meta-llama/llama-4.1',
+  'mistralai/mistral-large-latest',
+  'bytedance/ui-tars-1.5-7b',
   'openai/gpt-4o-2024-08-06',
   'google/gemini-3-pro-image',
   'qwen/qwen3.7-code',
@@ -92,9 +136,9 @@ for (const excluded of [
 }
 
 assert.deepEqual(
-  filtered.filter((model) => model.startsWith('openrouter/')),
-  ['openrouter/auto', 'openrouter/auto-beta'],
-  'OpenRouter should keep only the preferred router choices',
+  filtered.filter((model) => model.startsWith('bytedance-seed/')),
+  ['bytedance-seed/seed-1.6', 'bytedance-seed/seed-1.6-flash'],
+  'Doubao should keep only mainstream Seed chat models',
 );
 assert.ok(
   filtered.filter((model) => model.startsWith('anthropic/')).length <= 3,

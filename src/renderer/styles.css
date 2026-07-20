@@ -472,8 +472,41 @@ textarea {
   background: #1a56db;
 }
 
-.api-favicon-placeholder {
-  background: linear-gradient(135deg, #2563eb, #14b8a6);
+.api-model-logo {
+  display: inline-grid;
+  place-items: center;
+  position: relative;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: transparent;
+  color: #334155;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.api-model-logo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 1px;
+  background: transparent;
+}
+
+.api-model-logo-fallback {
+  display: inline-grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 5px;
+  background: #f8fafc;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.12);
 }
 
 .api-model-select {
